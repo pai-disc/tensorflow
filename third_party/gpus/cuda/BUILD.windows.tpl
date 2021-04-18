@@ -135,12 +135,6 @@ cc_import(
 )
 
 cc_import(
-    name = "cublasLt",
-    interface_library = "cuda/lib/%{cublasLt_lib}",
-    system_provided = 1,
-)
-
-cc_import(
     name = "cusolver",
     interface_library = "cuda/lib/%{cusolver_lib}",
     system_provided = 1,
@@ -176,7 +170,6 @@ cc_library(
     name = "cuda",
     deps = [
         ":cublas",
-        ":cublasLt",
         ":cuda_headers",
         ":cudart",
         ":cudnn",
