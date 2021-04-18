@@ -21,7 +21,9 @@ limitations under the License.
 #define TENSORFLOW_STREAM_EXECUTOR_CUDA_CUDA_BLAS_H_
 
 #include "absl/synchronization/mutex.h"
+#if CUDA_VERSION >= 11000
 #include "third_party/gpus/cuda/include/cublasLt.h"
+#endif
 #include "third_party/gpus/cuda/include/cublas_v2.h"
 #include "third_party/gpus/cuda/include/cuda.h"
 #include "tensorflow/core/platform/thread_annotations.h"
