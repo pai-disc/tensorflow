@@ -173,7 +173,6 @@ cc_library(
         "//tensorflow/compiler/xla/stream_executor/cuda:cublas_plugin",
     ] + if_cuda_is_configured([
         ":cublas_lib",
-        ":cublas_lt_lib",
         ":cuda_activation",
         ":cuda_blas_utils",
         ":cuda_gpu_executor",
