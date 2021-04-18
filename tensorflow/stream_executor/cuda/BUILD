@@ -274,7 +274,6 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = if_cuda_is_configured([
         ":cublas_lib",
-        ":cublas_lt_lib",
         ":cuda_activation",
         ":cuda_gpu_executor",
         ":cuda_platform_id",
