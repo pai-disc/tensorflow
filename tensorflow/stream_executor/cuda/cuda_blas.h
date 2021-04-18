@@ -22,6 +22,9 @@ limitations under the License.
 
 #include "absl/base/thread_annotations.h"
 #include "absl/synchronization/mutex.h"
+#if CUDA_VERSION >= 11000
+#include "third_party/gpus/cuda/include/cublasLt.h"
+#endif
 #include "third_party/gpus/cuda/include/cublas_v2.h"
 #include "tensorflow/stream_executor/blas.h"
 #include "tensorflow/stream_executor/cuda/cuda_blas_lt.h"
