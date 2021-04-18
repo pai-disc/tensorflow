@@ -125,6 +125,16 @@ class GpuExecutable : public Executable {
     };
 
     std::unique_ptr<HloModule> debug_module = nullptr;
+
+    // Only relevant to whole-program BEF execution:
+    // Optionally provide a cache of GPU contexts and corresponding
+    // tfrt::ResourceContext(s). This can be used to supply
+    // tfrt::ResourceContext(s) that are preloaded with GPU resources for given
+    // GPU contexts. This isn't required for correct execution. However, it
+    // prevents the initial execution step from being slowed down due to
+    // initializing GPU resources.
+    std::shared_ptr<const BufferAssignment> buffer_assignment_ =
+        nullptr; /*ADDED_FOR_TAO*/
   };
 
   // TODO(hanbinyoon): Once BEF replaces Thunks, hide this method as an
@@ -137,7 +147,8 @@ class GpuExecutable : public Executable {
       mlir::func::FuncOp func, llvm::ArrayRef<int64_t> buffer_sizes,
       std::vector<BufferAllocation>* allocations,
       absl::flat_hash_map<ShapeIndex, OutputInfo>* output_info,
-      Shape* output_shape, int buffer_param_offset = 0);
+      Shape* output_shape, int buffer_param_offset = 0,
+      BufferAssignment* buffer_assignment = nullptr /*ADDED_FOR_TAO*/);
 
   // Returns an Executable that is loaded from an object file (XLA program
   // compiled to a native function using the JitRt stack).
@@ -332,6 +343,8 @@ class GpuExecutable : public Executable {
 
   GpuExecutable(const GpuExecutable&) = delete;
   GpuExecutable& operator=(const GpuExecutable&) = delete;
+
+  std::shared_ptr<const BufferAssignment> buffer_assignment_; /*ADDED_FOR_TAO*/
 };
 
 StatusOr<absl::flat_hash_map<ShapeIndex, GpuExecutable::OutputInfo>>

@@ -546,6 +546,51 @@ template <PrimitiveType type, typename T>
   return CreateRandomLiteral<type>(shape, &engine, mean, stddev);
 }
 
+// ADDED_FOR_TAO
+
+template <>
+/* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<F16, std::minstd_rand0, half>(
+    const Shape& shape, std::minstd_rand0* engine, half mean, half stddev);
+
+template <>
+/* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<S64, std::minstd_rand0, int64_t>(
+    const Shape& shape, std::minstd_rand0* engine, tensorflow::int64 mean, int64_t stddev);
+
+template <>
+/* static */ StatusOr<Literal>
+LiteralUtil::CreateRandomLiteral<S32, std::minstd_rand0, int32_t>(
+    const Shape& shape, std::minstd_rand0* engine, int32_t mean,
+    int32_t stddev);
+
+template <>
+/* static */ StatusOr<Literal>
+LiteralUtil::CreateRandomLiteral<S8, std::minstd_rand0, int8_t>(
+    const Shape& shape, std::minstd_rand0* engine, int8_t mean, int8_t stddev);
+
+template <>
+/* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<PRED, std::minstd_rand0, bool>(
+    const Shape& shape, std::minstd_rand0* engine, bool mean, bool stddev);
+
+template <>
+/* static */ StatusOr<Literal>
+LiteralUtil::CreateRandomLiteral<U8, std::minstd_rand0, uint8_t>(
+    const Shape& shape, std::minstd_rand0* engine, uint8_t mean,
+    uint8_t stddev);
+
+template <>
+/* static */ StatusOr<Literal>
+LiteralUtil::CreateRandomLiteral<U32, std::minstd_rand0, uint32_t>(
+    const Shape& shape, std::minstd_rand0* engine, uint32_t mean,
+    uint32_t stddev);
+
+template <>
+/* static */ StatusOr<Literal>
+LiteralUtil::CreateRandomLiteral<U64, std::minstd_rand0, uint64_t>(
+    const Shape& shape, std::minstd_rand0* engine, uint64_t mean,
+    uint64_t stddev);
+
+// END_OF_ADD
+
 }  // namespace xla
 
 #endif  // TENSORFLOW_COMPILER_XLA_LITERAL_UTIL_H_

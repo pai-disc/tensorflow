@@ -49,6 +49,18 @@ class WhileThunk : public Thunk {
                     se::StreamExecutor* executor) override;
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
+  // ADDED_FOR_TAO
+  const BufferAllocation::Slice& condition_result_buffer_index() const {
+    return condition_result_buffer_index_;
+  }
+  const SequentialThunk* condition_thunk_sequence() const {
+    return condition_thunk_sequence_.get();
+  }
+  const SequentialThunk* body_thunk_sequence() const {
+    return body_thunk_sequence_.get();
+  }
+  // END_OF_ADD
+
  private:
   const BufferAllocation::Slice condition_result_buffer_index_;
   std::unique_ptr<SequentialThunk> condition_thunk_sequence_;
