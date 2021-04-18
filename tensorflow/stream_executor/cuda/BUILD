@@ -247,27 +247,7 @@ alias(
     visibility = ["//visibility:public"],
 )
 
-cc_library(
-    name = "cublas_lt_stub",
-    srcs = if_cuda_is_configured(["cublasLt_stub.cc"]),
-    textual_hdrs = glob(["cublasLt_*.inc"]),
-    deps = if_cuda_is_configured([
-        "@local_config_cuda//cuda:cuda_headers",
-        "//tensorflow/stream_executor/lib",
-        "//tensorflow/stream_executor/platform:dso_loader",
-    ]),
-)
-
 cc_library(name = "empty_lib")
-
-alias(
-    name = "cublas_lt_lib",
-    actual = select({
-        "//tensorflow:oss": ":cublas_lt_stub",
-        "//conditions:default": ":empty_lib",
-    }),
-    visibility = ["//visibility:public"],
-)
 
 cc_library(
     name = "cublas_plugin",
@@ -276,7 +256,6 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = if_cuda_is_configured([
         ":cublas_lib",
-        ":cublas_lt_lib",
         ":cuda_activation",
         ":cuda_gpu_executor",
         ":cuda_platform_id",
