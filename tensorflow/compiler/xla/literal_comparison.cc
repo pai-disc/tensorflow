@@ -959,5 +959,38 @@ std::string ToStringTruncated(const LiteralSlice& literal) {
              : "[TRUNCATED, Literal with more than 1000 values]";
 }
 
+// ADDED_FOR_TAO
+std::string ToStringSampled(const LiteralSlice& literal) {
+  const Shape& shape = literal.shape();
+  if (shape.IsTuple()) {
+    return ToStringTruncated(literal);
+  }
+
+  if (RecursiveElementCount(literal.shape()) < 1000) {
+    return literal.ToString();
+  } else {
+    std::string str = "{ ";
+    if (shape.element_type() == F32) {
+      absl::Span<const float> data = literal.data<float>();
+      int64_t n = (data.size() < 32) ? data.size() : 32;
+      for (int64_t i = 0; i < n; ++i) {
+        StrAppend(&str, data[i], ", ");
+      }
+    } else if (shape.element_type() == F16) {
+      absl::Span<const Eigen::half> data = literal.data<Eigen::half>();
+      int64_t n = (data.size() < 32) ? data.size() : 32;
+      for (int64_t i = 0; i < n; ++i) {
+        StrAppend(&str, static_cast<float>(data[i]), ", ");
+      }
+    } else {
+      StrAppend(&str, "non-supported elem type in ToStringSampled");
+    }
+
+    StrAppend(&str, "} ");
+    return str;
+  }
+}
+// END_OF_ADD
+
 }  // namespace literal_comparison
 }  // namespace xla
