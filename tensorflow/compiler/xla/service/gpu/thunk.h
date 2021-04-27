@@ -68,11 +68,13 @@ class Thunk {
     kSequential,
     kTriangularSolve,
     kWhile,
+    kFor, /*ADDED_FOR_TAO*/
   };
 
   struct ThunkInfo {
     absl::optional<int64_t> profile_index;
     std::string profile_annotation;
+    const xla::HloInstruction* hlo_instr{nullptr}; /*ADDED_FOR_TAO*/
   };
 
   // The hlo_instruction argument is meant to be the instruction this thunk was
@@ -81,7 +83,8 @@ class Thunk {
   explicit Thunk(Kind kind, ThunkInfo thunk_info)
       : kind_(kind),
         profile_index_(thunk_info.profile_index),
-        profile_annotation_(thunk_info.profile_annotation) {}
+        profile_annotation_(thunk_info.profile_annotation),
+        hlo_(thunk_info.hlo_instr) /*ADDED_FOR_TAO*/ {}
   virtual ~Thunk() {}
   Thunk(const Thunk&) = delete;
   Thunk& operator=(const Thunk&) = delete;
@@ -126,6 +129,10 @@ class Thunk {
   virtual Status ExecuteOnStream(const ExecuteParams& params) = 0;
 
   static absl::string_view KindToString(Thunk::Kind kind);
+  
+  // ADDED_FOR_TAO
+  const xla::HloInstruction* hlo_instruction() const { return hlo_; }
+  // END_OF_ADD
 
  protected:
   absl::optional<int64_t> profile_index() const { return profile_index_; }
@@ -134,6 +141,7 @@ class Thunk {
   Kind kind_;
   absl::optional<int64_t> profile_index_;
   std::string profile_annotation_;
+  const xla::HloInstruction* hlo_; /*ADDED_FOR_TAO*/
 };
 
 // A sequence of thunks.

@@ -206,7 +206,9 @@ GpuExecutable::GpuExecutable(GpuExecutable::Params params)
       verbose_buffer_assignment_string_dumper_(
           params.verbose_buffer_assignment_string_dumper),
       constants_(std::move(params.constants)),
-      output_info_(std::move(params.output_info)) {
+      output_info_(std::move(params.output_info)),
+      buffer_assignment_(
+          std::move(params.buffer_assignment_)) /*ADDED_FOR_TAO*/ {
   XlaDebugInfoManager::Get()->RegisterModule(
       ModuleUniqueName(module_name_, shared_module().get()), shared_module(),
       debug_buffer_assignment_);
