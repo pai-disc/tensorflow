@@ -79,6 +79,20 @@ class GemmThunk : public Thunk {
 
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
+  // ADDED_FOR_TAO
+  const BufferAllocation::Slice& lhs_buffer() const { return lhs_buffer_; }
+  const BufferAllocation::Slice& rhs_buffer() const { return rhs_buffer_; }
+  const BufferAllocation::Slice& output_buffer() const {
+    return output_buffer_;
+  }
+  const Shape& lhs_shape() const { return config_.lhs_shape; }
+  const Shape& rhs_shape() const { return config_.rhs_shape; }
+  const Shape& output_shape() const { return config_.output_shape; }
+  const GemmBackendConfig& backend_config() const {
+    return config_.backend_config;
+  }
+  // END_OF_ADD
+
  private:
   const GpuGemmConfig config_;
   const BufferAllocation::Slice lhs_buffer_;

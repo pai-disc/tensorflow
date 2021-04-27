@@ -1346,7 +1346,8 @@ StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
            std::move(buffer_assignment_proto),
            [buffer_assignment] { return buffer_assignment->ToVerboseString(); },
            std::move(module),
-           std::move(compile_module_results.gpu_ctx_cache)}));
+           std::move(compile_module_results.gpu_ctx_cache),
+           buffer_assignment}));
   if (embed_ir_in_executable) {
     DCHECK_NE("", ir_module_string_before_opt);
     gpu_executable->set_ir_module_string(ir_module_string_before_opt);
