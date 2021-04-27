@@ -47,3 +47,7 @@ gradleBuild
 Podfile.lock
 Pods
 xcuserdata
+
+# ADDED_FOR_TAO
+tensorflow/compiler/decoupling
+# END_OF_ADD

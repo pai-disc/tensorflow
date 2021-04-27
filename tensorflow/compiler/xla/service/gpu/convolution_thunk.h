@@ -52,6 +52,15 @@ class ConvolutionThunk : public Thunk {
 
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
+  // ADDED_FOR_TAO
+  const std::vector<BufferAllocation::Slice>& operand_buffers() const {
+    return operand_buffers_;
+  }
+  const BufferAllocation::Slice& result_buffer() const {
+    return result_buffer_;
+  }
+  // END_OF_ADD
+
  private:
   std::vector<BufferAllocation::Slice> operand_buffers_;
   BufferAllocation::Slice result_buffer_;
