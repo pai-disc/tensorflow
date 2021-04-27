@@ -57,6 +57,17 @@ class ConditionalThunk : public Thunk {
                     se::StreamExecutor* executor) override;
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
+  // ADDED_FOR_TAO
+  bool branch_index_is_bool() const { return config_.branch_index_is_bool; }
+  int64 branch_count() const { return config_.branch_count; }
+  const std::vector<std::unique_ptr<SequentialThunk>>& branch_thunks() const {
+    return config_.branch_thunks;
+  }
+  const BufferAllocation::Slice& branch_index_buffer_index() const {
+    return branch_index_buffer_index_;
+  }
+  // END_OF_ADD
+
  private:
   const ConditionalThunkConfig config_;
   BufferAllocation::Slice branch_index_buffer_index_;
