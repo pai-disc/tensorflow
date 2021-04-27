@@ -103,7 +103,9 @@ GpuExecutable::GpuExecutable(GpuExecutable::Params params)
       debug_buffer_assignment_(std::move(params.debug_buffer_assignment)),
       entry_computation_profile_index_(params.entry_computation_profile_index),
       constants_(std::move(params.constants)),
-      output_info_(std::move(params.output_info)) {
+      output_info_(std::move(params.output_info)),
+      buffer_assignment_(
+          std::move(params.buffer_assignment_)) /*ADDED_FOR_TAO*/ {
   XlaDebugInfoManager::Get()->RegisterModule(module_name_, shared_module(),
                                              debug_buffer_assignment_);
 }

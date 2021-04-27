@@ -94,6 +94,8 @@ class GpuExecutable : public Executable {
     size_t entry_computation_profile_index = 0;
     std::unique_ptr<HloProfilePrinterData> hlo_profile_printer_data = nullptr;
     std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map = nullptr;
+    std::unique_ptr<BufferAssignment> buffer_assignment_ =
+        nullptr; /*ADDED_FOR_TAO*/
   };
 
   // We need to share ownership of hlo_module and assignment with profiler to
@@ -142,6 +144,20 @@ class GpuExecutable : public Executable {
   absl::Span<const BufferAllocation> GetAllocations() const {
     return allocations_;
   }
+
+  // ADDED_FOR_TAO
+  StatusOr<BufferAllocation::Slice> GetUniqueSlice(
+      const HloInstruction* instruction, const ShapeIndex& index) const {
+    if (!buffer_assignment_) {
+      return tensorflow::errors::Internal("buffer assignment not initialized");
+    }
+    return buffer_assignment_->GetUniqueSlice(instruction, index);
+  }
+  const BufferAssignment* buffer_assignment() const {
+    return buffer_assignment_.get();
+  }
+  const ThunkSchedule* thunk_schedule() const { return thunk_schedule_.get(); }
+  // END_OF_ADD
 
  private:
   // If `block_host_until_done` is false, execution will not block the host
@@ -227,6 +243,8 @@ class GpuExecutable : public Executable {
 
   std::vector<ConstantInfo> constants_;
   const absl::flat_hash_map<ShapeIndex, OutputInfo> output_info_;
+
+  std::unique_ptr<BufferAssignment> buffer_assignment_; /*ADDED_FOR_TAO*/
 
   TF_DISALLOW_COPY_AND_ASSIGN(GpuExecutable);
 };

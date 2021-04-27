@@ -60,6 +60,13 @@ class KernelThunk : public Thunk {
                     se::StreamExecutor* executor) override;
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
+  // ADDED_FOR_TAO
+  const LaunchDimensions& launch_dimensions() const {
+    return launch_dimensions_;
+  }
+  const std::vector<const BufferAllocation*>& args() const { return args_; }
+  // END_OF_ADD
+
  private:
   // Buffers passed to the kernel as arguments.
   const std::vector<const BufferAllocation*> args_;

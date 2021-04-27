@@ -62,6 +62,17 @@ class CudnnBatchNormForwardInferenceThunk : public Thunk {
 
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
+  // ADDED_FOR_TAO
+  const BufferAllocation::Slice& operand() const { return operand_; }
+  const BufferAllocation::Slice& scale() const { return scale_; }
+  const BufferAllocation::Slice& offset() const { return offset_; }
+  const BufferAllocation::Slice& mean() const { return mean_; }
+  const BufferAllocation::Slice& variance() const { return variance_; }
+  float epsilon() const { return config_.epsilon; }
+  int64 feature_index() const { return config_.feature_index; }
+  const BufferAllocation::Slice& output() const { return output_; }
+  // END_OF_ADD
+
  private:
   CudnnBatchNormConfig config_;
   BufferAllocation::Slice operand_;
@@ -90,6 +101,19 @@ class CudnnBatchNormForwardTrainingThunk : public Thunk {
 
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
+  // ADDED_FOR_TAO
+  const BufferAllocation::Slice& operand() const { return operand_; }
+  const BufferAllocation::Slice& scale() const { return scale_; }
+  const BufferAllocation::Slice& offset() const { return offset_; }
+  const BufferAllocation::Slice& output_data() const { return output_data_; }
+  const BufferAllocation::Slice& output_mean() const { return output_mean_; }
+  const BufferAllocation::Slice& output_inv_stddev() const {
+    return output_inv_stddev_;
+  }
+  float epsilon() const { return config_.epsilon; }
+  int64 feature_index() const { return config_.feature_index; }
+  // END_OF_ADD
+
  private:
   CudnnBatchNormConfig config_;
   BufferAllocation::Slice operand_;
@@ -117,6 +141,25 @@ class CudnnBatchNormBackwardThunk : public Thunk {
       delete;
 
   Status ExecuteOnStream(const ExecuteParams& params) override;
+
+  // ADDED_FOR_TAO
+  const BufferAllocation::Slice& operand() const { return operand_; }
+  const BufferAllocation::Slice& scale() const { return scale_; }
+  const BufferAllocation::Slice& mean() const { return mean_; }
+  const BufferAllocation::Slice& inv_stddev() const { return inv_stddev_; }
+  const BufferAllocation::Slice& grad_output() const { return grad_output_; }
+  const BufferAllocation::Slice& output_grad_data() const {
+    return output_grad_data_;
+  }
+  const BufferAllocation::Slice& output_grad_scale() const {
+    return output_grad_scale_;
+  }
+  const BufferAllocation::Slice& output_grad_offset() const {
+    return output_grad_offset_;
+  }
+  float epsilon() const { return config_.epsilon; }
+  int64 feature_index() const { return config_.feature_index; }
+  // END_OF_ADD
 
  private:
   const CudnnBatchNormConfig config_;

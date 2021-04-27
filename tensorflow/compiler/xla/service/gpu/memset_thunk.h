@@ -37,6 +37,10 @@ class MemzeroThunk : public Thunk {
 
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
+  // ADDED_FOR_TAO
+  const BufferAllocation::Slice& destination_buffer() const { return dest_; }
+  // END_OF_ADD
+
  private:
   const BufferAllocation::Slice dest_;
 };
@@ -52,6 +56,11 @@ class Memset32BitValueThunk : public Thunk {
         dest_(dest) {}
 
   Status ExecuteOnStream(const ExecuteParams& params) override;
+
+  // ADDED_FOR_TAO
+  const BufferAllocation::Slice& destination_buffer() const { return dest_; }
+  uint32 value() const { return value_; }
+  // END_OF_ADD
 
  private:
   const uint32 value_;

@@ -41,6 +41,14 @@ class HostToDeviceCopyThunk : public Thunk {
 
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
+  // ADDED_FOR_TAO
+  const void* source_address() const { return source_address_; }
+  const BufferAllocation::Slice& destination_buffer() const {
+    return destination_buffer_;
+  }
+  uint64 mem_size() const { return mem_size_; }
+  // END_OF_ADD
+
  private:
   const void* source_address_;
   const BufferAllocation::Slice destination_buffer_;
@@ -62,6 +70,16 @@ class DeviceToDeviceCopyThunk : public Thunk {
   DeviceToDeviceCopyThunk& operator=(const DeviceToDeviceCopyThunk&) = delete;
 
   Status ExecuteOnStream(const ExecuteParams& params) override;
+
+  // ADDED_FOR_TAO
+  const BufferAllocation::Slice& source_buffer() const {
+    return source_buffer_;
+  }
+  const BufferAllocation::Slice& destination_buffer() const {
+    return destination_buffer_;
+  }
+  uint64 mem_size() const { return mem_size_; }
+  // END_OF_ADD
 
  private:
   const BufferAllocation::Slice source_buffer_;
