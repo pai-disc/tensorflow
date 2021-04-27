@@ -641,6 +641,12 @@ StatusOr<tensorflow::AutotuneResult>
 GpuConvAlgorithmPicker::PickBestAlgorithmNoCacheCuda(
     const HloCustomCallInstruction* instr, se::DeviceMemoryAllocator* allocator,
     se::Stream* stream) {
+  // ADDED_FOR_TAO
+  return InternalError(
+      "Skip ConvAlgo auto tune on GPU in decoupled mode for we may have no "
+      "enough GPU device memory or can't get accurate profiling result");
+  // END_OF_ADD
+
   // Right now Redzone allocator is available in Cuda target only
   XLA_SCOPED_LOGGING_TIMER(absl::StrCat(
       "GpuConvAlgorithmPicker::PickBestAlgorithmImpl for ", instr->ToString()));

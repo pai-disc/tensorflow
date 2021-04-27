@@ -127,6 +127,16 @@ class GpuExecutable : public Executable {
     };
 
     std::unique_ptr<HloModule> debug_module = nullptr;
+
+    // Only relevant to whole-program BEF execution:
+    // Optionally provide a cache of GPU contexts and corresponding
+    // tfrt::ResourceContext(s). This can be used to supply
+    // tfrt::ResourceContext(s) that are preloaded with GPU resources for given
+    // GPU contexts. This isn't required for correct execution. However, it
+    // prevents the initial execution step from being slowed down due to
+    // initializing GPU resources.
+    std::shared_ptr<BufferAssignment> buffer_assignment_ =
+        nullptr; /*ADDED_FOR_TAO*/
   };
 
   // TODO(hanbinyoon): Once BEF replaces Thunks, hide this method as an
@@ -186,6 +196,20 @@ class GpuExecutable : public Executable {
   }
 
   const std::vector<ConstantInfo>& constants() const { return constants_; }
+
+  // ADDED_FOR_TAO
+  StatusOr<BufferAllocation::Slice> GetUniqueSlice(
+      const HloInstruction* instruction, const ShapeIndex& index) const {
+    if (!buffer_assignment_) {
+      return tensorflow::errors::Internal("buffer assignment not initialized");
+    }
+    return buffer_assignment_->GetUniqueSlice(instruction, index);
+  }
+  const BufferAssignment* buffer_assignment() const {
+    return buffer_assignment_.get();
+  }
+  const ThunkSchedule* thunk_schedule() const { return thunk_schedule_.get(); }
+  // END_OF_ADD
 
  private:
   // Use GpuExecutable::Create() to create an instance.
@@ -290,6 +314,8 @@ class GpuExecutable : public Executable {
 
   GpuExecutable(const GpuExecutable&) = delete;
   GpuExecutable& operator=(const GpuExecutable&) = delete;
+
+  std::unique_ptr<BufferAssignment> buffer_assignment_; /*ADDED_FOR_TAO*/
 };
 
 StatusOr<absl::flat_hash_map<ShapeIndex, GpuExecutable::OutputInfo>>

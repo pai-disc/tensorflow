@@ -25,6 +25,35 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
+// A thunk that copies data from a host buffer to a device buffer.
+class HostToDeviceCopyThunk : public Thunk {
+ public:
+  // Constructs a CopyThunk that copies host data from `source_address` to the
+  // device buffer `destination_buffer`. `mem_size` is the size of the data in
+  // bytes.
+  HostToDeviceCopyThunk(ThunkInfo thunk_info, const void* source_address,
+                        const BufferAllocation::Slice& destination_buffer,
+                        uint64 mem_size);
+
+  HostToDeviceCopyThunk(const HostToDeviceCopyThunk&) = delete;
+  HostToDeviceCopyThunk& operator=(const HostToDeviceCopyThunk&) = delete;
+
+  Status ExecuteOnStream(const ExecuteParams& params) override;
+
+  // ADDED_FOR_TAO
+  const void* source_address() const { return source_address_; }
+  const BufferAllocation::Slice& destination_buffer() const {
+    return destination_buffer_;
+  }
+  uint64 mem_size() const { return mem_size_; }
+  // END_OF_ADD
+
+ private:
+  const void* source_address_;
+  const BufferAllocation::Slice destination_buffer_;
+  const uint64 mem_size_;
+};
+
 // A thunk that copies data from a device buffer to another device buffer.
 class DeviceToDeviceCopyThunk : public Thunk {
  public:
