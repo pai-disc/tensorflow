@@ -234,6 +234,27 @@ class XlaHloToLhloPass
 
 }  // namespace
 
+// ADDED_FOR_TAO
+std::unordered_map<std::string,
+                   std::unordered_map<std::string, const xla::HloInstruction*>>
+    LhloDialectEmitter::hlo_insts_;
+std::mutex LhloDialectEmitter::hlo_insts_mtx_;
+const xla::HloInstruction* LhloDialectEmitter::GetHloInstruction(
+    const std::string& module, const std::string& inst) {
+  std::lock_guard<std::mutex> lock(hlo_insts_mtx_);
+  auto it_mod = hlo_insts_.find(module);
+  if (it_mod == hlo_insts_.end()) {
+    return nullptr;
+  }
+  auto& mod = it_mod->second;
+  auto it_inst = mod.find(inst);
+  if (it_inst == mod.end()) {
+    return nullptr;
+  }
+  return it_inst->second;
+}
+// END_OF_ADD
+
 // Creates MLIR operands corresponding to operands and results of the XLA HLO
 // instruction. If `num_operands` is valid, then only the first `num_operands`
 // operands of the HLO instruction will be considered.

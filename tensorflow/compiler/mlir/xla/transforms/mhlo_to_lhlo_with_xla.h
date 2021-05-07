@@ -31,6 +31,12 @@ limitations under the License.
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/statusor.h"
 
+// ADDED_FOR_TAO
+#include "tensorflow/compiler/mlir/utils/name_utils.h"
+#include <unordered_map>
+#include <mutex>
+// END_OF_ADD
+
 namespace mlir {
 
 // This class will process an HloModule with the supplied BufferAssignment and
@@ -48,13 +54,20 @@ class LhloDialectEmitter : public xla::ConstDfsHloVisitorWithDefault {
         computation_(computation),
         module_(module),
         builder_(module.getContext()),
-        i8_type_(builder_.getIntegerType(8)) {}
+        i8_type_(builder_.getIntegerType(8)) {
+    module_name_ = mlir::GetNameFromLoc(module->getLoc()); /*ADDED_FOR_TAO*/
+  }
 
   xla::StatusOr<mlir::Operation*> EmitOp(const xla::HloInstruction* instr);
 
   static xla::StatusOr<mhlo::ScatterDimensionNumbersAttr>
   GetScatterDimensionNumbers(const xla::HloInstruction* instr,
                              mlir::MLIRContext* context);
+
+  // ADDED_FOR_TAO
+  static const xla::HloInstruction* GetHloInstruction(const std::string& module,
+                                                      const std::string& inst);
+  // END_OF_ADD
 
  private:
   xla::StatusOr<lmhlo::SortOp> EmitSortOp(const xla::HloInstruction* instr);
@@ -215,7 +228,13 @@ class LhloDialectEmitter : public xla::ConstDfsHloVisitorWithDefault {
 
   // Return an MLIR location for an HLO instruction.
   Location getLocation(const xla::HloInstruction* inst) {
-    return NameLoc::get(builder_.getStringAttr(inst->name()));
+    // MODIFY_FOR_TAO
+    Location loc(NameLoc::get(builder_.getIdentifier(inst->name())));
+    std::lock_guard<std::mutex> lock(hlo_insts_mtx_);
+    auto loc_name = mlir::GetNameFromLoc(loc);
+    hlo_insts_[module_name_][loc_name] = inst;
+    return loc;
+    // END_OF_MODIFY
   }
 
   // This map provides access to MLIR buffers for each HLO buffer allocation.
@@ -266,6 +285,16 @@ class LhloDialectEmitter : public xla::ConstDfsHloVisitorWithDefault {
   // all-reduce-done op with the correct token.
   absl::flat_hash_map<const xla::HloInstruction*, lmhlo_gpu::AllReduceStartOp>
       all_reduce_start_ops_;
+
+  // ADDED_FOR_TAO
+  std::string module_name_;
+  // module_name ->
+  //    inst_name -> HloInstruction
+  static std::unordered_map<
+      std::string, std::unordered_map<std::string, const xla::HloInstruction*>>
+      hlo_insts_;
+  static std::mutex hlo_insts_mtx_;
+  // END_OF_ADD
 };
 
 // Populate the MLIR `module` with the computation from the `hlo_module` using
