@@ -777,6 +777,13 @@ Status GpuCompiler::OptimizeHloPostLayoutAssignment(
 StatusOr<std::unique_ptr<HloModule>> GpuCompiler::RunHloPasses(
     std::unique_ptr<HloModule> module, se::StreamExecutor* stream_exec,
     const CompileOptions& options) {
+  // ADDED_FOR_TAO
+  if (module->config().debug_options().tao_disable_hlo_passes()) {
+    VLOG(0) << "Force to skip hlo passes";
+    return std::move(module);
+  }
+  // END_OF_ADD
+
   // We dump the post-optimization HLO in RunBackend so no need to dump it here.
   XLA_SCOPED_LOGGING_TIMER("GpuCompiler::RunHloPasses");
   uint64_t start_usecs = tensorflow::Env::Default()->NowMicros();
