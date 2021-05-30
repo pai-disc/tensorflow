@@ -99,12 +99,18 @@ DebugOptions DefaultDebugOptionsIgnoringFlags() {
   opts.set_xla_cpu_enable_mlir_lowering(false);
   opts.set_xla_gpu_enable_mlir_lowering(false);
   opts.set_xla_gpu_normalize_layouts(false);
+  // ADDED_FOR_TAO
+  opts.set_tao_disable_hlo_passes(false);
+  opts.set_tao_enforce_xla_codegen(false);
+  // END_OF_ADD
+
   return opts;
 }
 
 static absl::once_flag flags_init;
 static DebugOptions* flag_values;
 static std::vector<tensorflow::Flag>* flag_objects;
+static std::vector<tensorflow::Flag>* tao_flag_objects; /*ADDED_FOR_TAO*/
 
 // Maps pass -> initial fuel values (parsed when AllocateFlags was run).
 static absl::flat_hash_map<std::string, int64_t>* initial_fuel;
@@ -774,6 +780,22 @@ static void AllocateFlags() {
       "after-optimizations HLO to be descending"));
 
   ParseFlagsFromEnvAndDieIfUnknown("XLA_FLAGS", *flag_objects);
+
+  // ADDED_FOR_TAO
+  tao_flag_objects = new std::vector<tensorflow::Flag>();
+  tao_flag_objects->push_back(tensorflow::Flag(
+      "tao_disable_hlo_passes",
+      bool_setter_for(&DebugOptions::set_tao_disable_hlo_passes),
+      flag_values->tao_disable_hlo_passes(),
+      "Skip hlo passes"));
+  tao_flag_objects->push_back(tensorflow::Flag(
+      "tao_enforce_xla_codegen",
+      bool_setter_for(&DebugOptions::set_tao_enforce_xla_codegen),
+      flag_values->tao_enforce_xla_codegen(),
+      "Use xla codegen instead of tao codegen"));
+
+  ParseFlagsFromEnvAndDieIfUnknown("TAO_XLA_FLAGS", *tao_flag_objects);
+  // END_OF_ADD
 }  // NOLINT(readability/fn_size)
 
 void AppendDebugOptionsFlags(std::vector<tensorflow::Flag>* flag_list) {
