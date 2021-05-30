@@ -369,6 +369,15 @@ message DebugOptions {
       139;  // were xla_hlo_dump_as_graphdef, xla_dump_to,
             // xla_gpu_use_horizontal_fusion, and
             // xla_gpu_unsafe_fallback_to_driver_on_ptxas_error
+
+  // ADDED_FOR_TAO
+  // Disable all hlo optimization passes
+  bool tao_disable_hlo_passes = 1050;
+
+  // Enforce use xla codegen even if Tao is enabled
+  bool tao_enforce_xla_codegen = 1051;
+  // END_OF_ADD
+
 }
 
 // These settings control how XLA compiles and/or runs code.  Not all settings
