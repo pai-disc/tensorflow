@@ -5430,7 +5430,7 @@ Thunk::ThunkInfo IrEmitterUnnested::GetThunkInfo(mlir::Operation* op) {
 
   // ADDED_FOR_TAO
   auto module_name = mlir::GetNameFromLoc(module->getLoc());
-  auto op_name = mlir::GetNameFromLoc(op.getLoc());
+  auto op_name = mlir::GetNameFromLoc(op->getLoc());
   // END_OF_ADD
 
   // MODIFIED_FOR_TAO
