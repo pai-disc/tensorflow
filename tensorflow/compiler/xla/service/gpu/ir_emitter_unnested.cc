@@ -5616,6 +5616,12 @@ Thunk::ThunkInfo IrEmitterUnnested::GetThunkInfo(mlir::Operation* op) {
   thunk_info.profile_annotation = absl::StrFormat(
       "Thunk:#hlo_op=%s,hlo_module=%s%s#", mlir::GetNameFromLoc(op->getLoc()),
       mlir::GetNameFromLoc(module->getLoc()), unique_id_str);
+
+  // ADDED_FOR_TAO
+  thunk_info.hlo_instr =
+      mlir::LhloDialectEmitter::GetHloInstruction(module_name, op_name);
+  // END_OF_ADD
+
   return thunk_info;
 }
 
