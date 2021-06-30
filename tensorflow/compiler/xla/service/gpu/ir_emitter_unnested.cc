@@ -5427,9 +5427,21 @@ Status IrEmitterUnnested::EmitLmhloRegion(mlir::Region* region) {
 Thunk::ThunkInfo IrEmitterUnnested::GetThunkInfo(mlir::Operation* op) {
   auto module = op->getParentOfType<mlir::ModuleOp>();
   Thunk::ThunkInfo thunk_info;
-  thunk_info.profile_annotation = absl::StrFormat(
-      "Thunk:#hlo_op=%s,hlo_module=%s#", mlir::GetNameFromLoc(op->getLoc()),
-      mlir::GetNameFromLoc(module->getLoc()));
+
+  // ADDED_FOR_TAO
+  auto module_name = mlir::GetNameFromLoc(module->getLoc());
+  auto op_name = mlir::GetNameFromLoc(op.getLoc());
+  // END_OF_ADD
+
+  // MODIFIED_FOR_TAO
+  thunk_info.profile_annotation =
+      absl::StrFormat("Thunk:#hlo_op=%s,hlo_module=%s#", op_name, module_name);
+
+  // ADDED_FOR_TAO
+  thunk_info.hlo_instr =
+      mlir::LhloDialectEmitter::GetHloInstruction(module_name, op_name);
+  // END_OF_ADD
+
   return thunk_info;
 }
 
