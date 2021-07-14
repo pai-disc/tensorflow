@@ -367,6 +367,52 @@ LogicalResult CustomCallOp::verify() {
 
   // Verify that results and result layouts match.
   return verify_types_and_layouts(result_types, result_layouts, "result");
+
+//===----------------------------------------------------------------------===//
+// DotOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult DotOp::reifyReturnTypeShapes(
+    OpBuilder& builder, ValueRange operands,
+    SmallVectorImpl<Value>& reifiedReturnShapes) {
+  DotOp::Adaptor adaptor(operands);
+  Value lhs = adaptor.lhs();
+  Value rhs = adaptor.rhs();
+
+  RankedTensorType lhs_type = lhs.getType().dyn_cast<RankedTensorType>();
+  RankedTensorType rhs_type = rhs.getType().dyn_cast<RankedTensorType>();
+  // Not support unranked type a.t.m.
+  if (!lhs_type || !rhs_type) return failure();
+
+  if (lhs_type.getRank() > 2 || rhs_type.getRank() > 2) {
+    // TODO: make sure whether DotOp supports batch dimension or not. The doc
+    // (https://www.tensorflow.org/xla/operation_semantics#dot) does not tell.
+    // We thus only support 1-D and 2-D Dot currently.
+    return failure();
+  }
+
+  Location loc = this->getLoc();
+  SmallVector<Value, 4> shape_values;
+
+  Type shape_scalar_type = builder.getIndexType();
+  auto to_shape_scalar_type = [&](Value v) {
+    return MaybeCastTo(builder, loc, v, shape_scalar_type);
+  };
+
+  if (lhs_type.getRank() == 2) {
+    shape_values.emplace_back(
+        to_shape_scalar_type(builder.create<tensor::DimOp>(loc, lhs, 0)));
+  }
+  if (rhs_type.getRank() == 2) {
+    shape_values.emplace_back(
+        to_shape_scalar_type(builder.create<tensor::DimOp>(loc, rhs, 1)));
+  }
+
+  Value output_shape = builder.create<tensor::FromElementsOp>(
+      loc, shape_scalar_type, shape_values);
+  reifiedReturnShapes.push_back(output_shape);
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -451,6 +497,91 @@ LogicalResult DotGeneralOp::verify() {
     return emitError() << "lhs and rhs should have the same number of "
                           "contracting dimensions";
   }
+  return success();
+}
+
+LogicalResult DotGeneralOp::reifyReturnTypeShapes(
+    OpBuilder& builder, ValueRange operands,
+    SmallVectorImpl<Value>& reifiedReturnShapes) {
+  DotOp::Adaptor adaptor(operands);
+  Value lhs = adaptor.lhs();
+  Value rhs = adaptor.rhs();
+
+  RankedTensorType lhs_type = lhs.getType().dyn_cast<RankedTensorType>();
+  RankedTensorType rhs_type = rhs.getType().dyn_cast<RankedTensorType>();
+  // Not support unranked type a.t.m.
+  if (!lhs_type || !rhs_type) return failure();
+
+  Location loc = this->getLoc();
+  SmallVector<Value, 4> shape_values;
+
+  Type shape_scalar_type = builder.getIndexType();
+  auto to_shape_scalar_type = [&](Value v) {
+    return MaybeCastTo(builder, loc, v, shape_scalar_type);
+  };
+
+  DotDimensionNumbers dot_dimension_numbers = this->dot_dimension_numbers();
+  DenseIntElementsAttr rhs_contracting_dimensions =
+      dot_dimension_numbers.rhs_contracting_dimensions()
+          .cast<DenseIntElementsAttr>();
+  DenseIntElementsAttr lhs_contracting_dimensions =
+      dot_dimension_numbers.lhs_contracting_dimensions()
+          .cast<DenseIntElementsAttr>();
+  DenseIntElementsAttr rhs_batch_dimensions =
+      dot_dimension_numbers.rhs_batching_dimensions()
+          .cast<DenseIntElementsAttr>();
+  DenseIntElementsAttr lhs_batch_dimensions =
+      dot_dimension_numbers.lhs_batching_dimensions()
+          .cast<DenseIntElementsAttr>();
+
+  if (rhs_batch_dimensions.size() != lhs_batch_dimensions.size()) {
+    return failure();
+  }
+
+  // TODO: make sure that the order of batch-dimensions of lhs and rhs are the
+  // same. A bad case is '[b0, b1, m, k] dot [b1, b0, k, n]', for which we do
+  // not know the output batch-dim order. We use the order in
+  // lhs_batch_dimensions currently.
+  for (const auto& element : llvm::enumerate(lhs_batch_dimensions)) {
+    Value value_dim = to_shape_scalar_type(
+        builder.create<tensor::DimOp>(loc, lhs, element.index()));
+    shape_values.push_back(value_dim);
+  }
+
+  auto generate_mn_dim = [&](Value operand, RankedTensorType type,
+                             DenseIntElementsAttr contracting_dimensions,
+                             DenseIntElementsAttr batch_dimensions) {
+    SmallVector<Value, 4> out_mn_dim;
+    for (const auto& element : llvm::enumerate(type.getShape())) {
+      int64_t idx = element.index();
+      auto it = std::find(contracting_dimensions.begin(),
+                          contracting_dimensions.end(), idx);
+      if (it != contracting_dimensions.end()) {
+        continue;
+      }
+      it = std::find(batch_dimensions.begin(), batch_dimensions.end(), idx);
+      if (it != batch_dimensions.end()) {
+        continue;
+      }
+      Value value_dim = to_shape_scalar_type(
+          builder.create<tensor::DimOp>(loc, operand, element.index()));
+      out_mn_dim.push_back(value_dim);
+    }
+    assert(out_mn_dim.size() <= 1 &&
+           "no more than 1 non-contracting/non-batch dimension allowed.");
+    shape_values.insert(shape_values.end(), out_mn_dim.begin(),
+                        out_mn_dim.end());
+  };
+
+  generate_mn_dim(lhs, lhs_type, lhs_contracting_dimensions,
+                  lhs_batch_dimensions);
+  generate_mn_dim(rhs, rhs_type, rhs_contracting_dimensions,
+                  rhs_batch_dimensions);
+
+  Value output_shape = builder.create<tensor::FromElementsOp>(
+      loc, shape_scalar_type, shape_values);
+  reifiedReturnShapes.push_back(output_shape);
+
   return success();
 }
 
