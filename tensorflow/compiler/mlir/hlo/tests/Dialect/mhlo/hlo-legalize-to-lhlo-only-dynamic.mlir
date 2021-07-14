@@ -247,3 +247,36 @@ func.func @logistic(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {
   %0 = "mhlo.logistic"(%arg0) : (tensor<?x?xf32>) -> tensor<?x?xf32>
   func.return %0: tensor<?x?xf32>
 }
+
+// CHECK-LABEL: func @dot
+// CHECK-SAME: (%[[ARG0:.*]]: memref<?x?xf32>, %[[ARG1:.*]]: memref<?x?xf32>)
+func @dot(%arg0: tensor<?x?xf32>, %arg1: tensor<?x?xf32>) -> tensor<?x?xf32> {
+  // CHECK-DAG: %[[CONST_ZERO:.*]] = constant 0 : index
+  // CHECK-DAG: %[[CONST_ONE:.*]] = constant 1 : index
+  // CHECK-DAG: %[[OUT_DIM0:.*]] = memref.dim %[[ARG0]], %[[CONST_ZERO]] : memref<?x?xf32>
+  // CHECK-DAG: %[[OUT_DIM1:.*]] = memref.dim %[[ARG1]], %[[CONST_ONE]] : memref<?x?xf32>
+  // CHECK: %[[OUT:.*]] = memref.alloc(%[[OUT_DIM0]], %[[OUT_DIM1]]) : memref<?x?xf32>
+  // CHECK: "lmhlo.dot"(%[[ARG0]], %[[ARG1]], %[[OUT]])
+  %0 = "mhlo.dot"(%arg0, %arg1) : (tensor<?x?xf32>, tensor<?x?xf32>) -> tensor<?x?xf32>
+  return %0: tensor<?x?xf32>
+}
+
+// CHECK-LABEL: func @dot_general
+// CHECK-SAME: (%[[ARG0:.*]]: memref<?x?x?xf32>, %[[ARG1:.*]]: memref<?x?x?xf32>)
+func @dot_general(%arg0: tensor<?x?x?xf32>, %arg1: tensor<?x?x?xf32>) -> tensor<?x?x?xf32> {
+  // CHECK-DAG: %[[BATCH_IDX:.*]] = constant 0 : index
+  // CHECK-DAG: %[[LHS_IDX:.*]] = constant 1 : index
+  // CHECK-DAG: %[[RHS_IDX:.*]] = constant 2 : index
+  // CHECK-DAG: %[[BATCH_DIM:.*]] = memref.dim %[[ARG0]], %[[BATCH_IDX]] : memref<?x?x?xf32>
+  // CHECK-DAG: %[[LHS_DIM:.*]] = memref.dim %[[ARG0]], %[[LHS_IDX]] : memref<?x?x?xf32>
+  // CHECK-DAG: %[[RHS_DIM:.*]] = memref.dim %[[ARG1]], %[[RHS_IDX]] : memref<?x?x?xf32>
+  // CHECK: %[[OUT:.*]] = memref.alloc(%[[BATCH_DIM]], %[[LHS_DIM]], %[[RHS_DIM]]) : memref<?x?x?xf32>
+  // CHECK: "lmhlo.dot_general"(%[[ARG0]], %[[ARG1]], %[[OUT]])
+  %0 = "mhlo.dot_general"(%arg0, %arg1) { dot_dimension_numbers = {
+    lhs_batching_dimensions = dense<0> : tensor<1xi64>,
+    lhs_contracting_dimensions = dense<[2]> : tensor<1xi64>,
+    rhs_batching_dimensions = dense<0> : tensor<1xi64>,
+    rhs_contracting_dimensions = dense<1> : tensor<1xi64>
+  }} : (tensor<?x?x?xf32>, tensor<?x?x?xf32>) -> tensor<?x?x?xf32>
+  return %0: tensor<?x?x?xf32>
+}
