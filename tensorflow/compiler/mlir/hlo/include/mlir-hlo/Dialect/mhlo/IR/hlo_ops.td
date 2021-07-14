@@ -1507,7 +1507,7 @@ def HLO_CustomCallOp: HLO_Op<"custom_call", []> {
   let hasCustomHLOConverter = 1;
 }
 
-def HLO_DotOp: HLO_Op<"dot", [NoSideEffect]> {
+def HLO_DotOp: HLO_ShapedInterfaceOp<"dot", [NoSideEffect]> {
   let summary = "Dot operator";
   let description = [{
     Performs dot products between vectors, vector/matrix and matrix/matrix
@@ -1523,7 +1523,7 @@ def HLO_DotOp: HLO_Op<"dot", [NoSideEffect]> {
   let results = (outs HLO_Tensor);
 }
 
-def HLO_DotGeneralOp: HLO_Op<"dot_general", [NoSideEffect]> {
+def HLO_DotGeneralOp: HLO_ShapedInterfaceOp<"dot_general", [NoSideEffect]> {
   let summary = "General Dot operator";
   let description = [{
     Performs general dot products between vectors, vector/matrix and
