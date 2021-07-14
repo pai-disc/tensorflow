@@ -914,6 +914,53 @@ LogicalResult CustomCallOp::verify() {
   return verifyTypesAndLayouts(resultTypes, resultLayouts, "result");
 }
 
+//===----------------------------------------------------------------------===//
+// DotOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult DotOp::reifyReturnTypeShapes(
+    OpBuilder& builder, ValueRange operands,
+    SmallVectorImpl<Value>& reifiedReturnShapes) {
+  DotOp::Adaptor adaptor(operands);
+  Value lhs = adaptor.lhs();
+  Value rhs = adaptor.rhs();
+
+  RankedTensorType lhs_type = lhs.getType().dyn_cast<RankedTensorType>();
+  RankedTensorType rhs_type = rhs.getType().dyn_cast<RankedTensorType>();
+  // Not support unranked type a.t.m.
+  if (!lhs_type || !rhs_type) return failure();
+
+  if (lhs_type.getRank() > 2 || rhs_type.getRank() > 2) {
+    // TODO: make sure whether DotOp supports batch dimension or not. The doc
+    // (https://www.tensorflow.org/xla/operation_semantics#dot) does not tell.
+    // We thus only support 1-D and 2-D Dot currently.
+    return failure();
+  }
+
+  Location loc = this->getLoc();
+  SmallVector<Value, 4> shape_values;
+
+  Type shape_scalar_type = builder.getIndexType();
+  auto to_shape_scalar_type = [&](Value v) {
+    return MaybeCastTo(builder, loc, v, shape_scalar_type);
+  };
+
+  if (lhs_type.getRank() == 2) {
+    shape_values.emplace_back(
+        to_shape_scalar_type(builder.create<tensor::DimOp>(loc, lhs, 0)));
+  }
+  if (rhs_type.getRank() == 2) {
+    shape_values.emplace_back(
+        to_shape_scalar_type(builder.create<tensor::DimOp>(loc, rhs, 1)));
+  }
+
+  Value output_shape = builder.create<tensor::FromElementsOp>(
+      loc, shape_scalar_type, shape_values);
+  reifiedReturnShapes.push_back(output_shape);
+
+  return success();
+}
+
 void CustomCallOp::getEffects(
     SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>&
         effects) {
