@@ -149,6 +149,7 @@ def _gen_kernel_bin_impl(ctx):
         inputs = [ctx.file.mlir_op, ctx.file._tfso],
         outputs = [gpu_bin],
         executable = ctx.executable._tool,
+        use_default_shell_env=True,
         arguments = cmd_args + [
             "--tile_sizes=%s" % ctx.attr.tile_size,
             "--max-supported-rank=%s" % ctx.attr.max_supported_rank,
