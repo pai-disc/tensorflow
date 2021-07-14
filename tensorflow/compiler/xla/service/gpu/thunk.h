@@ -71,7 +71,6 @@ class Thunk {
     kSequential,
     kTriangularSolve,
     kWhile,
-    kFor, /*ADDED_FOR_TAO*/
   };
 
   struct ThunkInfo {
