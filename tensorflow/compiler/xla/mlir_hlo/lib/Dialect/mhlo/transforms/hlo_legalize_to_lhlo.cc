@@ -514,7 +514,7 @@ void populateHloToLhloConversionPattern(
   // clang-format off
   patterns->add<
       HloToLhloCustomCallOpConverter,
-      HloToLhloDotGeneralOpConverter,
+      // HloToLhloDotGeneralOpConverter,
       HloToLhloOpConverter<mhlo::AbsOp>,
       HloToLhloOpConverter<mhlo::AddOp>,
       HloToLhloOpConverter<mhlo::AndOp>,
@@ -534,6 +534,8 @@ void populateHloToLhloConversionPattern(
       HloToLhloOpConverter<mhlo::CosineOp>,
       HloToLhloOpConverter<mhlo::DivOp>,
       HloToLhloOpConverter<mhlo::DotOp>,
+      HloToLhloOpConverter<mhlo::DotGeneralOp>,
+      HloToLhloOpConverter<mhlo::DynamicConvOp>,
       HloToLhloOpConverter<mhlo::ExpOp>,
       HloToLhloOpConverter<mhlo::Expm1Op>,
       HloToLhloOpConverter<mhlo::FloorOp>,
