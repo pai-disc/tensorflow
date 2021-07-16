@@ -968,9 +968,9 @@ LogicalResult DotGeneralOp::reifyReturnTypeShapes(
   // same. A bad case is '[b0, b1, m, k] dot [b1, b0, k, n]', for which we do
   // not know the output batch-dim order. We use the order in
   // lhs_batch_dimensions currently.
-  for (const auto& element : llvm::enumerate(lhs_batch_dimensions)) {
-    Value value_dim = to_shape_scalar_type(
-        builder.create<tensor::DimOp>(loc, lhs, element.index()));
+  for (auto dim : lhs_batch_dimensions.getValues<int64_t>()) {
+    Value value_dim =
+        to_shape_scalar_type(builder.create<tensor::DimOp>(loc, lhs, dim));
     shape_values.push_back(value_dim);
   }
 
@@ -1791,6 +1791,193 @@ LogicalResult AbsOp::inferReturnTypes(
 LogicalResult CollectivePermuteOp::verify() {
   return mlir::hlo::VerifyCollectivePermuteSourceTargetPairs(
       *this, source_target_pairs());
+}
+
+//===----------------------------------------------------------------------===//
+// ConvOp
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+template <typename Op>
+LogicalResult ConvReifyReturnTypeImpl(
+    Op* op, OpBuilder& builder, ValueRange operands,
+    SmallVectorImpl<Value>& reifiedReturnShapes,
+    const SmallVector<Value>& spatial_padding_values, Type shape_scalar_type) {
+  typename Op::Adaptor adaptor(operands);
+  Value lhs = adaptor.lhs();
+  Value rhs = adaptor.rhs();
+
+  RankedTensorType lhs_type = lhs.getType().dyn_cast<RankedTensorType>();
+  RankedTensorType rhs_type = rhs.getType().dyn_cast<RankedTensorType>();
+  // Not support unranked type a.t.m.
+  if (!lhs_type || !rhs_type) return failure();
+
+  Location loc = op->getLoc();
+
+  auto to_shape_scalar_type = [&](Value v) {
+    return MaybeCastTo(builder, loc, v, shape_scalar_type);
+  };
+
+  ConvDimensionNumbers dimension_numbers = op->dimension_numbers();
+  int64_t input_batch_dimension =
+      dimension_numbers.input_batch_dimension().getInt();
+  int64_t kernel_output_feature_dimension =
+      dimension_numbers.kernel_output_feature_dimension().getInt();
+  DenseIntElementsAttr input_spatial_dimensions_attr =
+      dimension_numbers.input_spatial_dimensions().cast<DenseIntElementsAttr>();
+  DenseIntElementsAttr kernel_spatial_dimensions_attr =
+      dimension_numbers.kernel_spatial_dimensions()
+          .cast<DenseIntElementsAttr>();
+  DenseIntElementsAttr output_spatial_dimensions_attr =
+      dimension_numbers.output_spatial_dimensions()
+          .cast<DenseIntElementsAttr>();
+
+  SmallVector<Value, 4> shape_values(
+      output_spatial_dimensions_attr.getNumElements() + 2);
+
+  // batch dim = lhs-batch-dim / batch_group_count
+  Value lhs_batch_dim = to_shape_scalar_type(
+      builder.create<tensor::DimOp>(loc, lhs, input_batch_dimension));
+  Value batch_group_count = to_shape_scalar_type(
+      builder.create<ConstantIndexOp>(loc, op->batch_group_count()));
+  Value batch_dim = to_shape_scalar_type(
+      builder.create<SignedDivIOp>(loc, lhs_batch_dim, batch_group_count));
+  int64_t output_batch_dimension =
+      dimension_numbers.output_batch_dimension().getInt();
+  shape_values[output_batch_dimension] = batch_dim;
+
+  // Output's feature dim is the same with kernel's output feature dim.
+  Value feature_dim = to_shape_scalar_type(
+      builder.create<tensor::DimOp>(loc, rhs, kernel_output_feature_dimension));
+  int64_t output_feature_dimension =
+      dimension_numbers.output_feature_dimension().getInt();
+  shape_values[output_feature_dimension] = feature_dim;
+
+  DenseIntElementsAttr window_strides_attr = op->window_strides().getValue();
+  DenseIntElementsAttr lhs_dilation_attr = op->lhs_dilation().getValue();
+  DenseIntElementsAttr rhs_dilation_attr = op->rhs_dilation().getValue();
+
+  Value one = to_shape_scalar_type(builder.create<ConstantIndexOp>(loc, 1));
+  for (uint64_t i = 0; i < output_spatial_dimensions_attr.getNumElements();
+       i++) {
+    // effective_input_value =
+    //    (input_size - 1) * input_dilation + 1 + padding_left + padding_right
+    Value effective_input_value =
+        to_shape_scalar_type(builder.create<tensor::DimOp>(
+            loc, lhs, input_spatial_dimensions_attr.getValue<int64_t>(i)));
+    // Dilation.
+    if (lhs_dilation_attr) {
+      Value input_dilation =
+          to_shape_scalar_type(builder.create<ConstantIndexOp>(
+              loc, lhs_dilation_attr.getValue<int64_t>(i)));
+      effective_input_value = builder.create<AddIOp>(
+          loc, builder.create<MulIOp>(
+                   loc, builder.create<SubIOp>(loc, effective_input_value, one),
+                   input_dilation),
+          one);
+    }
+
+    // Padding.
+    if (!spatial_padding_values.empty()) {
+      Value padding_left = spatial_padding_values[i * 2];
+      Value padding_right = spatial_padding_values[i * 2 + 1];
+      effective_input_value = builder.create<AddIOp>(
+          loc, effective_input_value,
+          builder.create<AddIOp>(loc, padding_left, padding_right));
+    }
+
+    // effective_kernel_size = (kernel_size - 1) * dilation + 1
+    Value effective_kernel_size_value =
+        to_shape_scalar_type(builder.create<tensor::DimOp>(
+            loc, rhs, kernel_spatial_dimensions_attr.getValue<int64_t>(i)));
+    if (rhs_dilation_attr) {
+      Value kernel_dilation =
+          to_shape_scalar_type(builder.create<ConstantIndexOp>(
+              loc, rhs_dilation_attr.getValue<int64_t>(i)));
+      effective_kernel_size_value = builder.create<AddIOp>(
+          loc, one,
+          builder.create<MulIOp>(
+              loc, kernel_dilation,
+              builder.create<SubIOp>(loc, effective_kernel_size_value, one)));
+    }
+
+    // output_size =
+    //     (effective_input_value - effective_kernel_size_value) / stride + 1
+    Value output_dim_value = builder.create<SubIOp>(
+        loc, effective_input_value, effective_kernel_size_value);
+    if (window_strides_attr) {
+      Value stride_value = to_shape_scalar_type(builder.create<ConstantIndexOp>(
+          loc, window_strides_attr.getValue<int64_t>(i)));
+      output_dim_value =
+          builder.create<SignedDivIOp>(loc, output_dim_value, stride_value);
+    }
+    output_dim_value = builder.create<AddIOp>(loc, output_dim_value, one);
+    shape_values[output_spatial_dimensions_attr.getValue<int64_t>(i)] =
+        output_dim_value;
+  }
+
+  Value output_shape = builder.create<tensor::FromElementsOp>(
+      loc, shape_scalar_type, shape_values);
+  reifiedReturnShapes.push_back(output_shape);
+
+  return success();
+}
+}
+
+LogicalResult ConvOp::reifyReturnTypeShapes(
+    OpBuilder& builder, ValueRange operands,
+    SmallVectorImpl<Value>& reifiedReturnShapes) {
+  ConvOp::Adaptor adaptor(operands);
+  Location loc = this->getLoc();
+
+  DenseIntElementsAttr padding_attr = this->padding().getValue();
+  Type shape_scalar_type = builder.getIndexType();
+
+  SmallVector<Value> spatial_padding_values;
+  if (padding_attr) {
+    for (int64_t pad : padding_attr.getValues<int64_t>()) {
+      Value pad_value = builder.create<ConstantIndexOp>(loc, pad);
+      pad_value = MaybeCastTo(builder, loc, pad_value, shape_scalar_type);
+      spatial_padding_values.push_back(pad_value);
+    }
+  }
+
+  return ConvReifyReturnTypeImpl(this, builder, operands, reifiedReturnShapes,
+                                 spatial_padding_values, shape_scalar_type);
+}
+
+LogicalResult DynamicConvOp::reifyReturnTypeShapes(
+    OpBuilder& builder, ValueRange operands,
+    SmallVectorImpl<Value>& reifiedReturnShapes) {
+  DynamicConvOp::Adaptor adaptor(operands);
+  Value d_padding = adaptor.d_padding();
+
+  RankedTensorType padding_type =
+      d_padding.getType().dyn_cast<RankedTensorType>();
+  // Not support unranked type a.t.m.
+  if (!padding_type) return failure();
+
+  Location loc = this->getLoc();
+  Type shape_scalar_type = padding_type.getElementType();
+  auto to_shape_scalar_type = [&](Value v) {
+    return MaybeCastTo(builder, loc, v, shape_scalar_type);
+  };
+
+  SmallVector<Value> spatial_padding_values;
+  ConvDimensionNumbers dimension_numbers = this->dimension_numbers();
+  DenseIntElementsAttr input_spatial_dimensions_attr =
+      dimension_numbers.input_spatial_dimensions().cast<DenseIntElementsAttr>();
+  int64_t padding_num = input_spatial_dimensions_attr.getNumElements() * 2;
+  for (int64_t i = 0; i < padding_num; i++) {
+    Value offset = builder.create<ConstantIndexOp>(loc, i);
+    Value pad_value = to_shape_scalar_type(
+        builder.create<tensor::ExtractOp>(loc, d_padding, offset));
+    spatial_padding_values.push_back(pad_value);
+  }
+
+  return ConvReifyReturnTypeImpl(this, builder, operands, reifiedReturnShapes,
+                                 spatial_padding_values, shape_scalar_type);
 }
 
 //===----------------------------------------------------------------------===//
