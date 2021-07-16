@@ -261,6 +261,8 @@ func @dot(%arg0: tensor<?x?xf32>, %arg1: tensor<?x?xf32>) -> tensor<?x?xf32> {
   return %0: tensor<?x?xf32>
 }
 
+// -----
+
 // CHECK-LABEL: func @dot_general
 // CHECK-SAME: (%[[ARG0:.*]]: memref<?x?x?xf32>, %[[ARG1:.*]]: memref<?x?x?xf32>)
 func @dot_general(%arg0: tensor<?x?x?xf32>, %arg1: tensor<?x?x?xf32>) -> tensor<?x?x?xf32> {
@@ -279,4 +281,138 @@ func @dot_general(%arg0: tensor<?x?x?xf32>, %arg1: tensor<?x?x?xf32>) -> tensor<
     rhs_contracting_dimensions = dense<1> : tensor<1xi64>
   }} : (tensor<?x?x?xf32>, tensor<?x?x?xf32>) -> tensor<?x?x?xf32>
   return %0: tensor<?x?x?xf32>
+}
+
+// -----
+
+// CHECK-LABEL: func @conv
+// CHECK-SAME: (%[[ARG0:.*]]: memref<?x?x?x?xf32>, %[[ARG1:.*]]: memref<?x?x?x?xf32>)
+func @conv(%arg0: tensor<?x?x?x?xf32>, %arg1: tensor<?x?x?x?xf32>)
+  -> tensor<?x?x?x?xf32> {
+  %0 = "mhlo.convolution"(%arg0, %arg1) {
+    batch_group_count = 1 : i64,
+    dimension_numbers = {
+      // CHECK-DAG: %[[C0_BATCH_IDX_OR_KERNEL_X_IDX:.*]] = constant 0 : index
+      // CHECK-DAG: %[[BATCH_DIM:.*]] = memref.dim %[[ARG0]], %[[C0_BATCH_IDX_OR_KERNEL_X_IDX]] : memref<?x?x?x?xf32>
+      input_batch_dimension = 0 : i64,
+      input_feature_dimension = 3 : i64,
+      input_spatial_dimensions = dense<[1, 2]> : tensor<2xi64>,
+      kernel_input_feature_dimension = 2 : i64,
+      // CHECK-DAG: %[[C3_FEATURE_IDX_OR_PAD_X:.*]] = constant 3 : index
+      // Note that padding in x dim is 1 + 2 = 3, as in `padding` attribute.
+      // CHECK-DAG: %[[FEATURE_DIM:.*]] = memref.dim %[[ARG1]], %[[C3_FEATURE_IDX_OR_PAD_X]] : memref<?x?x?x?xf32>
+      kernel_output_feature_dimension = 3 : i64,
+      kernel_spatial_dimensions = dense<[0, 1]> : tensor<2xi64>,
+      output_batch_dimension = 0 : i64,
+      output_feature_dimension = 3 : i64,
+      // CHECK-DAG: %[[C1_IN_OUT_X_IDX_OR_KERNEL_Y_IDX:.*]] = constant 1 : index
+      // CHECK-DAG: %[[C2_IN_OUT_Y_IDX_OR_LHS_DIL_OR_STRIDE_X:.*]] = constant 2 : index
+      output_spatial_dimensions = dense<[1, 2]> : tensor<2xi64>
+    },
+    feature_group_count = 1 : i64,
+    // lhs_dilation = dense<1> : tensor<2xi64>,
+    // CHECK-DAG: %[[C4_PAD_Y:.*]] = constant 4 : index
+    padding = dense<[[1, 2], [3, 1]]> : tensor<2x2xi64>,
+    precision_config = ["DEFAULT", "DEFAULT"],
+    rhs_dilation = dense<[2, 1]> : tensor<2xi64>,
+    window_strides = dense<[2, 1]> : tensor<2xi64>
+
+  } : (tensor<?x?x?x?xf32>, tensor<?x?x?x?xf32>) -> tensor<?x?x?x?xf32>
+
+  // Calculate first spatial dimension, which we name dim-x here.
+  // CHECK-DAG: %[[IN_X_DIM:.*]] = memref.dim %[[ARG0]], %[[C1_IN_OUT_X_IDX_OR_KERNEL_Y_IDX]] : memref<?x?x?x?xf32>
+  // CHECK: %[[IN_X_SIZE_WITH_PAD:.*]] = addi %[[IN_X_DIM]], %[[C3_FEATURE_IDX_OR_PAD_X]]
+  // CHECK: %[[KERNEL_X_DIM:.*]] = memref.dim %[[ARG1]], %[[C0_BATCH_IDX_OR_KERNEL_X_IDX]]
+  // CHECK: %[[KXD_MINUS_ONE:.*]] = subi %[[KERNEL_X_DIM]], %[[C1_IN_OUT_X_IDX_OR_KERNEL_Y_IDX]]
+  // CHECK: %[[KXD_MINUS_ONE_MUL_D:.*]] = muli %[[KXD_MINUS_ONE]], %[[C2_IN_OUT_Y_IDX_OR_LHS_DIL_OR_STRIDE_X]]
+  // CHECK: %[[KERNEL_X_WITH_DIL:.*]] = addi %[[KXD_MINUS_ONE_MUL_D]], %[[C1_IN_OUT_X_IDX_OR_KERNEL_Y_IDX]]
+  // CHECK: %[[INX_MINUS_KX:.*]] = subi %[[IN_X_SIZE_WITH_PAD]], %[[KERNEL_X_WITH_DIL]]
+  // CHECK: %[[INX_MINUS_KX_DIV_STRIDE:.*]] = divi_signed %[[INX_MINUS_KX]], %[[C2_IN_OUT_Y_IDX_OR_LHS_DIL_OR_STRIDE_X]]
+  // CHECK: %[[OUT_X_SIZE:.*]] = addi %[[INX_MINUS_KX_DIV_STRIDE]], %[[C1_IN_OUT_X_IDX_OR_KERNEL_Y_IDX]]
+
+  // Calculate second spatial dimension, which we name dim-y here.
+  // CHECK-DAG: %[[IN_Y_DIM:.*]] = memref.dim %[[ARG0]], %[[C2_IN_OUT_Y_IDX_OR_LHS_DIL_OR_STRIDE_X]] : memref<?x?x?x?xf32>
+  // CHECK: %[[IN_Y_SIZE_WITH_PAD:.*]] = addi %[[IN_Y_DIM]], %[[C4_PAD_Y]]
+  // CHECK: %[[KERNEL_Y_DIM:.*]] = memref.dim %[[ARG1]], %[[C1_IN_OUT_X_IDX_OR_KERNEL_Y_IDX]]
+  // CHECK: %[[INY_MINUS_KY:.*]] = subi %[[IN_Y_SIZE_WITH_PAD]], %[[KERNEL_Y_DIM]]
+  // CHECK: %[[OUT_Y_SIZE:.*]] = addi %[[INY_MINUS_KY]], %[[C1_IN_OUT_X_IDX_OR_KERNEL_Y_IDX]]
+
+  // CHECK: %[[OUT:.*]] = memref.alloc(%[[BATCH_DIM]], %[[OUT_X_SIZE]], %[[OUT_Y_SIZE]], %[[FEATURE_DIM]]) : memref<?x?x?x?xf32>
+  // CHECK: lmhlo.convolution(%[[ARG0]], %[[ARG1]], %[[OUT]])
+  return %0 : tensor<?x?x?x?xf32>
+}
+
+// -----
+
+// CHECK-LABEL: func @dynamic_conv
+// CHECK-SAME: (%[[ARG0:.*]]: memref<?x?x?x?xf32>, %[[ARG1:.*]]: memref<?x?x?x?xf32>, %[[ARG2:.*]]: memref<4xi32>)
+func @dynamic_conv(%arg0: tensor<?x?x?x?xf32>, %arg1: tensor<?x?x?x?xf32>, %arg2: tensor<4xi32>)
+  -> tensor<?x?x?x?xf32> {
+  %0 = "mhlo.dynamic_conv"(%arg0, %arg1, %arg2) {
+    batch_group_count = 1 : i64,
+    dimension_numbers = {
+      // CHECK-DAG: %[[C0_BATCH_IDX_OR_KERNEL_X_IDX:.*]] = constant 0 : index
+      input_batch_dimension = 0 : i64,
+      input_feature_dimension = 3 : i64,
+      // CHECK-DAG: %[[C1_IN_OUT_X_IDX_OR_KERNEL_Y_IDX:.*]] = constant 1 : index
+      // CHECK-DAG: %[[C2_IN_OUT_Y_IDX:.*]] = constant 2 : index
+      input_spatial_dimensions = dense<[1, 2]> : tensor<2xi64>,
+      kernel_input_feature_dimension = 2 : i64,
+      // CHECK-DAG: %[[C3_FEATURE_IDX:.*]] = constant 3 : index
+      // Note that padding in x dim is 1 + 2 = 3, as in `padding` attribute.
+      kernel_output_feature_dimension = 3 : i64,
+      kernel_spatial_dimensions = dense<[0, 1]> : tensor<2xi64>,
+      output_batch_dimension = 0 : i64,
+      output_feature_dimension = 3 : i64,
+      output_spatial_dimensions = dense<[1, 2]> : tensor<2xi64>
+    },
+    feature_group_count = 1 : i64,
+    // lhs_dilation = dense<1> : tensor<2xi64>,
+    precision_config = ["DEFAULT", "DEFAULT"],
+    rhs_dilation = dense<[2, 1]> : tensor<2xi64>,
+    window_strides = dense<[2, 1]> : tensor<2xi64>
+
+  } : (tensor<?x?x?x?xf32>, tensor<?x?x?x?xf32>, tensor<4xi32>) -> tensor<?x?x?x?xf32>
+  // CHECK-DAG: %[[C1_I32:.*]] = constant 1 : i32
+  // CHECK-DAG: %[[C2_I32_LHS_DIL_OR_STRIDE_X:.*]] = constant 2 : i32
+
+  // Calculate paddings.
+  // CHECK-DAG: %[[PAD_X_L:.*]] = memref.load %[[ARG2]][%[[C0_BATCH_IDX_OR_KERNEL_X_IDX]]]
+  // CHECK-DAG: %[[PAD_X_H:.*]] = memref.load %[[ARG2]][%[[C1_IN_OUT_X_IDX_OR_KERNEL_Y_IDX]]]
+  // CHECK-DAG: %[[PAD_Y_L:.*]] = memref.load %[[ARG2]][%[[C2_IN_OUT_Y_IDX]]]
+  // CHECK-DAG: %[[PAD_Y_H:.*]] = memref.load %[[ARG2]][%[[C3_FEATURE_IDX]]]
+
+  // Batch dim and feature dim.
+  // CHECK-DAG: %[[BATCH_DIM:.*]] = memref.dim %[[ARG0]], %[[C0_BATCH_IDX_OR_KERNEL_X_IDX]] : memref<?x?x?x?xf32>
+  // CHECK-DAG: %[[FEATURE_DIM:.*]] = memref.dim %[[ARG1]], %[[C3_FEATURE_IDX]] : memref<?x?x?x?xf32>
+
+  // Calculate first spatial dimension, which we name dim-x here.
+  // CHECK-DAG: %[[IN_X_DIM_INDEX:.*]] = memref.dim %[[ARG0]], %[[C1_IN_OUT_X_IDX_OR_KERNEL_Y_IDX]] : memref<?x?x?x?xf32>
+  // CHECK: %[[IN_X_DIM:.*]] = index_cast %[[IN_X_DIM_INDEX]] : index to i32
+  // CHECK-DAG: %[[PAD_X:.*]] = addi %[[PAD_X_L]], %[[PAD_X_H]]
+  // CHECK: %[[IN_X_SIZE_WITH_PAD:.*]] = addi %[[IN_X_DIM]], %[[PAD_X]]
+  // CHECK: %[[KERNEL_X_DIM_INDEX:.*]] = memref.dim %[[ARG1]], %[[C0_BATCH_IDX_OR_KERNEL_X_IDX]]
+  // CHECK: %[[KERNEL_X_DIM:.*]] = index_cast %[[KERNEL_X_DIM_INDEX]] : index to i32
+  // CHECK: %[[KXD_MINUS_ONE:.*]] = subi %[[KERNEL_X_DIM]], %[[C1_I32]]
+  // CHECK: %[[KXD_MINUS_ONE_MUL_D:.*]] = muli %[[KXD_MINUS_ONE]], %[[C2_I32_LHS_DIL_OR_STRIDE_X]]
+  // CHECK: %[[KERNEL_X_WITH_DIL:.*]] = addi %[[KXD_MINUS_ONE_MUL_D]], %[[C1_I32]]
+  // CHECK: %[[INX_MINUS_KX:.*]] = subi %[[IN_X_SIZE_WITH_PAD]], %[[KERNEL_X_WITH_DIL]]
+  // CHECK: %[[INX_MINUS_KX_DIV_STRIDE:.*]] = divi_signed %[[INX_MINUS_KX]], %[[C2_I32_LHS_DIL_OR_STRIDE_X]]
+  // CHECK: %[[OUT_X_SIZE:.*]] = addi %[[INX_MINUS_KX_DIV_STRIDE]], %[[C1_I32]]
+
+  // Calculate second spatial dimension, which we name dim-y here.
+  // CHECK-DAG: %[[IN_Y_DIM_INDEX:.*]] = memref.dim %[[ARG0]], %[[C2_IN_OUT_Y_IDX]] : memref<?x?x?x?xf32>
+  // CHECK: %[[IN_Y_DIM:.*]] = index_cast %[[IN_Y_DIM_INDEX]] : index to i32
+  // CHECK-DAG: %[[PAD_Y:.*]] = addi %[[PAD_Y_L]], %[[PAD_Y_H]]
+  // CHECK: %[[IN_Y_SIZE_WITH_PAD:.*]] = addi %[[IN_Y_DIM]], %[[PAD_Y]]
+  // CHECK: %[[KERNEL_Y_DIM_INDEX:.*]] = memref.dim %[[ARG1]], %[[C1_IN_OUT_X_IDX_OR_KERNEL_Y_IDX]]
+  // CHECK: %[[KERNEL_Y_DIM:.*]] = index_cast %[[KERNEL_Y_DIM_INDEX]] : index to i32
+  // CHECK: %[[INY_MINUS_KY:.*]] = subi %[[IN_Y_SIZE_WITH_PAD]], %[[KERNEL_Y_DIM]]
+  // CHECK: %[[OUT_Y_SIZE:.*]] = addi %[[INY_MINUS_KY]], %[[C1_I32]]
+
+  // CHECK: %[[OUT_X_SIZE_INDEX:.*]] = index_cast %[[OUT_X_SIZE]] : i32 to index
+  // CHECK: %[[OUT_Y_SIZE_INDEX:.*]] = index_cast %[[OUT_Y_SIZE]] : i32 to index
+  // CHECK: %[[OUT:.*]] = memref.alloc(%[[BATCH_DIM]], %[[OUT_X_SIZE_INDEX]], %[[OUT_Y_SIZE_INDEX]], %[[FEATURE_DIM]]) : memref<?x?x?x?xf32>
+  // CHECK: "lmhlo.dynamic_conv"(%[[ARG0]], %[[ARG1]], %[[ARG2]], %[[OUT]])
+  return %0 : tensor<?x?x?x?xf32>
 }
