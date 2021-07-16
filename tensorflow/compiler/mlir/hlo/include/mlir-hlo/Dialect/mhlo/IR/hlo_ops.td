@@ -1410,7 +1410,7 @@ def HLO_CollectivePermuteOp: HLO_Op<"collective_permute",
   let results = (outs HLO_Tensor);
 }
 
-def HLO_ConvOp : HLO_Op<"convolution", [NoSideEffect]> {
+def HLO_ConvOp : HLO_ShapedInterfaceOp<"convolution", [NoSideEffect]> {
   let summary = "Convolution operator";
   let description = [{
     Computes a convolution of the kind used in neural networks.
@@ -2272,7 +2272,7 @@ def HLO_DynamicGatherOp: HLO_ShapedInterfaceOp<"dynamic_gather", [NoSideEffect]>
   let hasCustomHLOConverter = 1;
 }
 
-def HLO_DynamicConvOp : HLO_Op<"dynamic_conv", [NoSideEffect]>, BASE_HLO_ConvOp {
+def HLO_DynamicConvOp : HLO_ShapedInterfaceOp<"dynamic_conv", [NoSideEffect]>, BASE_HLO_ConvOp {
   let summary = "Dynamic Convolution operator";
   let description = [{
     The dynamic shape version of ConvOp. Computes a convolution with dynamic padding.

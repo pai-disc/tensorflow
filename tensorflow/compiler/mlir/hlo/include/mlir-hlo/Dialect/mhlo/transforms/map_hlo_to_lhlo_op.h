@@ -58,6 +58,7 @@ MAP_HLO_TO_LHLO(DivOp);
 MAP_HLO_TO_LHLO(DotOp);
 MAP_HLO_TO_LHLO(DotGeneralOp);
 MAP_HLO_TO_LHLO(DynamicBroadcastInDimOp);
+MAP_HLO_TO_LHLO(DynamicConvOp);
 MAP_HLO_TO_LHLO(DynamicGatherOp);
 MAP_HLO_TO_LHLO(DynamicIotaOp);
 MAP_HLO_TO_LHLO(DynamicPadOp);
