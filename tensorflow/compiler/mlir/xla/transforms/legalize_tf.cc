@@ -3341,6 +3341,49 @@ class ConvertBatchMatMulV2Op : public OpRewritePattern<TF::BatchMatMulV2Op> {
   }
 };
 
+class ConvertBatchMatMulOp : public OpRewritePattern<TF::BatchMatMulOp> {
+ public:
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(TF::BatchMatMulOp op,
+                                PatternRewriter &rewriter) const override {
+    Value lhs = op.x();
+    Value rhs = op.y();
+    auto lhs_type = lhs.getType().dyn_cast<RankedTensorType>();
+    auto rhs_type = rhs.getType().dyn_cast<RankedTensorType>();
+    if (!lhs_type || !rhs_type) return failure();
+    if (lhs_type.getElementType().isa<ComplexType>() && op.adj_x()) {
+      lhs = rewriter.create<TF::ConjOp>(op.getLoc(), lhs_type, lhs);
+    }
+    if (rhs_type.getElementType().isa<ComplexType>() && op.adj_y()) {
+      rhs = rewriter.create<TF::ConjOp>(op.getLoc(), rhs_type, rhs);
+    }
+
+    lhs_type = lhs.getType().cast<RankedTensorType>();
+    rhs_type = rhs.getType().cast<RankedTensorType>();
+    assert(lhs_type.getRank() == rhs_type.getRank());
+    int64_t rank = lhs_type.getRank();
+    auto batch_dimensions = GetI64ElementsAttr(
+        llvm::to_vector<4>(llvm::seq<int64_t>(0, rank - 2)), &rewriter);
+    auto lhs_contracting_dimensions = GetI64ElementsAttr(
+        llvm::makeArrayRef({op.adj_x() ? rank - 2 : rank - 1}), &rewriter);
+    auto rhs_contracting_dimensions = GetI64ElementsAttr(
+        llvm::makeArrayRef({op.adj_y() ? rank - 1 : rank - 2}), &rewriter);
+    auto dimension_numbers = DotDimensionNumbers::get(
+        /*lhs_batching_dimensions=*/batch_dimensions,
+        /*rhs_batching_dimensions=*/batch_dimensions,
+        /*lhs_contracting_dimensions=*/lhs_contracting_dimensions,
+        /*rhs_contracting_dimensions=*/rhs_contracting_dimensions,
+        rewriter.getContext());
+    // TODO(silvasean): Emit shape checks for contracting dimensions.
+    // (The batch dimensions are checked by the broadcasting logic)
+    rewriter.replaceOpWithNewOp<DotGeneralOp>(op, op.getType(), lhs, rhs,
+                                              dimension_numbers,
+                                              /*precision_config=*/nullptr);
+    return success();
+  }
+};
+
 // Converts the tf.Split op into a series of HLO slice ops when the tensor to be
 // split has fully static shape and the dimension to split is a constant.
 //
@@ -7231,6 +7274,7 @@ void PopulateLegalizeTfPatterns(MLIRContext *context,
     ConvertAnyOp,
     ConvertArgMaxOp,
     ConvertArgMinOp,
+    ConvertBatchMatMulOp,
     ConvertBatchMatMulV2Op,
     ConvertBiasAddOp,
     ConvertBroadcastToOp,
