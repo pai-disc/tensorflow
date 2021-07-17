@@ -493,7 +493,7 @@ void populateHLOToLHLOConversionPattern(
   // clang-format off
   patterns->add<
       HloToLhloCustomCallOpConverter,
-      HloToLhloDotGeneralOpConverter,
+      // HloToLhloDotGeneralOpConverter,
       HloToLhloOpConverter<mhlo::AbsOp>,
       HloToLhloOpConverter<mhlo::AddOp>,
       HloToLhloOpConverter<mhlo::AndOp>,
