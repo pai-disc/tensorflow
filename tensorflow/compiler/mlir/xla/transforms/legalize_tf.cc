@@ -1102,6 +1102,99 @@ class ConvertBiasAddOp : public OpRewritePattern<TF::BiasAddOp> {
   }
 };
 
+// Convert TF::GatherV2Op to mhlo::DynamicGatherOp
+class ConvertGatherV2OpDynamic : public OpRewritePattern<TF::GatherV2Op> {
+  using OpRewritePattern<TF::GatherV2Op>::OpRewritePattern;
+  // TODO(disc): To recover static special case's performance with folding and
+  // canonicalization.
+  LogicalResult matchAndRewrite(TF::GatherV2Op op,
+                                PatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    Value params = op.params();
+    // params and indices of GatherNdOp must be ranked
+    auto params_ty = params.getType().dyn_cast<RankedTensorType>();
+    Value indices = op.indices();
+    auto indices_ty = indices.getType().dyn_cast<RankedTensorType>();
+    if (!params_ty || !indices_ty) return failure();
+
+    // // TODO(disc): Remove this constraint once fold and canonicalization
+    // // implemented.
+    // if (params_ty.hasStaticShape() && indices_ty.hasStaticShape())
+    //   return failure();
+
+    int64_t params_rank = params_ty.getRank();
+    int64_t indices_rank = indices_ty.getRank();
+
+    // axis
+    DenseIntElementsAttr axis_attr;
+    // axis must be const for GatherOp
+    if (!matchPattern(op.axis(), m_Constant(&axis_attr))) return failure();
+
+    int64_t axis = (*axis_attr.begin()).getSExtValue();
+    if (axis < 0) axis += params_rank;
+
+    // slice_sizes
+    SmallVector<int64_t, 4> slice_sizes;
+    slice_sizes.reserve(params_rank);
+    for (int64_t dim_idx = 0; dim_idx < params_rank; ++dim_idx) {
+      if (dim_idx == axis) {
+        slice_sizes.push_back(1);
+      } else {
+        // potentially dynamic
+        int64_t dim_size = params_ty.getDimSize(dim_idx);
+        slice_sizes.push_back(dim_size);
+      }
+    }
+    SmallVector<Value, 4> slice_sizes_vals;
+    for (int64_t dim_idx = 0; dim_idx < params_rank; ++dim_idx) {
+      if (dim_idx == axis) {
+        slice_sizes_vals.push_back(rewriter.create<ConstantOp>(
+            loc, rewriter.getIntegerAttr(indices_ty.getElementType(), 1)));
+      } else {
+        int64_t dim_size = params_ty.getDimSize(dim_idx);
+        if (dim_size != ShapedType::kDynamicSize) {
+          slice_sizes_vals.push_back(rewriter.create<ConstantOp>(
+              loc,
+              rewriter.getIntegerAttr(indices_ty.getElementType(), dim_size)));
+        } else {
+          slice_sizes_vals.push_back(rewriter.create<IndexCastOp>(
+              loc, rewriter.create<tensor::DimOp>(loc, params, dim_idx),
+              indices_ty.getElementType()));
+        }
+      }
+    }
+    Value slice_sizes_value = rewriter.create<tensor::FromElementsOp>(
+        loc, indices_ty.getElementType(), slice_sizes_vals);
+    // offset_dims
+    SmallVector<int64_t, 4> offset_dims;
+    for (int64_t dim_idx = 0; dim_idx < params_rank; dim_idx++) {
+      if (dim_idx < axis) {
+        offset_dims.push_back(dim_idx);
+      } else if (dim_idx >= axis + 1) {
+        offset_dims.push_back(dim_idx + indices_rank - 1);
+      }
+    }
+    // collapsed_slice_dims
+    SmallVector<int64_t, 4> collapsed_slice_dims(1, axis);
+    // start_index_map
+    SmallVector<int64_t, 4> start_index_map(1, axis);
+    // index_vector_dim
+    int64_t index_vector_dim = indices_rank;
+    auto dims_attr = GatherDimensionNumbers::get(
+        /*offset_dims=*/GetI64ElementsAttr(offset_dims, &rewriter),
+        /*collapsed_slice_dims=*/
+        GetI64ElementsAttr(collapsed_slice_dims, &rewriter),
+        /*start_index_map=*/GetI64ElementsAttr(start_index_map, &rewriter),
+        /*index_vector_dim=*/rewriter.getI64IntegerAttr(index_vector_dim),
+        rewriter.getContext());
+
+    rewriter.replaceOpWithNewOp<mhlo::DynamicGatherOp>(
+        op, op.getType(), op.params(), op.indices(), slice_sizes_value,
+        dims_attr);
+    return success();
+  }
+};
+
 // Conterts tf.Conv2D to mhlo.dynamic_conv.
 // TODO(disc): To recover static special case's performance with adding folding,
 // canonicalization func and removing ConvertConvOp.
@@ -4007,6 +4100,448 @@ class ConvertStridedSliceGradOp
         GetI64ElementsAttr(padding_low, &rewriter),
         GetI64ElementsAttr(padding_high, &rewriter),
         GetI64ElementsAttr(padding_interm, &rewriter));
+    return success();
+  }
+};
+
+namespace {
+// TODO: move these templates to legalize_tf_util.h when community codes are
+// stablized Checks if the `index` bit of `val` is set.
+template <class T>
+constexpr bool IsSet(const T& val, unsigned index) {
+  return (val & (1 << index)) != 0;
+}
+
+// Sets the `index` bit of `val`.
+template <class T>
+constexpr void Set(T& val, unsigned index) {
+  val |= (1 << index);
+}
+
+// Unset the `index` bit of `val`.
+template <class T>
+constexpr void Unset(T& val, unsigned index) {
+  val &= ~(1 << index);
+}
+
+// Copy the `src_index` bit of `src` to `dst_index` bit of `dst`.
+template <class T>
+constexpr void CopyBit(const T& src, unsigned src_index, T& dst,
+                       unsigned dst_index) {
+  if (IsSet(src, src_index))
+    Set(dst, dst_index);
+  else
+    Unset(dst, dst_index);
+}
+
+// Returns a new scalar integer value having type `type`. Here `type` must be
+// an integer or index type.
+Value MaybeCastTo(OpBuilder& b, Location loc, Value value, Type type) {
+  if (type == value.getType()) return value;
+  assert(type.isIndex() || value.getType().isIndex());
+  return b.create<IndexCastOp>(loc, value, type);
+}
+
+struct SparseSliceSpec {
+  int64_t dims;
+  int32_t begin_mask, end_mask, ellipsis_mask, new_axis_mask, shrink_axis_mask;
+  const ArrayRef<Value>& begin;
+  const ArrayRef<Value>& end;
+  const ArrayRef<Value>& strides;
+};
+
+struct DenseSliceSpec {
+  int64_t dims;
+  int32_t begin_mask, end_mask, shrink_axis_mask;
+  SmallVectorImpl<Value>& begin;
+  SmallVectorImpl<Value>& end;
+  SmallVectorImpl<Value>& strides;
+};
+
+static SmallVector<int64_t, 4> BuildDenseSliceSpec(
+    PatternRewriter* rewriter, Location loc, Type index_ty,
+    const SparseSliceSpec& sparse, DenseSliceSpec* dense) {
+  Value one =
+      rewriter->create<ConstantOp>(loc, rewriter->getIntegerAttr(index_ty, 1));
+  Value zero =
+      rewriter->create<ConstantOp>(loc, rewriter->getIntegerAttr(index_ty, 0));
+
+  // Build expanded dense begin, end, strides, begin_mask, end_mask, and
+  // shrink_axis_mask.
+  dense->begin.resize(dense->dims);
+  dense->end.resize(dense->dims);
+  dense->strides.resize(dense->dims);
+  dense->begin_mask = 0;
+  dense->end_mask = 0;
+  dense->shrink_axis_mask = 0;
+
+  // Count number of new_axis after ellipsis. This helps in calculating the
+  // number of dimensions ellipsis represents in the sparse spec.
+  bool ellipsis_seen = false;
+  int num_new_axis_after_ellipsis = 0;
+  for (int sparse_index = 0; sparse_index < sparse.dims; ++sparse_index) {
+    if (ellipsis_seen && IsSet(sparse.new_axis_mask, sparse_index))
+      num_new_axis_after_ellipsis++;
+    if (IsSet(sparse.ellipsis_mask, sparse_index)) ellipsis_seen = true;
+  }
+
+  int dense_index = 0;
+  SmallVector<int64_t, 4> new_axis_spec((dense->dims + 1), 0);
+  for (int sparse_index = 0; sparse_index < sparse.dims; ++sparse_index) {
+    if (IsSet(sparse.new_axis_mask, sparse_index)) {
+      new_axis_spec[dense_index]++;
+      continue;
+    }
+    if (IsSet(sparse.ellipsis_mask, sparse_index)) {
+      auto next_index = std::min(dense->dims - (sparse.dims - sparse_index) +
+                                     1 + num_new_axis_after_ellipsis,
+                                 dense->dims);
+      // Expand ellipsis into the appropriate dense indices. From current index
+      // until next_index, all dimensions would have begin and end masks set and
+      // stride 1, i.e., get all elements in those dimensions.
+      for (; dense_index < next_index; ++dense_index) {
+        dense->begin[dense_index] = dense->end[dense_index] = zero;
+        dense->strides[dense_index] = one;
+        Set(dense->begin_mask, dense_index);
+        Set(dense->end_mask, dense_index);
+      }
+      continue;
+    }
+    assert(dense_index < dense->dims);
+    // Copy over the sparse indices to dense indices if ellipsis_mask and
+    // new_axis_mask are not set.
+    dense->begin[dense_index] = sparse.begin[sparse_index];
+    dense->end[dense_index] = sparse.end[sparse_index];
+    dense->strides[dense_index] = sparse.strides[sparse_index];
+    CopyBit(sparse.begin_mask, sparse_index, dense->begin_mask, dense_index);
+    CopyBit(sparse.end_mask, sparse_index, dense->end_mask, dense_index);
+    CopyBit(sparse.shrink_axis_mask, sparse_index, dense->shrink_axis_mask,
+            dense_index);
+    dense_index++;
+  }
+  return new_axis_spec;
+}
+
+static void CalculateSlicedShapeFromDenseIndices(
+    PatternRewriter* rewriter, Location loc, Type index_ty,
+    MutableArrayRef<Value> input_shape, int32_t begin_mask, int32_t end_mask,
+    int32_t shrink_axis_mask, MutableArrayRef<Value> begin,
+    MutableArrayRef<Value> end, MutableArrayRef<Value> stride) {
+  assert(input_shape.size() <= 32);  // Only 32-bit masks are supported.
+
+  // Make sure ranges' ranks are consistent with the input.
+  assert(input_shape.size() == begin.size());
+  assert(input_shape.size() == end.size());
+  assert(input_shape.size() == stride.size());
+
+  Value one =
+      rewriter->create<ConstantOp>(loc, rewriter->getIntegerAttr(index_ty, 1));
+  Value zero =
+      rewriter->create<ConstantOp>(loc, rewriter->getIntegerAttr(index_ty, 0));
+  Value neg_one =
+      rewriter->create<ConstantOp>(loc, rewriter->getIntegerAttr(index_ty, -1));
+  for (int i = 0, e = input_shape.size(); i < e; ++i) {
+    Value dim_i = input_shape[i];
+    Value begin_i = begin[i];
+    Value end_i = end[i];
+    Value stride_i = stride[i];
+
+    // [0]: mask for begin, [1]: mask for end
+    int64_t masks[] = {begin_mask & (1 << i), end_mask & (1 << i)};
+    // [0]: bound for begin, [1]: bound for end
+    // int64_t bounds[] = {stride_i > 0 ? 0 : -1,
+    //                     stride_i > 0 ? dim_i : dim_i - 1};
+    auto stride_is_pos =
+        rewriter->create<CmpIOp>(loc, CmpIPredicate::sgt, stride_i, zero);
+    auto dim_i_minus_one = rewriter->create<SubIOp>(loc, dim_i, one);
+    SmallVector<Value, 2> bounds(2, nullptr);
+    bounds[0] =
+        rewriter->create<mlir::SelectOp>(loc, stride_is_pos, zero, neg_one);
+    bounds[1] = rewriter->create<mlir::SelectOp>(loc, stride_is_pos, dim_i,
+                                                 dim_i_minus_one);
+
+    auto clamp = [&](Value val, Value low, Value high) {
+      auto val_lt_low =
+          rewriter->create<CmpIOp>(loc, CmpIPredicate::slt, val, low);
+      auto high_lt_val =
+          rewriter->create<CmpIOp>(loc, CmpIPredicate::slt, high, val);
+      auto t = rewriter->create<mlir::SelectOp>(loc, high_lt_val, high, val);
+      Value result = rewriter->create<mlir::SelectOp>(loc, val_lt_low, low, t);
+      return result;
+    };
+
+    // Canonicalizes the given range `point` (begin/end) according to the
+    // current dimension. `c` means case: 0 for begin, 1 for end.
+    auto canonicalize = [&](Value point, int c) {
+      if (masks[c]) {
+        // return stride_i > 0 ? bounds[c] : bounds[(c + 1) & 1];
+        Value r = rewriter->create<mlir::SelectOp>(
+            loc, stride_is_pos, bounds[c], bounds[(c + 1) & 1]);
+        return r;
+      }
+
+      // Add dim as offset to negative range point.
+      // point = point < 0 ? dim_i + point : point;
+      auto point_is_neg =
+          rewriter->create<CmpIOp>(loc, CmpIPredicate::slt, point, zero);
+      auto dim_i_plus_point = rewriter->create<AddIOp>(loc, dim_i, point);
+      auto point_pos = rewriter->create<mlir::SelectOp>(
+          loc, point_is_neg, dim_i_plus_point, point);
+      return clamp(point_pos, bounds[0], bounds[1]);
+    };
+
+    begin_i = canonicalize(begin_i, 0);
+    end_i = canonicalize(end_i, 1);
+
+    // interval_len = end_i - begin_i;
+    auto interval_len = rewriter->create<SubIOp>(loc, end_i, begin_i);
+    // If internal length is zero or has different sign from stride, it's a
+    // degenerated case: we are slicing nothing. Otherwise, calculate the sliced
+    // size.
+    // size_i = 0;
+    // if (interval_len != 0 && (interval_len < 0) == (stride_i < 0))
+    //   size_i = (interval_len / stride_i) + (interval_len % stride_i != 0);
+    auto not_degenerated = rewriter->create<mlir::AndOp>(
+        loc,
+        rewriter->create<CmpIOp>(loc, CmpIPredicate::ne, interval_len, zero),
+        rewriter->create<CmpIOp>(
+            loc, CmpIPredicate::eq,
+            rewriter->create<CmpIOp>(loc, CmpIPredicate::slt, interval_len,
+                                     zero),
+            rewriter->create<CmpIOp>(loc, CmpIPredicate::slt, stride_i, zero)));
+    auto interval_len_div_stride =
+        rewriter->create<SignedDivIOp>(loc, interval_len, stride_i);
+    auto interval_len_rem_stride =
+        rewriter->create<SignedRemIOp>(loc, interval_len, stride_i);
+    auto interval_len_rem_stride_not_zero = rewriter->create<CmpIOp>(
+        loc, CmpIPredicate::ne, interval_len_rem_stride, zero);
+    auto interval_len_div_stride_plus_1 =
+        rewriter->create<AddIOp>(loc, interval_len_div_stride, one);
+    auto size_i_val = rewriter->create<mlir::SelectOp>(
+        loc, interval_len_rem_stride_not_zero, interval_len_div_stride_plus_1,
+        interval_len_div_stride);
+    auto size_i = rewriter->create<mlir::SelectOp>(loc, not_degenerated,
+                                                   size_i_val, zero);
+
+    begin[i] = begin_i;
+    if (IsSet(shrink_axis_mask, i)) {
+      // Shrink this dimension. It means we only take the element at begin_i.
+      input_shape[i] = one;
+      end[i] = rewriter->create<AddIOp>(loc, begin_i, one);
+      stride[i] = one;
+    } else {
+      input_shape[i] = size_i;
+      end[i] = end_i;
+      stride[i] = stride_i;
+    }
+  }
+}
+
+static void CalculateFinalShape(PatternRewriter* rewriter, Location loc,
+                                Type index_ty, ArrayRef<Value> slice_shape,
+                                int32_t shrink_axis_mask,
+                                ArrayRef<int64_t> new_axis_spec,
+                                SmallVectorImpl<Value>* final_shape) {
+  final_shape->clear();
+  int64_t dense_dims = slice_shape.size();
+  assert(new_axis_spec.size() > dense_dims);
+  for (int64_t i = 0; i < dense_dims; ++i) {
+    int64_t new_axis = new_axis_spec[i];
+    for (int64_t m = 0; m < new_axis; ++m) {
+      final_shape->push_back(rewriter->create<ConstantOp>(
+          loc, rewriter->getIntegerAttr(index_ty, 1)));
+    }
+    if (IsSet(shrink_axis_mask, i)) {
+      continue;
+    }
+    final_shape->push_back(slice_shape[i]);
+  }
+  // potential new axis after the last dim
+  int64_t new_axis = new_axis_spec[dense_dims];
+  for (int64_t m = 0; m < new_axis; ++m) {
+    final_shape->push_back(rewriter->create<ConstantOp>(
+        loc, rewriter->getIntegerAttr(index_ty, 1)));
+  }
+}
+
+// a dynamic shape version of
+// StridedSliceOp::CalculateSlicedShapeFromSparseIndices, where
+// input_shape/begin/end/stride etc are represented with Value.
+static void CalculateSlicedShapeFromSparseIndices(
+    PatternRewriter* rewriter, Location loc, Type index_ty,
+    MutableArrayRef<Value> input_shape, ArrayRef<Value> sparse_begin,
+    ArrayRef<Value> sparse_end, ArrayRef<Value> sparse_strides,
+    int32_t begin_mask, int32_t end_mask, int32_t ellipsis_mask,
+    int32_t new_axis_mask, int32_t shrink_axis_mask,
+    SmallVectorImpl<Value>* begin, SmallVectorImpl<Value>* end,
+    SmallVectorImpl<Value>* stride, SmallVectorImpl<Value>* final_shape,
+    bool calc_final_shape = false) {
+  int64_t num_sparse_indices = sparse_begin.size();
+  SparseSliceSpec sparse = {num_sparse_indices, begin_mask,    end_mask,
+                            ellipsis_mask,      new_axis_mask, shrink_axis_mask,
+                            sparse_begin,       sparse_end,    sparse_strides};
+
+  // If no ellipsis_mask exists then an implicit ellipsis_mask at the end is
+  // inserted. This handles cases where foo[2:4] (foo.shape() = [4, 8]) yields
+  // a tensor of shape [2, 8], i.e., foo[2:4] is same as foo[2:4, ...].
+  if (sparse.ellipsis_mask == 0) {
+    Set(sparse.ellipsis_mask, sparse.dims);
+    sparse.dims++;
+  }
+
+  int64_t dims = input_shape.size();
+  DenseSliceSpec dense = {dims,
+                          /*begin_mask = */ 0,
+                          /*end_mask = */ 0,
+                          /*shrink_axis_mask = */ 0,
+                          *begin,
+                          *end,
+                          *stride};
+
+  auto new_axis_spec =
+      BuildDenseSliceSpec(rewriter, loc, index_ty, sparse, &dense);
+  CalculateSlicedShapeFromDenseIndices(
+      rewriter, loc, index_ty, input_shape, dense.begin_mask, dense.end_mask,
+      dense.shrink_axis_mask, *begin, *end, *stride);
+  if (calc_final_shape) {
+    CalculateFinalShape(rewriter, loc, index_ty, input_shape,
+                        dense.shrink_axis_mask, new_axis_spec, final_shape);
+  }
+}
+
+// a dynamic shape version of StridedSliceOp::GetSlicedBoundRanges, where
+// begin_indices/end_indices/strides are returned with Value.
+bool GetSlicedBoundRanges(
+    TF::StridedSliceOp op, PatternRewriter& rewriter,
+    Type shape_scalar_type,
+    SmallVectorImpl<Value>& slice_begin, SmallVectorImpl<Value>& slice_end,
+    SmallVectorImpl<Value>& slice_stride,
+    SmallVectorImpl<Value>& input_shape_vec,
+    SmallVectorImpl<Value>& output_shape_vec) {
+  Location loc = op.getLoc();
+  auto input_ty = op.input().getType().cast<RankedTensorType>();
+  int64_t rank = input_ty.getRank();
+  Value in_shape = rewriter.create<shape::ShapeOfOp>(loc, op.input());
+
+  if (op.begin().getType().cast<RankedTensorType>().getDimSize(0) != rank)
+    return false;
+  if (op.end().getType().cast<RankedTensorType>().getDimSize(0) != rank)
+    return false;
+  if (op.strides().getType().cast<RankedTensorType>().getDimSize(0) != rank)
+    return false;
+
+  auto to_shape_scalar_type = [&](Value v) {
+    return MaybeCastTo(rewriter, loc, v, shape_scalar_type);
+  };
+  Value zero = to_shape_scalar_type(rewriter.create<ConstantIndexOp>(loc, 0));
+  auto plusIfNeg = [&] (Value val, Value to_plus) {
+    Value isNeg = rewriter.create<CmpIOp>(loc, CmpIPredicate::slt, val, zero);
+    Value refinedVal = rewriter.create<AddIOp>(loc, val, to_plus);
+    Value result = rewriter.create<mlir::SelectOp>(loc, isNeg, refinedVal, val);
+    return result;
+  };
+
+  SmallVector<Value, 4> sparse_begin, sparse_end, sparse_strides;
+  for (int64_t i = 0; i < rank; ++i) {
+    Value idx = rewriter.create<ConstantIndexOp>(loc, i);
+    input_shape_vec.push_back(to_shape_scalar_type(
+        rewriter.create<tensor::ExtractOp>(loc, in_shape, idx)));
+    sparse_begin.push_back(plusIfNeg(
+      rewriter.create<tensor::ExtractOp>(loc, op.begin(), idx),
+      input_shape_vec.back()));
+    sparse_end.push_back(plusIfNeg(
+      rewriter.create<tensor::ExtractOp>(loc, op.end(), idx),
+      input_shape_vec.back()));
+    sparse_strides.push_back(
+      rewriter.create<tensor::ExtractOp>(loc, op.strides(), idx));
+  }
+
+  CalculateSlicedShapeFromSparseIndices(
+      &rewriter, loc, shape_scalar_type, input_shape_vec, sparse_begin, sparse_end,
+      sparse_strides, op.begin_mask(), op.end_mask(), op.ellipsis_mask(),
+      op.new_axis_mask(), op.shrink_axis_mask(),
+      &slice_begin, &slice_end, &slice_stride, &output_shape_vec,
+      /*calc_final_shape*/ true);
+
+  return true;
+}
+
+} // namespace
+
+class ConvertStridedSliceOpDynamic : public OpRewritePattern<TF::StridedSliceOp> {
+ public:
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(TF::StridedSliceOp op,
+                                PatternRewriter &rewriter) const override {
+    // Only static rank case is supported a.t.m.
+    auto input_ty = op.input().getType().dyn_cast<RankedTensorType>();
+    if (!input_ty) return failure();
+
+    auto result_ty = op.getType().dyn_cast<RankedTensorType>();
+    if (!result_ty) return failure();
+
+    // Only static shape begin/end/strides is supported a.t.m.
+    auto begin_ty = op.begin().getType().dyn_cast<RankedTensorType>();
+    auto end_ty = op.end().getType().dyn_cast<RankedTensorType>();
+    auto strides_ty = op.strides().getType().dyn_cast<RankedTensorType>();
+    if (!begin_ty || !begin_ty.hasStaticShape() ||
+        !end_ty || !end_ty.hasStaticShape() ||
+        !strides_ty || !strides_ty.hasStaticShape())
+      return rewriter.notifyMatchFailure(op,
+           "begin/end/stride need to have static shape");
+
+    // Strides need be constant to tell if there exists negative indices.
+    // TODO(disc): support negative indices.
+    DenseIntElementsAttr sparse_strides_attr;
+    if (!matchPattern(op.strides(), m_Constant(&sparse_strides_attr))) {
+      return rewriter.notifyMatchFailure(op,
+           "requires that strides are constants");
+    }
+
+    for (const APInt& index : sparse_strides_attr) {
+      if (index.getSExtValue() < 0)
+        return rewriter.notifyMatchFailure(
+          op, "requires that strides are positive constants");
+    }
+
+    Type shape_scalar_type = begin_ty.getElementType();
+    SmallVector<Value, 4> begin_indices, end_indices, strides;
+    SmallVector<Value, 4> input_shape_vec, output_shape_vec;
+    if (!GetSlicedBoundRanges(op, rewriter, shape_scalar_type,
+        begin_indices, end_indices,
+        strides, input_shape_vec, output_shape_vec)) {
+      return rewriter.notifyMatchFailure(op,
+           "failed to calculate begin/end/strides values");
+    }
+
+    Location loc = op.getLoc();
+    Type elem_ty = begin_ty.getElementType();
+    Value begin_vec =
+        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, begin_indices);
+    Value end_vec =
+        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, end_indices);
+    Value strides_vec =
+        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, strides);
+    SmallVector<int64_t, 4> slice_result_shape(
+        begin_indices.size(), ShapedType::kDynamicSize);
+    RankedTensorType slice_result_type =
+      RankedTensorType::get(slice_result_shape, input_ty.getElementType());
+    Value sliced = rewriter.create<mhlo::RealDynamicSliceOp>(
+        loc, slice_result_type, op.input(), begin_vec, end_vec, strides_vec);
+    // Reshape slice result so that the shape is updated depending on
+    // 'new_axis_mask' or 'shrink_axis_mask' attributes.
+
+    // TODO: Check if final_shape is static when its rank > 0
+    if (output_shape_vec.size() == 0) {
+      rewriter.replaceOpWithNewOp<mhlo::ReshapeOp>(op, op.getType(), sliced);
+    } else {
+      Value output_shape =
+        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, output_shape_vec);
+      rewriter.replaceOpWithNewOp<mhlo::DynamicReshapeOp>(
+        op, op.getType(), sliced, output_shape);
+    }
+
     return success();
   }
 };
@@ -7364,7 +7899,8 @@ void PopulateLegalizeTfPatterns(MLIRContext *context,
     ConvertSigmoidGradOpDynamic,
     ConvertConv2DDynamic,
     ConvertPadOpDynamic,
-    ConvertGatherNdOpDynamic>(context);
+    ConvertGatherNdOpDynamic,
+    ConvertStridedSliceOpDynamic>(context);
   // clang-format on
 }
 
