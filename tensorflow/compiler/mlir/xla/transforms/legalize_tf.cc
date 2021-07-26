@@ -4424,11 +4424,10 @@ bool GetSlicedBoundRanges(
   int64_t rank = input_ty.getRank();
   Value in_shape = rewriter.create<shape::ShapeOfOp>(loc, op.input());
 
-  if (op.begin().getType().cast<RankedTensorType>().getDimSize(0) != rank)
+  int64_t sparse_rank = op.begin().getType().cast<RankedTensorType>().getDimSize(0);
+  if (op.end().getType().cast<RankedTensorType>().getDimSize(0) != sparse_rank)
     return false;
-  if (op.end().getType().cast<RankedTensorType>().getDimSize(0) != rank)
-    return false;
-  if (op.strides().getType().cast<RankedTensorType>().getDimSize(0) != rank)
+  if (op.strides().getType().cast<RankedTensorType>().getDimSize(0) != sparse_rank)
     return false;
 
   auto to_shape_scalar_type = [&](Value v) {
@@ -4447,6 +4446,7 @@ bool GetSlicedBoundRanges(
     Value idx = rewriter.create<ConstantIndexOp>(loc, i);
     input_shape_vec.push_back(to_shape_scalar_type(
         rewriter.create<tensor::ExtractOp>(loc, in_shape, idx)));
+    if (i >= sparse_rank) continue;
     sparse_begin.push_back(plusIfNeg(
       rewriter.create<tensor::ExtractOp>(loc, op.begin(), idx),
       input_shape_vec.back()));
