@@ -4009,7 +4009,10 @@ class ConvertStridedSliceOp : public OpRewritePattern<TF::StridedSliceOp> {
     DenseIntElementsAttr sparse_begin_attr, sparse_end_attr;
     if (!matchPattern(op.begin(), m_Constant(&sparse_begin_attr)) ||
         !matchPattern(op.end(), m_Constant(&sparse_end_attr))) {
-      return rewriteWithUnknownBegin(op, input_ty, result_ty, rewriter);
+      // Disable this path and rely on ConvertStridedSliceOpDynamic to do the
+      // conversion.
+      // return rewriteWithUnknownBegin(op, input_ty, result_ty, rewriter);
+      return failure();
     }
 
     SmallVector<int64_t, 4> begin_indices, end_indices, strides;
