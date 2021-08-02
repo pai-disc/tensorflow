@@ -5324,9 +5324,11 @@ class ConvertTileOpDynamic : public OpRewritePattern<TF::TileOp> {
     Value multiples = op.multiples();
     auto input_ty = input.getType().dyn_cast<RankedTensorType>();
     if (!input_ty) return failure();
+    auto result_ty = op.getType().dyn_cast<RankedTensorType>();
+    if (!result_ty) return failure();
     // TODO(disc): Remove this constraint once fold and canonicalization
     // implemented.
-    if (input_ty.hasStaticShape()) return failure();
+    if (input_ty.hasStaticShape() && result_ty.hasStaticShape()) return failure();
 
     Type element_type = input_ty.getElementType();
     int64_t input_rank = input_ty.getRank();
