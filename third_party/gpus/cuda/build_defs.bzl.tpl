@@ -63,6 +63,13 @@ def if_cuda_is_configured(x):
       return select({"//conditions:default": x})
     return select({"//conditions:default": []})
 
+def if_cuda11_is_configured(x):
+    """Tests if the CUDA (ver >= 11) was enabled during the configure process.
+    """
+    if %{cuda_is_configured} and %{cuda_version} >= 11:
+      return select({"//conditions:default": x})
+    return select({"//conditions:default": []})
+
 def cuda_header_library(
         name,
         hdrs,
