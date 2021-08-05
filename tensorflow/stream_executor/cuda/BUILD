@@ -14,6 +14,7 @@ load(
 load(
     "//tensorflow/core/platform/default:cuda_build_defs.bzl",
     "if_cuda_is_configured",
+    "if_cuda11_is_configured",
 )
 load(
     "//tensorflow/core/platform:build_config_root.bzl",
@@ -258,11 +259,13 @@ cc_library(
     ]),
 )
 
+cc_library(name = "empty_lib")
+
 alias(
     name = "cublas_lt_lib",
     actual = select({
         "//tensorflow:oss": ":cublas_lt_stub",
-        "//conditions:default": "@local_config_cuda//cuda:cublasLt",
+        "//conditions:default": ":empty_lib",
     }),
     visibility = ["//visibility:public"],
 )
@@ -295,6 +298,8 @@ cc_library(
         "//tensorflow/stream_executor/gpu:gpu_helpers_header",
         "//tensorflow/stream_executor/lib",
         "//tensorflow/stream_executor/platform",
+    ]) + if_cuda11_is_configured([
+        ":cublas_lt_lib",
     ]) + [
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",

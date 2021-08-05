@@ -595,6 +595,15 @@ def _find_libs(repository_ctx, check_cuda_libs_script, cuda_config):
         ),
     }
 
+    if (int(cuda_config.cuda_version_major) >= 11):
+        check_cuda_libs_params["cublasLt"] = _check_cuda_lib_params(
+            "cublasLt",
+            cpu_value,
+            cuda_config.config["cublas_library_dir"],
+            cuda_config.cublas_version,
+            static = False,
+        )
+
     # Verify that the libs actually exist at their locations.
     _check_cuda_libs(repository_ctx, check_cuda_libs_script, check_cuda_libs_params.values())
 
@@ -763,6 +772,7 @@ def _create_dummy_repository(repository_ctx):
         "cuda:build_defs.bzl",
         {
             "%{cuda_is_configured}": "False",
+            "%{cuda_version}": "[]",
             "%{cuda_extra_copts}": "[]",
             "%{cuda_gpu_architectures}": "[]",
         },
@@ -780,6 +790,7 @@ def _create_dummy_repository(repository_ctx):
             "%{cudart_static_linkopt}": _cudart_static_linkopt(cpu_value),
             "%{cudart_lib}": lib_name("cudart", cpu_value),
             "%{cublas_lib}": lib_name("cublas", cpu_value),
+            "%{cublasLt_lib}": lib_name("cublasLt", cpu_value),
             "%{cusolver_lib}": lib_name("cusolver", cpu_value),
             "%{cudnn_lib}": lib_name("cudnn", cpu_value),
             "%{cufft_lib}": lib_name("cufft", cpu_value),
@@ -811,6 +822,7 @@ filegroup(name="cudnn-include")
         "cuda/cuda/lib/%s" % lib_name("cudart_static", cpu_value),
     )
     repository_ctx.file("cuda/cuda/lib/%s" % lib_name("cublas", cpu_value))
+    repository_ctx.file("cuda/cuda/lib/%s" % lib_name("cublasLt", cpu_value))
     repository_ctx.file("cuda/cuda/lib/%s" % lib_name("cusolver", cpu_value))
     repository_ctx.file("cuda/cuda/lib/%s" % lib_name("cudnn", cpu_value))
     repository_ctx.file("cuda/cuda/lib/%s" % lib_name("curand", cpu_value))
@@ -996,20 +1008,38 @@ def _create_local_cuda_repository(repository_ctx):
         ),
     ]
 
-    copy_rules.append(make_copy_files_rule(
-        repository_ctx,
-        name = "cublas-include",
-        srcs = [
-            cublas_include_path + "/cublas.h",
-            cublas_include_path + "/cublas_v2.h",
-            cublas_include_path + "/cublas_api.h",
-        ],
-        outs = [
-            "cublas/include/cublas.h",
-            "cublas/include/cublas_v2.h",
-            "cublas/include/cublas_api.h",
-        ],
-    ))
+    if int(cuda_config.cuda_version_major) >= 11:
+        copy_rules.append(make_copy_files_rule(
+            repository_ctx,
+            name = "cublas-include",
+            srcs = [
+                cublas_include_path + "/cublas.h",
+                cublas_include_path + "/cublasLt.h",
+                cublas_include_path + "/cublas_v2.h",
+                cublas_include_path + "/cublas_api.h",
+            ],
+            outs = [
+                "cublas/include/cublas.h",
+                "cublas/include/cublasLt.h",
+                "cublas/include/cublas_v2.h",
+                "cublas/include/cublas_api.h",
+            ],
+        ))
+    else:
+        copy_rules.append(make_copy_files_rule(
+            repository_ctx,
+            name = "cublas-include",
+            srcs = [
+                cublas_include_path + "/cublas.h",
+                cublas_include_path + "/cublas_v2.h",
+                cublas_include_path + "/cublas_api.h",
+            ],
+            outs = [
+                "cublas/include/cublas.h",
+                "cublas/include/cublas_v2.h",
+                "cublas/include/cublas_api.h",
+            ],
+        ))
 
     cusolver_include_path = cuda_config.config["cusolver_include_dir"]
     copy_rules.append(make_copy_files_rule(
@@ -1121,6 +1151,7 @@ def _create_local_cuda_repository(repository_ctx):
         tpl_paths["cuda:build_defs.bzl"],
         {
             "%{cuda_is_configured}": "True",
+            "%{cuda_version}": cuda_config.cuda_version_major,
             "%{cuda_extra_copts}": _compute_cuda_extra_copts(
                 repository_ctx,
                 cuda_config.compute_capabilities,
@@ -1133,25 +1164,47 @@ def _create_local_cuda_repository(repository_ctx):
     if int(cuda_config.cuda_version_major) >= 11:
         cub_actual = ":cuda_headers"
 
-    repository_ctx.template(
-        "cuda/BUILD",
-        tpl_paths["cuda:BUILD"],
-        {
-            "%{cuda_driver_lib}": _basename(repository_ctx, cuda_libs["cuda"]),
-            "%{cudart_static_lib}": _basename(repository_ctx, cuda_libs["cudart_static"]),
-            "%{cudart_static_linkopt}": _cudart_static_linkopt(cuda_config.cpu_value),
-            "%{cudart_lib}": _basename(repository_ctx, cuda_libs["cudart"]),
-            "%{cublas_lib}": _basename(repository_ctx, cuda_libs["cublas"]),
-            "%{cusolver_lib}": _basename(repository_ctx, cuda_libs["cusolver"]),
-            "%{cudnn_lib}": _basename(repository_ctx, cuda_libs["cudnn"]),
-            "%{cufft_lib}": _basename(repository_ctx, cuda_libs["cufft"]),
-            "%{curand_lib}": _basename(repository_ctx, cuda_libs["curand"]),
-            "%{cupti_lib}": _basename(repository_ctx, cuda_libs["cupti"]),
-            "%{cusparse_lib}": _basename(repository_ctx, cuda_libs["cusparse"]),
-            "%{cub_actual}": cub_actual,
-            "%{copy_rules}": "\n".join(copy_rules),
-        },
-    )
+    if int(cuda_config.cuda_version_major) >= 11:
+        repository_ctx.template(
+            "cuda/BUILD",
+            tpl_paths["cuda:BUILD"],
+            {
+                "%{cuda_driver_lib}": _basename(repository_ctx, cuda_libs["cuda"]),
+                "%{cudart_static_lib}": _basename(repository_ctx, cuda_libs["cudart_static"]),
+                "%{cudart_static_linkopt}": _cudart_static_linkopt(cuda_config.cpu_value),
+                "%{cudart_lib}": _basename(repository_ctx, cuda_libs["cudart"]),
+                "%{cublas_lib}": _basename(repository_ctx, cuda_libs["cublas"]),
+                "%{cublasLt_lib}": _basename(repository_ctx, cuda_libs["cublasLt"]),
+                "%{cusolver_lib}": _basename(repository_ctx, cuda_libs["cusolver"]),
+                "%{cudnn_lib}": _basename(repository_ctx, cuda_libs["cudnn"]),
+                "%{cufft_lib}": _basename(repository_ctx, cuda_libs["cufft"]),
+                "%{curand_lib}": _basename(repository_ctx, cuda_libs["curand"]),
+                "%{cupti_lib}": _basename(repository_ctx, cuda_libs["cupti"]),
+                "%{cusparse_lib}": _basename(repository_ctx, cuda_libs["cusparse"]),
+                "%{cub_actual}": cub_actual,
+                "%{copy_rules}": "\n".join(copy_rules),
+            },
+        )
+    else:
+        repository_ctx.template(
+            "cuda/BUILD",
+            tpl_paths["cuda:BUILD"],
+            {
+                "%{cuda_driver_lib}": _basename(repository_ctx, cuda_libs["cuda"]),
+                "%{cudart_static_lib}": _basename(repository_ctx, cuda_libs["cudart_static"]),
+                "%{cudart_static_linkopt}": _cudart_static_linkopt(cuda_config.cpu_value),
+                "%{cudart_lib}": _basename(repository_ctx, cuda_libs["cudart"]),
+                "%{cublas_lib}": _basename(repository_ctx, cuda_libs["cublas"]),
+                "%{cusolver_lib}": _basename(repository_ctx, cuda_libs["cusolver"]),
+                "%{cudnn_lib}": _basename(repository_ctx, cuda_libs["cudnn"]),
+                "%{cufft_lib}": _basename(repository_ctx, cuda_libs["cufft"]),
+                "%{curand_lib}": _basename(repository_ctx, cuda_libs["curand"]),
+                "%{cupti_lib}": _basename(repository_ctx, cuda_libs["cupti"]),
+                "%{cusparse_lib}": _basename(repository_ctx, cuda_libs["cusparse"]),
+                "%{cub_actual}": cub_actual,
+                "%{copy_rules}": "\n".join(copy_rules),
+            },
+        )
 
     is_cuda_clang = _use_cuda_clang(repository_ctx)
     tf_sysroot = _tf_sysroot(repository_ctx)
