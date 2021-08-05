@@ -10,6 +10,7 @@ load(
 load(
     "//tensorflow/tsl/platform/default:cuda_build_defs.bzl",
     "if_cuda_is_configured",
+    "if_cuda11_is_configured",
 )
 load(
     "//tensorflow/core/platform:build_config_root.bzl",
@@ -150,11 +151,13 @@ cc_library(
     ],
 )
 
+cc_library(name = "empty_lib")
+
 alias(
     name = "cublas_lt_lib",
     actual = select({
         "//tensorflow:oss": ":cublas_lt_stub",
-        "//conditions:default": "@local_config_cuda//cuda:cublasLt",
+        "//conditions:default": ":empty_lib",
     }),
     visibility = ["//visibility:public"],
 )
