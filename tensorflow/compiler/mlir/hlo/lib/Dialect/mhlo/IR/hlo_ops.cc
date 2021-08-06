@@ -5368,7 +5368,60 @@ void SortOp::getCanonicalizationPatterns(RewritePatternSet& results,
 // TransposeOp
 //===----------------------------------------------------------------------===//
 
+namespace {
+
+// Transpose the given elements attr according to the specified permutation.
+mlir::ElementsAttr TransposeElementsAttr(
+    const mlir::ElementsAttr& elements, const DenseIntElementsAttr& perm_attr) {
+  ShapedType type = elements.getType();
+  int64_t rank = type.getRank();
+  if (rank < 2) {
+    // Transpose rank 0 and rank 1 tensor is equal to itself.
+    return elements;
+  }
+
+  SmallVector<int64_t, 4> perm;
+  for (auto v : perm_attr.getIntValues()) {
+    perm.push_back(static_cast<int64_t>(v.getSExtValue()));
+  }
+
+  SmallVector<int64_t, 4> orig_shape;
+  for (auto v : type.getShape()) orig_shape.push_back(v);
+  SmallVector<int64_t, 4> new_shape(rank);
+  for (int64_t dim = 0; dim < rank; ++dim) {
+    new_shape[dim] = orig_shape[perm[dim]];
+  }
+
+  SmallVector<Attribute, 8> transposed_attrs(elements.getNumElements());
+  for (int64_t i = 0; i < elements.getNumElements(); ++i) {
+    SmallVector<uint64_t, 4> orig_index(rank);
+    SmallVector<uint64_t, 4> new_index(rank);
+    int orig_linear_index = i;
+    for (int64_t dim = rank - 1; dim >= 0; --dim) {
+      orig_index[dim] =  orig_linear_index % orig_shape[dim];
+      orig_linear_index /= orig_shape[dim];
+    }
+    for (int64_t dim = 0; dim < rank; ++dim) {
+      new_index[dim] = orig_index[perm[dim]];
+    }
+    int64_t new_linear_index = new_index[0];
+    for (int64_t dim = 1; dim < rank; ++dim) {
+      new_linear_index = new_linear_index * new_shape[dim] + new_index[dim];
+    }
+    transposed_attrs[new_linear_index] = elements.getValue(orig_index);
+  }
+  return DenseElementsAttr::get(RankedTensorType::get(
+      new_shape, type.getElementType()), transposed_attrs);
+}
+
+} // namespace
+
 OpFoldResult TransposeOp::fold(ArrayRef<Attribute> operands) {
+  // operand is const, thus fold it directly.
+  if (auto elementsAttr = operands.front().dyn_cast_or_null<ElementsAttr>()) {
+    return TransposeElementsAttr(elementsAttr, permutation());
+  }
+
   for (const auto& it : llvm::enumerate(permutation().getValues<APInt>())) {
     if (it.index() != it.value()) {
       return {};
