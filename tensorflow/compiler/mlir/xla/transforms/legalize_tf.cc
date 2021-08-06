@@ -3244,8 +3244,9 @@ class ConvertSliceOpDynamic : public OpRewritePattern<TF::SliceOp> {
     auto input_ty = input.getType().dyn_cast<RankedTensorType>();
     auto begin_type = begin_indices.getType().dyn_cast<RankedTensorType>();
     auto size_type = sizes.getType().dyn_cast<RankedTensorType>();
+    auto result_ty = op.getType().dyn_cast<RankedTensorType>();
 
-    if (!input_ty || !begin_type || !size_type ||
+    if (!input_ty || !begin_type || !size_type || !result_ty ||
         !begin_type.hasStaticShape() || !size_type.hasStaticShape() ||
         begin_type.getRank() != 1 || size_type.getRank() != 1) {
       return failure();
@@ -3253,7 +3254,8 @@ class ConvertSliceOpDynamic : public OpRewritePattern<TF::SliceOp> {
     // TODO(disc): remove static shape check once folding/canonicalization func
     // added
     DenseIntElementsAttr size_attr;
-    if (matchPattern(op.size(), m_Constant(&size_attr))) {
+    if (matchPattern(op.size(), m_Constant(&size_attr)) && input_ty.hasStaticShape()
+        && result_ty.hasStaticShape()) {
       return failure();
     }
 
@@ -3518,7 +3520,7 @@ class ConvertSplitOp : public OpRewritePattern<TF::SplitOp> {
                                 PatternRewriter &rewriter) const override {
     // We can only split along static dimensions.
     auto input_type = op.value().getType().dyn_cast<RankedTensorType>();
-    if (!input_type) return failure();
+    if (!input_type || !input_type.hasStaticShape()) return failure();
 
     // We can only match when the split dimension is a constant scalar.
     DenseIntElementsAttr split_dim_attr;
@@ -3593,12 +3595,12 @@ class ConvertSplitOpDynamic : public OpRewritePattern<TF::SplitOp> {
     int64_t dim_index = (*split_dim_attr.begin()).getSExtValue();
     if (dim_index < 0) dim_index += input_rank;
 
-    // TODO(disc): remove static shape check once folding/canonicalization func
-    // added and ConvertSplitOp deleted. Calculate the dimension size for each
-    // slice along the split dimension. We are splitting along the dynamic
-    // dimension, or using static pattern transform
-    int64_t c_input_dim_size = input_type.getDimSize(dim_index);
-    if (!ShapedType::isDynamic(c_input_dim_size)) return failure();
+    // // TODO(disc): remove static shape check once folding/canonicalization func
+    // // added and ConvertSplitOp deleted. Calculate the dimension size for each
+    // // slice along the split dimension. We are splitting along the dynamic
+    // // dimension, or using static pattern transform
+    // int64_t c_input_dim_size = input_type.getDimSize(dim_index);
+    // if (!TensorType::isDynamic(c_input_dim_size)) return failure();
 
     Value input_dim_size =
         rewriter.create<tensor::DimOp>(loc, input, dim_index);
