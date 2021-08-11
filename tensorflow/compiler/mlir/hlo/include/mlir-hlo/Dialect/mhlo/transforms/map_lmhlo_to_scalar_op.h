@@ -407,6 +407,20 @@ inline Value MapLhloOpToStdScalarOp<lmhlo::ConvertOp>(
   } else if (mlir::SIToFPOp::areCastCompatible(convertedSourceType,
                                                targetType)) {
     return b->create<mlir::SIToFPOp>(loc, result_types, args, mlir::None);
+  } else if (sourceType.isUnsignedInteger() && targetType.isa<FloatType>()) {
+    auto int_type = IntegerType::get(sourceType.getContext(),
+                                     sourceType.getIntOrFloatBitWidth());
+    Value converted_arg =
+        b->create<UnrealizedConversionCastOp>(loc, int_type, args[0])
+            ->getResult(0);
+    return b->create<UIToFPOp>(loc, result_types, converted_arg, mlir::None);
+  } else if (sourceType.isSignedInteger() && targetType.isa<FloatType>()) {
+    auto int_type = IntegerType::get(sourceType.getContext(),
+                                     sourceType.getIntOrFloatBitWidth());
+    Value converted_arg =
+        b->create<UnrealizedConversionCastOp>(loc, int_type, args[0])
+            ->getResult(0);
+    return b->create<SIToFPOp>(loc, result_types, converted_arg, mlir::None);
   } else if (sourceType.isa<FloatType>() && targetType.isa<FloatType>()) {
     FloatType src = sourceType.cast<FloatType>();
     FloatType res = targetType.cast<FloatType>();
