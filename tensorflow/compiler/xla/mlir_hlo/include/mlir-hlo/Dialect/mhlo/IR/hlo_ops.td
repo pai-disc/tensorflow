@@ -1607,6 +1607,29 @@ def HLO_ClampOp : HLO_ShapedInterfaceOp<"clamp", [NoSideEffect,
           return false;
       return true;
     }
+    llvm::Optional<SmallVector<int64_t, 3>> getInputRanks() {
+      auto min_ty = min().getType().dyn_cast<ShapedType>();
+      auto max_ty = max().getType().dyn_cast<ShapedType>();
+      auto operand_ty = operand().getType().dyn_cast<ShapedType>();
+      if (!min_ty || !max_ty || !operand_ty) {
+        return llvm::None;
+      }
+      SmallVector<int64_t, 3> ranks{
+          min_ty.getRank(), operand_ty.getRank(), max_ty.getRank()};
+      return llvm::Optional<SmallVector<int64_t, 3>>(ranks);
+    }
+    bool inferInputsShapeEquality(int lhs, int rhs) {
+      llvm::Optional<SmallVector<int64_t, 3>> ranks = getInputRanks();
+      return ranks.hasValue() && ((*ranks)[lhs] == (*ranks)[rhs]);
+    }
+    bool inferInputOutputShapeEquality(int input, int output) {
+      if (input == 1) return true;
+      llvm::Optional<SmallVector<int64_t, 3>> ranks = getInputRanks();
+      return ranks.hasValue() && ((*ranks)[input] == (*ranks)[1]);
+    }
+    llvm::Optional<Value> inferEffectiveWorkloadShape() {
+      return getOperation()->getResult(0);
+    }
   }];
 
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
@@ -1800,7 +1823,9 @@ def HLO_CustomCallOp: HLO_Op<"custom_call",
 }
 
 def HLO_DotOp: HLO_Op<"dot",
-    [NoSideEffect, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+    [NoSideEffect, DeclareOpInterfaceMethods<InferTypeOpInterface>,
+    DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+                              ["reifyReturnTypeShapes"]>]> {
   let summary = "Dot operator";
   let description = [{
     Performs dot products between vectors, vector/matrix and matrix/matrix
@@ -2783,7 +2808,7 @@ def HLO_DynamicGatherOp: HLO_Op<"dynamic_gather",
   }];
 }
 
-def HLO_DynamicConvOp : HLO_ShapedInterfaceOp<"dynamic_conv", [NoSideEffect]>, BASE_HLO_ConvOp {
+def HLO_DynamicConvOp : HLO_ShapedInterfaceOp<"dynamic_conv", [NoSideEffect]> {
   let summary = "Dynamic Convolution operator";
   let description = [{
     The dynamic shape version of ConvOp. Computes a convolution with dynamic padding.
