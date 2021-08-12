@@ -1403,8 +1403,9 @@ def HLO_CholeskyOp : HLO_Op<"cholesky",
   let results = (outs HLO_FpOrComplexTensor);
 }
 
-def HLO_ClampOp : HLO_ShapedInterfaceOp<"clamp", [NoSideEffect,
-  SameOperandsAndResultElementType, HLO_BroadcastingElementwise]> {
+def HLO_ClampOp : HLO_Op<"clamp", [NoSideEffect,
+    SameOperandsAndResultElementType, HLO_BroadcastingElementwise,
+    InferShapedTypeOpInterface]> {
   let summary = "Clamp operator";
   let description = [{
     Clamps an operand to within the range between a minimum and maximum value.
@@ -1424,6 +1425,44 @@ def HLO_ClampOp : HLO_ShapedInterfaceOp<"clamp", [NoSideEffect,
   let results = (outs HLO_Tensor);
 
   let hasVerifier = 1;
+  let extraClassDeclaration = [{
+    static  LogicalResult inferReturnTypeComponents(
+        MLIRContext* context, Optional<Location> location,
+        ValueRange operands, DictionaryAttr attributes, RegionRange regions,
+        SmallVectorImpl<ShapedTypeComponents>& inferedReturnShapes) {
+      return failure();
+    }
+    LogicalResult reifyReturnTypeShapes(
+        OpBuilder& builder, ValueRange operands,
+        SmallVectorImpl<Value>& reifiedReturnShapes) {
+      return ::mlir::mhlo::deriveShapeFromOperand(&builder, getOperation(),
+                                                  operands[1],
+                                                  &reifiedReturnShapes);
+    }
+    llvm::Optional<SmallVector<int64_t, 3>> getInputRanks() {
+      auto min_ty = min().getType().dyn_cast<ShapedType>();
+      auto max_ty = max().getType().dyn_cast<ShapedType>();
+      auto operand_ty = operand().getType().dyn_cast<ShapedType>();
+      if (!min_ty || !max_ty || !operand_ty) {
+        return llvm::None;
+      }
+      SmallVector<int64_t, 3> ranks{
+          min_ty.getRank(), operand_ty.getRank(), max_ty.getRank()};
+      return llvm::Optional<SmallVector<int64_t, 3>>(ranks);
+    }
+    bool inferInputsShapeEquality(int lhs, int rhs) {
+      llvm::Optional<SmallVector<int64_t, 3>> ranks = getInputRanks();
+      return ranks.hasValue() && ((*ranks)[lhs] == (*ranks)[rhs]);
+    }
+    bool inferInputOutputShapeEquality(int input, int output) {
+      if (input == 1) return true;
+      llvm::Optional<SmallVector<int64_t, 3>> ranks = getInputRanks();
+      return ranks.hasValue() && ((*ranks)[input] == (*ranks)[1]);
+    }
+    llvm::Optional<Value> inferEffectiveWorkloadShape() {
+      return getOperation()->getResult(0);
+    }
+  }];
 }
 
 def HLO_ConcatenateOp : HLO_ShapedInterfaceOp<"concatenate",
