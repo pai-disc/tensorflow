@@ -207,8 +207,12 @@ static LogicalResult rngInferReturnTypeComponents(
 // an integer or index type.
 Value maybeCastTo(OpBuilder& b, Location loc, Value value, Type type) {
   if (type == value.getType()) return value;
-  assert(type.isIndex() || value.getType().isIndex());
-  return b.create<arith::IndexCastOp>(loc, type, value);
+  if (!type.isIndex() && !value.getType().isIndex()) {
+    // in case of i32 -> i64 or vice versa
+    Value casted = b.create<IndexCastOp>(loc, value, b.getIndexType());
+    return b.create<IndexCastOp>(loc, casted, type);
+  }
+  return b.create<IndexCastOp>(loc, value, type);
 }
 
 DenseElementsAttr reshape(DenseElementsAttr attr, ShapedType newType) {
@@ -1302,25 +1306,27 @@ namespace {
 // (i.e. we pick adjusted_slice_sizes[k] where adjusted_slice_sizes is
 // slice_sizes with the bounds at indices collapsed_slice_dims removed).
 
-void getSliceSizeValues(GatherOp* gather, OpBuilder& builder, Location loc,
-                        ValueRange operands,
-                        SmallVectorImpl<Value>& sliceSizes) {
+Type GetSliceSizeValuesAndType(GatherOp* gather, OpBuilder& builder, Location loc,
+                               ValueRange /*operands*/,
+                               SmallVectorImpl<Value>& slice_size_values) {
   for (int64_t val : gather->slice_sizes().getValues<int64_t>()) {
-    sliceSizes.push_back(builder.create<arith::ConstantIndexOp>(loc, val));
+    slice_size_values.push_back(builder.create<ConstantIndexOp>(loc, val));
   }
+  return builder.getIndexType();
 }
 
-void getSliceSizeValues(DynamicGatherOp* /*dGather*/, OpBuilder& builder,
-                        Location loc, ValueRange operands,
-                        SmallVectorImpl<Value>& sliceSizeValues) {
-  DynamicGatherOp::Adaptor adaptor(operands);
-  Value sliceSizes = adaptor.slice_sizes();
-  auto sliceSizesTy = sliceSizes.getType().cast<ShapedType>();
-  for (int64_t i = 0; i < sliceSizesTy.getDimSize(0); ++i) {
+Type GetSliceSizeValuesAndType(DynamicGatherOp* d_gather, OpBuilder& builder,
+                               Location loc, ValueRange operands,
+                               SmallVectorImpl<Value>& slice_size_values) {
+  typename DynamicGatherOp::Adaptor adaptor(operands);
+  Value slice_sizes = adaptor.slice_sizes();
+  auto slice_sizes_ty = slice_sizes.getType().cast<ShapedType>();
+  for (int64_t i = 0; i < slice_sizes_ty.getDimSize(0); ++i) {
     Value idx = builder.create<arith::ConstantIndexOp>(loc, i);
     sliceSizeValues.push_back(
         builder.create<tensor::ExtractOp>(loc, sliceSizes, idx));
   }
+  return slice_sizes.getType().cast<ShapedType>().getElementType();
 }
 
 static LogicalResult verifyGather(
@@ -1533,7 +1539,7 @@ LogicalResult reifyGatherShape(Op* op, OpBuilder& builder, ValueRange operands,
   };
 
   SmallVector<Value, 4> sliceSizes;
-  getSliceSizeValues(op, builder, loc, operands, sliceSizes);
+  (void)GetSliceSizeValuesAndType(op, builder, loc, operands, sliceSizes);
   llvm::transform(sliceSizes, sliceSizes.begin(),
                   [&](Value v) { return toShapeElType(v); });
 
