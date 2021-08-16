@@ -190,7 +190,11 @@ static LogicalResult rngInferReturnTypeComponents(
 // an integer or index type.
 Value MaybeCastTo(OpBuilder& b, Location loc, Value value, Type type) {
   if (type == value.getType()) return value;
-  assert(type.isIndex() || value.getType().isIndex());
+  if (!type.isIndex() && !value.getType().isIndex()) {
+    // in case of i32 -> i64 or vice versa
+    Value casted = b.create<IndexCastOp>(loc, value, b.getIndexType());
+    return b.create<IndexCastOp>(loc, casted, type);
+  }
   return b.create<IndexCastOp>(loc, value, type);
 }
 
@@ -488,18 +492,19 @@ namespace {
 // (i.e. we pick adjusted_slice_sizes[k] where adjusted_slice_sizes is
 // slice_sizes with the bounds at indices collapsed_slice_dims removed).
 
-void GetSliceSizeValues(GatherOp* gather, OpBuilder& builder, Location loc,
-                        ValueRange operands,
-                        SmallVectorImpl<Value>& slice_sizes) {
+Type GetSliceSizeValuesAndType(GatherOp* gather, OpBuilder& builder, Location loc,
+                               ValueRange /*operands*/,
+                               SmallVectorImpl<Value>& slice_size_values) {
   for (int64_t val : gather->slice_sizes().getValues<int64_t>()) {
-    slice_sizes.push_back(builder.create<ConstantIndexOp>(loc, val));
+    slice_size_values.push_back(builder.create<ConstantIndexOp>(loc, val));
   }
+  return builder.getIndexType();
 }
 
-void GetSliceSizeValues(DynamicGatherOp* d_gather, OpBuilder& builder,
-                        Location loc, ValueRange operands,
-                        SmallVectorImpl<Value>& slice_size_values) {
-  DynamicGatherOp::Adaptor adaptor(operands);
+Type GetSliceSizeValuesAndType(DynamicGatherOp* d_gather, OpBuilder& builder,
+                               Location loc, ValueRange operands,
+                               SmallVectorImpl<Value>& slice_size_values) {
+  typename DynamicGatherOp::Adaptor adaptor(operands);
   Value slice_sizes = adaptor.slice_sizes();
   auto slice_sizes_ty = slice_sizes.getType().cast<ShapedType>();
   for (int64_t i = 0; i < slice_sizes_ty.getDimSize(0); ++i) {
@@ -507,6 +512,7 @@ void GetSliceSizeValues(DynamicGatherOp* d_gather, OpBuilder& builder,
     slice_size_values.push_back(
         builder.create<tensor::ExtractOp>(loc, slice_sizes, idx));
   }
+  return slice_sizes.getType().cast<ShapedType>().getElementType();
 }
 
 template <typename Op>
@@ -523,11 +529,6 @@ LogicalResult GatherShapeInferImpl(
 
   Location loc = op->getLoc();
   int result_rank = result_ty.getRank();
-  Type shape_scalar_type =
-      start_indices.getType().cast<ShapedType>().getElementType();
-  auto to_shape_scalar_type = [&](Value v) {
-    return MaybeCastTo(builder, loc, v, shape_scalar_type);
-  };
 
   auto dimension_numbers = op->dimension_numbers();
   SmallVector<int64_t, 4> collapsed_slice_dims(
@@ -538,10 +539,11 @@ LogicalResult GatherShapeInferImpl(
       dimension_numbers.index_vector_dim().getValue().getSExtValue();
 
   SmallVector<Value, 4> slice_sizes;
-  GetSliceSizeValues(op, builder, loc, operands, slice_sizes);
-  // Convert to `shape_scalar_type`
-  llvm::transform(slice_sizes, slice_sizes.begin(),
-                  [&](Value v) { return to_shape_scalar_type(v); });
+  Type shape_scalar_type = GetSliceSizeValuesAndType(
+      op, builder, loc, operands, slice_sizes);
+  auto to_shape_scalar_type = [&](Value v) {
+    return MaybeCastTo(builder, loc, v, shape_scalar_type);
+  };
 
   // we label dimensions in the output array not in offset_dims as batch_dims
   SmallVector<int64_t, 4> batch_dims;
