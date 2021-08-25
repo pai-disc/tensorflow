@@ -1172,11 +1172,11 @@ StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
   if (DumpingEnabledForHloModule(gpu_executable->module())) {
     auto hlo_proto = absl::make_unique<HloProto>(*hlo_proto_);
     *hlo_proto->mutable_buffer_assignment() =
-        compile_module_results.buffer_assignment->ToProto();
+        gpu_executable->buffer_assignment()->ToProto();
     gpu_executable->set_hlo_proto(std::move(hlo_proto));
   }
   gpu_executable->set_debug_info(
-      compile_module_results.buffer_assignment->GetStats().ToString());
+      gpu_executable->buffer_assignment()->GetStats().ToString());
   return std::unique_ptr<Executable>(gpu_executable);
 }
 
