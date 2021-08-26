@@ -116,7 +116,8 @@ class GpuExecutable : public Executable {
       mlir::FuncOp func, llvm::ArrayRef<int64_t> buffer_sizes,
       std::vector<BufferAllocation>* allocations,
       absl::flat_hash_map<ShapeIndex, OutputInfo>* output_info,
-      Shape* output_shape, int buffer_param_offset = 0);
+      Shape* output_shape, int buffer_param_offset = 0,
+      BufferAssignment* buffer_assignment = nullptr /*ADDED_FOR_TAO*/);
 
   // Returns an Executable that is loaded from a BEF. This BEF must have entry
   // point information recorded by use of the tfrt::gpu::setEntryPoint()
@@ -183,6 +184,9 @@ class GpuExecutable : public Executable {
     return buffer_assignment_.get();
   }
   const ThunkSchedule* thunk_schedule() const { return thunk_schedule_.get(); }
+  const absl::flat_hash_map<ShapeIndex, OutputInfo>& output_info() const {
+    return output_info_;
+  }
   // END_OF_ADD
 
  private:
