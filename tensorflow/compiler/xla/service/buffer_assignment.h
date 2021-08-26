@@ -160,6 +160,13 @@ class BufferAllocation {
     return assigned_buffers_;
   }
 
+  // Added by TAO
+  void set_assigned_buffers(
+      const absl::flat_hash_map<const HloValue*, OffsetSize>& assigned_buffer) {
+    assigned_buffers_ = assigned_buffer;
+  }
+  // End for added by TAO
+
   // A Slice represents a contiguous portion of a memory allocation. It is used
   // to identify the memory range that a LogicalBuffer corresponds to.
   class Slice {
