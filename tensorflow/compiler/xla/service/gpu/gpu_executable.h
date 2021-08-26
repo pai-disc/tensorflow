@@ -157,6 +157,9 @@ class GpuExecutable : public Executable {
     return buffer_assignment_.get();
   }
   const ThunkSchedule* thunk_schedule() const { return thunk_schedule_.get(); }
+  const absl::flat_hash_map<ShapeIndex, OutputInfo>& output_info() const {
+    return output_info_;
+  }
   // END_OF_ADD
 
  private:
