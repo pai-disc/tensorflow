@@ -116,7 +116,8 @@ class GpuExecutable : public Executable {
       mlir::FuncOp func, llvm::ArrayRef<int64_t> buffer_sizes,
       std::vector<BufferAllocation>* allocations,
       absl::flat_hash_map<ShapeIndex, OutputInfo>* output_info,
-      Shape* output_shape);
+      Shape* output_shape,
+      BufferAssignment* buffer_assignment = nullptr /*ADDED_FOR_TAO*/);
 
   // We need to share ownership of hlo_module and assignment with profiler to
   // safely keep a reference to these objects during tracing period, thus they
@@ -179,6 +180,9 @@ class GpuExecutable : public Executable {
     return buffer_assignment_.get();
   }
   const ThunkSchedule* thunk_schedule() const { return thunk_schedule_.get(); }
+  const absl::flat_hash_map<ShapeIndex, OutputInfo>& output_info() const {
+    return output_info_;
+  }
   // END_OF_ADD
 
  private:
