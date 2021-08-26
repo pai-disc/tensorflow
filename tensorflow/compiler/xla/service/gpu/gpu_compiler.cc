@@ -886,7 +886,8 @@ static Status GetMlirAllocationInfo(mlir::func::FuncOp func,
                                     std::vector<BufferAllocation>* allocations,
                                     OutputInfoMap* output_info,
                                     Shape* output_shape,
-                                    EntryFunctionAttributes* entry_func_attrs);
+                                    EntryFunctionAttributes* entry_func_attrs,
+                                    BufferAssignment* buffer_assignment = nullptr);
 
 namespace {
 // Removes all globals from the given module that are both uninitialized and
@@ -989,7 +990,15 @@ static Status CompileModuleToLlvmIrImpl(
 
   TF_RETURN_IF_ERROR(GetMlirAllocationInfo(
       entry_function, &results->allocations, &results->output_info,
-      &results->output_shape, &results->entry_func_attrs));
+      &results->output_shape, &results->entry_func_attrs,
+      results->buffer_assignment.get()));
+
+  if (VLOG_IS_ON(2)) {
+    VLOG(2) << "Reordered GpuExecutable::allocations_: ";
+    for (const auto& allocation : results->allocations) {
+      VLOG(2) << allocation.ToString();
+    }
+  }
 
   IrEmitterContext ir_emitter_context(
       /*hlo_module=*/nullptr, /*buffer_assignment=*/nullptr, platform_name,
@@ -1522,7 +1531,8 @@ static Status GetMlirAllocationInfo(mlir::func::FuncOp func,
                                     std::vector<BufferAllocation>* allocations,
                                     OutputInfoMap* output_info,
                                     Shape* output_shape,
-                                    EntryFunctionAttributes* entry_func_attrs) {
+                                    EntryFunctionAttributes* entry_func_attrs,
+                                    BufferAssignment* buffer_assignment) {
   CHECK(allocations->empty());
   allocations->reserve(func.getNumArguments());
 
@@ -1584,7 +1594,8 @@ static Status GetMlirAllocationInfo(mlir::func::FuncOp func,
           .str());
 
   return GpuExecutable::SetUpMlirAllocation(func, buffer_sizes, allocations,
-                                            output_info, output_shape);
+                                            output_info, output_shape,
+                                            buffer_assignment /*ADDED_FOR_TAO*/);
 }
 
 StatusOr<std::unique_ptr<Executable>> CompileLmhloToExecutable(
