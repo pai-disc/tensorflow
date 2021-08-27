@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <stdlib.h>
 
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <string>
@@ -1158,6 +1159,7 @@ StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
         profile_index_map->GetProfileIndexFor(*module->entry_computation());
   }
 
+
   GpuVersion gpu_version = GetGpuVersion(stream_exec);
   auto* gpu_executable = new GpuExecutable(
       {std::move(backend_result.first), std::move(backend_result.second),
@@ -1302,7 +1304,9 @@ static Status GetMlirAllocationInfo(mlir::FuncOp func,
             // erase the starting "buffer_for_"
             CHECK(str.size() > 11);
             str.erase(str.begin(), str.begin() + 11);
-            if (item.first->instruction()->name() == str) {
+            std::string instr_name = item.first->instruction()->name();
+            replace(instr_name.begin(), instr_name.end(), '.', '_');
+            if (instr_name == str) {
               allocations->at(i).set_assigned_buffers(
                   orig_allocation.assigned_buffers());
               break;
