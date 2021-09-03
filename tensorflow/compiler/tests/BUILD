@@ -104,6 +104,26 @@ tf_xla_py_test(
     ],
 )
 
+# ADDED_FOR_TAO
+tf_xla_py_test(
+    name = "is_nan_test",
+    size = "small",
+    srcs = ["is_nan_test.py"],
+    deps = [
+        ":xla_test",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:errors",
+        "//tensorflow/python:framework_for_generated_wrappers",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:nn",
+        "//tensorflow/python:nn_ops",
+        "//tensorflow/python:nn_ops_gen",
+        "//tensorflow/python:control_flow_ops",
+        "//tensorflow/python:platform_test",
+    ],
+)
+# END_OF_ADD
+
 tf_xla_py_test(
     name = "adagrad_test",
     size = "small",
