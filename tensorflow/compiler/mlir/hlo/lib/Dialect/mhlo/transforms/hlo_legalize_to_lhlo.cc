@@ -539,6 +539,7 @@ void populateHLOToLHLOConversionPattern(
       HloToLhloOpConverter<mhlo::TanhOp>,
       HloToLhloOpConverter<mhlo::TransposeOp>,
       HloToLhloOpConverter<mhlo::XorOp>,
+      HloToLhloOpConverter<mhlo::ReverseOp>,
       HloToLhloReduceOpConverter,
       HloToLhloReturnOpConverter
   >(*converter, context);

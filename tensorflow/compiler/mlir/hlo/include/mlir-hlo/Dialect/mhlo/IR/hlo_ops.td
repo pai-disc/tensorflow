@@ -1934,7 +1934,7 @@ def HLO_SortOp : HLO_Op<"sort", [RecursiveSideEffects,
   let hasCanonicalizer = 1;
 }
 
-def HLO_ReverseOp: HLO_Op<"reverse",
+def HLO_ReverseOp: HLO_ShapedInterfaceOp<"reverse",
       [NoSideEffect, SameOperandsAndResultType]> {
   let summary = "Reverse operator";
   let description = [{
