@@ -2098,8 +2098,8 @@ def HLO_SortOp : HLO_Op<"sort", [RecursiveSideEffects,
   let hasVerifier = 1;
 }
 
-def HLO_ReverseOp: HLO_Op<"reverse",
-      [NoSideEffect, HLO_CompatibleOperandsAndResultType]> {
+def HLO_ReverseOp: HLO_ShapedInterfaceOp<"reverse",
+      [NoSideEffect, SameOperandsAndResultType, HLO_CompatibleOperandsAndResultType]> {
   let summary = "Reverse operator";
   let description = [{
     Reverses the specified dimensions of `operand` according to the given
