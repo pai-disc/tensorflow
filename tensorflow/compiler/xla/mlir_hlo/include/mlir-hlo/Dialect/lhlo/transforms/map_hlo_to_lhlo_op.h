@@ -101,6 +101,7 @@ MAP_HLO_TO_LHLO(SubtractOp);
 MAP_HLO_TO_LHLO(TanhOp);
 MAP_HLO_TO_LHLO(TransposeOp);
 MAP_HLO_TO_LHLO(XorOp);
+MAP_HLO_TO_LHLO(ReverseOp);
 
 #undef MAP_HLO_TO_LHLO
 
