@@ -47,13 +47,13 @@ class GpuStream : public internal::StreamInterface {
 
   // Explicitly initialize the CUDA resources associated with this stream, used
   // by StreamExecutor::AllocateStream().
-  bool Init();
+  virtual bool Init();
   void SetPriority(int priority) { priority_ = priority; }
   int priority() const { return priority_; }
 
   // Explicitly destroy the CUDA resources associated with this stream, used by
   // StreamExecutor::DeallocateStream().
-  void Destroy();
+  virtual void Destroy();
 
   // Returns true if no work is pending or executing on the stream.
   bool IsIdle() const;
@@ -77,7 +77,8 @@ class GpuStream : public internal::StreamInterface {
 
   GpuExecutor* parent() const { return parent_; }
 
- private:
+  // private previously, change to protected to make subclass possible
+ protected:
   GpuExecutor* parent_;         // Executor that spawned this stream.
   GpuStreamHandle gpu_stream_;  // Wrapped CUDA stream handle.
   int priority_ = 0;
