@@ -4153,7 +4153,7 @@ struct SparseSliceSpec {
   int32_t begin_mask, end_mask, ellipsis_mask, new_axis_mask, shrink_axis_mask;
   const ArrayRef<Value>& begin;
   const ArrayRef<Value>& end;
-  const ArrayRef<Value>& strides;
+  const ArrayRef<int64_t>& strides;
 };
 
 struct DenseSliceSpec {
@@ -4161,7 +4161,7 @@ struct DenseSliceSpec {
   int32_t begin_mask, end_mask, shrink_axis_mask;
   SmallVectorImpl<Value>& begin;
   SmallVectorImpl<Value>& end;
-  SmallVectorImpl<Value>& strides;
+  SmallVectorImpl<int64_t>& strides;
 };
 
 static SmallVector<int64_t, 4> BuildDenseSliceSpec(
@@ -4207,7 +4207,7 @@ static SmallVector<int64_t, 4> BuildDenseSliceSpec(
       // stride 1, i.e., get all elements in those dimensions.
       for (; dense_index < next_index; ++dense_index) {
         dense->begin[dense_index] = dense->end[dense_index] = zero;
-        dense->strides[dense_index] = one;
+        dense->strides[dense_index] = 1;
         Set(dense->begin_mask, dense_index);
         Set(dense->end_mask, dense_index);
       }
@@ -4232,7 +4232,7 @@ static void CalculateSlicedShapeFromDenseIndices(
     PatternRewriter* rewriter, Location loc, Type index_ty,
     MutableArrayRef<Value> input_shape, int32_t begin_mask, int32_t end_mask,
     int32_t shrink_axis_mask, MutableArrayRef<Value> begin,
-    MutableArrayRef<Value> end, MutableArrayRef<Value> stride) {
+    MutableArrayRef<Value> end, MutableArrayRef<int64_t> stride) {
   assert(input_shape.size() <= 32);  // Only 32-bit masks are supported.
 
   // Make sure ranges' ranks are consistent with the input.
@@ -4250,7 +4250,7 @@ static void CalculateSlicedShapeFromDenseIndices(
     Value dim_i = input_shape[i];
     Value begin_i = begin[i];
     Value end_i = end[i];
-    Value stride_i = stride[i];
+    Value stride_i = rewriter->create<ConstantOp>(loc, rewriter->getIntegerAttr(index_ty, stride[i]));
 
     // [0]: mask for begin, [1]: mask for end
     int64_t masks[] = {begin_mask & (1 << i), end_mask & (1 << i)};
@@ -4334,11 +4334,10 @@ static void CalculateSlicedShapeFromDenseIndices(
       // Shrink this dimension. It means we only take the element at begin_i.
       input_shape[i] = one;
       end[i] = rewriter->create<AddIOp>(loc, begin_i, one);
-      stride[i] = one;
+      stride[i] = 1;
     } else {
       input_shape[i] = size_i;
       end[i] = end_i;
-      stride[i] = stride_i;
     }
   }
 }
@@ -4376,11 +4375,11 @@ static void CalculateFinalShape(PatternRewriter* rewriter, Location loc,
 static void CalculateSlicedShapeFromSparseIndices(
     PatternRewriter* rewriter, Location loc, Type index_ty,
     MutableArrayRef<Value> input_shape, ArrayRef<Value> sparse_begin,
-    ArrayRef<Value> sparse_end, ArrayRef<Value> sparse_strides,
+    ArrayRef<Value> sparse_end, ArrayRef<int64_t> sparse_strides,
     int32_t begin_mask, int32_t end_mask, int32_t ellipsis_mask,
     int32_t new_axis_mask, int32_t shrink_axis_mask,
     SmallVectorImpl<Value>* begin, SmallVectorImpl<Value>* end,
-    SmallVectorImpl<Value>* stride, SmallVectorImpl<Value>* final_shape,
+    SmallVectorImpl<int64_t>* stride, SmallVectorImpl<Value>* final_shape,
     bool calc_final_shape = false) {
   int64_t num_sparse_indices = sparse_begin.size();
   SparseSliceSpec sparse = {num_sparse_indices, begin_mask,    end_mask,
@@ -4420,8 +4419,9 @@ static void CalculateSlicedShapeFromSparseIndices(
 bool GetSlicedBoundRanges(
     TF::StridedSliceOp op, PatternRewriter& rewriter,
     Type shape_scalar_type,
+    SmallVectorImpl<int64_t>& sparse_strides,
     SmallVectorImpl<Value>& slice_begin, SmallVectorImpl<Value>& slice_end,
-    SmallVectorImpl<Value>& slice_stride,
+    SmallVectorImpl<int64_t>& slice_stride,
     SmallVectorImpl<Value>& input_shape_vec,
     SmallVectorImpl<Value>& output_shape_vec) {
   Location loc = op.getLoc();
@@ -4446,20 +4446,16 @@ bool GetSlicedBoundRanges(
     return result;
   };
 
-  SmallVector<Value, 4> sparse_begin, sparse_end, sparse_strides;
+  SmallVector<Value, 4> sparse_begin, sparse_end;
   for (int64_t i = 0; i < rank; ++i) {
     Value idx = rewriter.create<ConstantIndexOp>(loc, i);
     input_shape_vec.push_back(to_shape_scalar_type(
         rewriter.create<tensor::ExtractOp>(loc, in_shape, idx)));
     if (i >= sparse_rank) continue;
-    sparse_begin.push_back(plusIfNeg(
-      rewriter.create<tensor::ExtractOp>(loc, op.begin(), idx),
-      input_shape_vec.back()));
-    sparse_end.push_back(plusIfNeg(
-      rewriter.create<tensor::ExtractOp>(loc, op.end(), idx),
-      input_shape_vec.back()));
-    sparse_strides.push_back(
-      rewriter.create<tensor::ExtractOp>(loc, op.strides(), idx));
+    sparse_begin.push_back(
+      rewriter.create<tensor::ExtractOp>(loc, op.begin(), idx));
+    sparse_end.push_back(
+      rewriter.create<tensor::ExtractOp>(loc, op.end(), idx));
   }
 
   CalculateSlicedShapeFromSparseIndices(
@@ -4477,6 +4473,68 @@ bool GetSlicedBoundRanges(
 class ConvertStridedSliceOpDynamic : public OpRewritePattern<TF::StridedSliceOp> {
  public:
   using OpRewritePattern::OpRewritePattern;
+
+  bool getReverseDims(TF::StridedSliceOp op,
+                      PatternRewriter &rewriter,
+                      Type elem_ty,
+                      SmallVectorImpl<Value>& begin_indices,
+                      SmallVectorImpl<Value>& end_indices,
+                      SmallVectorImpl<int64_t>& strides,
+                      SmallVectorImpl<Value>& hlo_begin_indices,
+                      SmallVectorImpl<Value>& hlo_end_indices,
+                      SmallVectorImpl<Value>& hlo_strides,
+                      SmallVectorImpl<int64_t>& dims_to_reverse) const {
+    Location loc = op.getLoc();
+    auto to_shape_scalar_type = [&](Value v) {
+      return MaybeCastTo(rewriter, loc, v, elem_ty);
+    };
+
+    int64_t indices_elements = begin_indices.size();
+    Value one = rewriter.create<ConstantOp>(loc, rewriter.getIntegerAttr(elem_ty, 1));
+    Value zero = rewriter.create<ConstantOp>(loc, rewriter.getIntegerAttr(elem_ty, 0));
+    auto in_shape = rewriter.create<shape::ShapeOfOp>(loc, op.input());
+
+    for (int64_t i = 0; i < indices_elements; ++i) {
+      Value idx = rewriter.create<ConstantIndexOp>(loc, i);
+      Value shape_val = to_shape_scalar_type(
+        rewriter.create<tensor::ExtractOp>(loc, in_shape, idx));
+      Value begin = begin_indices[i];
+      Value end = end_indices[i];
+      int64_t stride = strides[i];
+      if (stride < 0) {
+        // Negative stride means that the output values are computed starting
+        // from end until begin. Mark the dimension for reversal before slice
+        // and compute indices for the reversed input:
+        //
+        // begin = (shape[i] - 1) - begin
+        // end = (shape[i] - 1) - end
+        begin = rewriter.create<SubIOp>(loc,
+            rewriter.create<SubIOp>(loc, shape_val, one), begin);
+        end = rewriter.create<SubIOp>(loc,
+            rewriter.create<SubIOp>(loc, shape_val, one), end);
+        stride = -stride;
+        dims_to_reverse.push_back(i);
+      }
+
+      //begin = std::max(int64_t(0), begin);
+      //end = std::max(begin, end);
+      //end = std::min(end, input_shape[i]);
+      auto cmp1 = rewriter.create<CmpIOp>(loc, CmpIPredicate::sgt, begin, zero);
+      begin = rewriter.create<mlir::SelectOp>(loc, cmp1, begin, zero);
+
+      auto cmp2 = rewriter.create<CmpIOp>(loc, CmpIPredicate::sgt, begin, end);
+      end = rewriter.create<mlir::SelectOp>(loc, cmp2, begin, end);
+
+      auto cmp3 = rewriter.create<CmpIOp>(loc, CmpIPredicate::slt, end, shape_val);
+      end = rewriter.create<mlir::SelectOp>(loc, cmp3, end, shape_val);
+
+      hlo_begin_indices.push_back(begin);
+      hlo_end_indices.push_back(end);
+      hlo_strides.push_back(
+          rewriter.create<ConstantOp>(loc, rewriter.getIntegerAttr(elem_ty, stride)));
+    }
+    return true;
+  }
 
   LogicalResult matchAndRewrite(TF::StridedSliceOp op,
                                 PatternRewriter &rewriter) const override {
@@ -4499,42 +4557,59 @@ class ConvertStridedSliceOpDynamic : public OpRewritePattern<TF::StridedSliceOp>
 
     // Strides need be constant to tell if there exists negative indices.
     // TODO(disc): support negative indices.
+    // TODO(disc): support dynamic stride
     DenseIntElementsAttr sparse_strides_attr;
     if (!matchPattern(op.strides(), m_Constant(&sparse_strides_attr))) {
       return rewriter.notifyMatchFailure(op,
            "requires that strides are constants");
     }
 
-    for (const APInt& index : sparse_strides_attr) {
-      if (index.getSExtValue() < 0)
-        return rewriter.notifyMatchFailure(
-          op, "requires that strides are positive constants");
+    SmallVector<int64_t, 4> sparse_strides;
+    for (int64_t i = 0; i < input_ty.getRank(); ++i) {
+      sparse_strides.push_back((*(sparse_strides_attr.begin() + i)).getSExtValue());
     }
 
-    Type shape_scalar_type = begin_ty.getElementType();
-    SmallVector<Value, 4> begin_indices, end_indices, strides;
+    Type elem_ty = begin_ty.getElementType();
+    SmallVector<Value, 4> begin_indices, end_indices;
+    SmallVector<int64_t, 4> strides;
     SmallVector<Value, 4> input_shape_vec, output_shape_vec;
-    if (!GetSlicedBoundRanges(op, rewriter, shape_scalar_type,
-        begin_indices, end_indices,
+
+    if (!GetSlicedBoundRanges(op, rewriter, elem_ty,
+        sparse_strides, begin_indices, end_indices,
         strides, input_shape_vec, output_shape_vec)) {
       return rewriter.notifyMatchFailure(op,
            "failed to calculate begin/end/strides values");
     }
 
+    SmallVector<Value, 4> hlo_begin_indices, hlo_end_indices, hlo_strides;
+    SmallVector<int64_t, 4> dims_to_reverse;
+    if (!getReverseDims(op, rewriter, elem_ty,
+      begin_indices, end_indices, strides,
+      hlo_begin_indices, hlo_end_indices, hlo_strides, dims_to_reverse)) {
+        return rewriter.notifyMatchFailure(op,
+            "failed to calculate reverse dims");
+    }
+
+    Value input = op.input();
     Location loc = op.getLoc();
-    Type elem_ty = begin_ty.getElementType();
+    if (!dims_to_reverse.empty()) {
+      input = rewriter.create<ReverseOp>(
+        loc, input_ty, op.input(),
+        GetI64ElementsAttr(dims_to_reverse, &rewriter));
+    }
+
     Value begin_vec =
-        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, begin_indices);
+        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, hlo_begin_indices);
     Value end_vec =
-        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, end_indices);
+        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, hlo_end_indices);
     Value strides_vec =
-        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, strides);
+        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, hlo_strides);
     SmallVector<int64_t, 4> slice_result_shape(
         begin_indices.size(), ShapedType::kDynamicSize);
     RankedTensorType slice_result_type =
       RankedTensorType::get(slice_result_shape, input_ty.getElementType());
     Value sliced = rewriter.create<mhlo::RealDynamicSliceOp>(
-        loc, slice_result_type, op.input(), begin_vec, end_vec, strides_vec);
+        loc, slice_result_type, input, begin_vec, end_vec, strides_vec);
     // Reshape slice result so that the shape is updated depending on
     // 'new_axis_mask' or 'shrink_axis_mask' attributes.
 
