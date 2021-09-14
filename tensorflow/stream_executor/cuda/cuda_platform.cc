@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/stream_executor/lib/initialize.h"
 #include "tensorflow/stream_executor/lib/status.h"
 
+#include "tensorflow/core/util/env_var.h"
 namespace stream_executor {
 namespace gpu {
 namespace {
@@ -138,6 +139,16 @@ const std::string& CudaPlatform::Name() const { return name_; }
 port::StatusOr<std::unique_ptr<DeviceDescription>>
 CudaPlatform::DescriptionForDevice(int ordinal) const {
   return GpuExecutor::CreateDeviceDescription(ordinal);
+}
+
+port::StatusOr<StreamExecutor*> CudaPlatform::ExecutorForDevice(int ordinal,
+                                                                void* hash) {
+  StreamExecutorConfig config;
+  config.ordinal = ordinal;
+  config.hash = hash;
+  config.plugin_config = PluginConfig();
+  config.device_options = GetDeviceOptionsFromEnv();
+  return GetExecutor(config);
 }
 
 port::StatusOr<StreamExecutor*> CudaPlatform::ExecutorForDevice(int ordinal) {
