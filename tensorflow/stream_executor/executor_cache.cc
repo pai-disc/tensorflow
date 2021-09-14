@@ -18,8 +18,21 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
 
-namespace stream_executor {
+#include <functional>
 
+namespace std {
+namespace se = ::stream_executor;
+template <>
+struct hash<se::StreamExecutorConfig> {
+  size_t operator()(se::StreamExecutorConfig const& s) const noexcept {
+    std::size_t h1 = std::hash<int>{}(s.ordinal);
+    std::size_t h2 = std::hash<void*>{}(s.hash);
+    return h1 ^ (h2 << 1);
+  }
+};
+}  // namespace std
+
+namespace stream_executor {
 port::StatusOr<StreamExecutor*> ExecutorCache::GetOrCreate(
     const StreamExecutorConfig& config,
     const std::function<ExecutorFactory>& factory) {
@@ -34,7 +47,7 @@ port::StatusOr<StreamExecutor*> ExecutorCache::GetOrCreate(
   Entry* entry = nullptr;
   {
     absl::MutexLock lock{&mutex_};
-    entry = &cache_[config.ordinal];
+    entry = &cache_[config];
     // Release the map lock; the address of 'entry' is stable because
     // std::map guarantees reference stability.
   }
@@ -68,27 +81,28 @@ port::StatusOr<StreamExecutor*> ExecutorCache::Get(
   Entry* entry = nullptr;
   {
     absl::ReaderMutexLock lock{&mutex_};
-    auto it = cache_.find(config.ordinal);
+    auto it = cache_.find(config);
     if (it != cache_.end()) {
       entry = &it->second;
     } else {
       return port::Status(
           port::error::NOT_FOUND,
-          absl::StrFormat("No executors registered for ordinal %d",
-                          config.ordinal));
+          absl::StrFormat("No executors registered for (ordinal %d, hash %x)",
+                          config.ordinal, config.hash));
     }
   }
   absl::ReaderMutexLock lock{&entry->configurations_mutex};
   if (entry->configurations.empty()) {
     return port::Status(
         port::error::NOT_FOUND,
-        absl::StrFormat("No executors registered for ordinal %d",
-                        config.ordinal));
+        absl::StrFormat("No executors registered for (ordinal %d, hash %x)",
+                        config.ordinal, config.hash));
   }
   for (const auto& iter : entry->configurations) {
     if (iter.first.plugin_config == config.plugin_config &&
         iter.first.device_options == config.device_options) {
-      VLOG(2) << "hit in cache for device ordinal " << config.ordinal;
+      VLOG(2) << "hit in cache for device (ordinal " << config.ordinal
+              << ", hash " << config.hash << ")";
       return iter.second.get();
     }
   }
@@ -105,5 +119,4 @@ ExecutorCache::Entry::~Entry() {
   absl::MutexLock lock{&configurations_mutex};
   configurations.clear();
 }
-
 }  // namespace stream_executor
