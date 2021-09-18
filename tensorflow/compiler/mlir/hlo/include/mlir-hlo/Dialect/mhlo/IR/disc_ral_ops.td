@@ -92,4 +92,21 @@ def RAL_DispatchOp: RAL_Op<"dispatch", []> {
   let results = (outs Variadic<AnyType>);
 }
 
+def RAL_CpuLaunchOp: RAL_Op<"cpu_launch", []> {
+  let summary = "CPU launch operator";
+  let description = [{
+    A launch op for cpu backend.
+  }];
+  let arguments = (ins
+    RAL_RalExecutionContextType:$ctx,
+    MemRefRankOf<[Index], [1]>:$lowerBound,
+    MemRefRankOf<[Index], [1]>:$upperBound,
+    MemRefRankOf<[Index], [1]>:$step,
+    Index:$unitWorkloadSizeHint,
+    Variadic<AnyType>:$args,
+    FlatSymbolRefAttr:$callee
+  );
+  let results = (outs);
+}
+
 #endif // DISC_RAL_OPS
