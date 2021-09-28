@@ -306,8 +306,12 @@ port::Status BlasLt::DoMatmul(Stream* stream, const BlasLt::MatmulPlan& plan,
 }
 
 BlasLt* GetBlasLt(Stream* stream) {
+#if CUDA_VERSION >= 11000
   CUDABlas* blas = dynamic_cast<CUDABlas*>(stream->parent()->AsBlas());
   return (blas != nullptr) ? &blas->blas_lt() : nullptr;
+#else
+  return nullptr;
+#endif
 }
 
 }  // namespace cuda
