@@ -69,7 +69,7 @@ class CudnnBatchNormForwardInferenceThunk : public Thunk {
   const BufferAllocation::Slice& mean() const { return mean_; }
   const BufferAllocation::Slice& variance() const { return variance_; }
   float epsilon() const { return config_.epsilon; }
-  int64 feature_index() const { return config_.feature_index; }
+  int64_t feature_index() const { return config_.feature_index; }
   const BufferAllocation::Slice& output() const { return output_; }
   // END_OF_ADD
 
@@ -111,7 +111,7 @@ class CudnnBatchNormForwardTrainingThunk : public Thunk {
     return output_inv_stddev_;
   }
   float epsilon() const { return config_.epsilon; }
-  int64 feature_index() const { return config_.feature_index; }
+  int64_t feature_index() const { return config_.feature_index; }
   // END_OF_ADD
 
  private:
@@ -158,7 +158,7 @@ class CudnnBatchNormBackwardThunk : public Thunk {
     return output_grad_offset_;
   }
   float epsilon() const { return config_.epsilon; }
-  int64 feature_index() const { return config_.feature_index; }
+  int64_t feature_index() const { return config_.feature_index; }
   // END_OF_ADD
 
  private:
