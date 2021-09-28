@@ -592,17 +592,17 @@ template <>
                                             Eigen::half_impl::half_to_float(stddev));
   return CreateLiteralWithGenerator<F16, half>(
       shape,
-      [&](absl::Span<const int64> /*indexes*/) {
+      [&](absl::Span<const int64_t> /*indexes*/) {
           return Eigen::half_impl::float_to_half_rtne(generator(*engine)); });
 }
 
 template <>
-/* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<S64, std::minstd_rand0, int64>(
-    const Shape& shape, std::minstd_rand0* engine, int64 mean, int64 stddev) {
-  std::discrete_distribution<int64> generator(mean, stddev);
-  return CreateLiteralWithGenerator<S64, int64>(
+/* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<S64, std::minstd_rand0, int64_t>(
+    const Shape& shape, std::minstd_rand0* engine, tensorflow::int64 mean, tensorflow::int64 stddev) {
+  std::discrete_distribution<tensorflow::int64> generator(mean, stddev);
+  return CreateLiteralWithGenerator<S64, int64_t>(
       shape,
-      [&](absl::Span<const int64> /*indexes*/) { return generator(*engine); });
+      [&](absl::Span<const int64_t> /*indexes*/) { return generator(*engine); });
 }
 
 template <>
@@ -611,7 +611,7 @@ template <>
   std::discrete_distribution<int32> generator(mean, stddev);
   return CreateLiteralWithGenerator<S32, int32>(
       shape,
-      [&](absl::Span<const int64> /*indexes*/) { return generator(*engine); });
+      [&](absl::Span<const int64_t> /*indexes*/) { return generator(*engine); });
 }
 
 template <>
@@ -620,7 +620,7 @@ template <>
   std::discrete_distribution<int8> generator(mean, stddev);
   return CreateLiteralWithGenerator<S8, int8>(
       shape,
-      [&](absl::Span<const int64> /*indexes*/) { return generator(*engine); });
+      [&](absl::Span<const int64_t> /*indexes*/) { return generator(*engine); });
 }
 
 template <>
@@ -629,7 +629,7 @@ template <>
   std::bernoulli_distribution generator(0.5);
   return CreateLiteralWithGenerator<PRED, bool>(
       shape,
-      [&](absl::Span<const int64> /*indexes*/) { return generator(*engine); });
+      [&](absl::Span<const int64_t> /*indexes*/) { return generator(*engine); });
 }
 
 template <>
@@ -638,7 +638,7 @@ template <>
   std::discrete_distribution<uint8> generator(mean, stddev);
   return CreateLiteralWithGenerator<U8, uint8>(
       shape,
-      [&](absl::Span<const int64> /*indexes*/) { return generator(*engine); });
+      [&](absl::Span<const int64_t> /*indexes*/) { return generator(*engine); });
 }
 
 template <>
@@ -647,7 +647,7 @@ template <>
   std::discrete_distribution<uint32> generator(mean, stddev);
   return CreateLiteralWithGenerator<U32, uint32>(
       shape,
-      [&](absl::Span<const int64> /*indexes*/) { return generator(*engine); });
+      [&](absl::Span<const int64_t> /*indexes*/) { return generator(*engine); });
 }
 
 template <>
@@ -656,7 +656,7 @@ template <>
   std::discrete_distribution<uint64> generator(mean, stddev);
   return CreateLiteralWithGenerator<U64, uint64>(
       shape,
-      [&](absl::Span<const int64> /*indexes*/) { return generator(*engine); });
+      [&](absl::Span<const int64_t> /*indexes*/) { return generator(*engine); });
 }
 
 // END_OF_ADD

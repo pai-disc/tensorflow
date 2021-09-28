@@ -65,6 +65,7 @@ class KernelThunk : public Thunk {
     return launch_dimensions_;
   }
   const std::vector<const BufferAllocation*>& args() const { return args_; }
+  const std::string kernel_name() const { return kernel_name_; }
   // END_OF_ADD
 
  private:

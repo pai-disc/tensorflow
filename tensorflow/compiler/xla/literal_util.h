@@ -565,8 +565,8 @@ template <>
     const Shape& shape, std::minstd_rand0* engine, half mean, half stddev);
 
 template <>
-/* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<S64, std::minstd_rand0, int64>(
-    const Shape& shape, std::minstd_rand0* engine, int64 mean, int64 stddev);
+/* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<S64, std::minstd_rand0, int64_t>(
+    const Shape& shape, std::minstd_rand0* engine, tensorflow::int64 mean, int64_t stddev);
 
 template <>
 /* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<S32, std::minstd_rand0, int32>(
