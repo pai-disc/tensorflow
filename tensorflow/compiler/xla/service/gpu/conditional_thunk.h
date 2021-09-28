@@ -59,7 +59,7 @@ class ConditionalThunk : public Thunk {
 
   // ADDED_FOR_TAO
   bool branch_index_is_bool() const { return config_.branch_index_is_bool; }
-  int64 branch_count() const { return config_.branch_count; }
+  tensorflow::int64 branch_count() const { return config_.branch_count; }
   const std::vector<std::unique_ptr<SequentialThunk>>& branch_thunks() const {
     return config_.branch_thunks;
   }

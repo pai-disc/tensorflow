@@ -40,7 +40,7 @@ class ForThunk : public Thunk {
   Status ExecuteOnStream(const ExecuteParams& params) override;
 
   // ADDED_FOR_TAO
-  int64 loop_limit() const { return loop_limit_; }
+  int64_t loop_limit() const { return loop_limit_; }
   const SequentialThunk* body_thunk_sequence() const {
     return body_thunk_sequence_.get();
   }

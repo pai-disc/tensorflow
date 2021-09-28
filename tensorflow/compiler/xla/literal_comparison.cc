@@ -972,14 +972,14 @@ string ToStringSampled(const LiteralSlice& literal) {
     string str = "{ ";
     if (shape.element_type() == F32) {
       absl::Span<const float> data = literal.data<float>();
-      int64 n = (data.size() < 32) ? data.size() : 32;
-      for (int64 i = 0; i < n; ++i) {
+      int64_t n = (data.size() < 32) ? data.size() : 32;
+      for (int64_t i = 0; i < n; ++i) {
         StrAppend(&str, data[i], ", ");
       }
     } else if (shape.element_type() == F16) {
       absl::Span<const Eigen::half> data = literal.data<Eigen::half>();
-      int64 n = (data.size() < 32) ? data.size() : 32;
-      for (int64 i = 0; i < n; ++i) {
+      int64_t n = (data.size() < 32) ? data.size() : 32;
+      for (int64_t i = 0; i < n; ++i) {
         StrAppend(&str, static_cast<float>(data[i]), ", ");
       }
     } else {
