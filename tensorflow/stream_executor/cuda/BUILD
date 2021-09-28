@@ -168,7 +168,42 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//tensorflow/compiler/xla/stream_executor/cuda:cublas_plugin",
-    ],
+    ] + if_cuda_is_configured([
+        ":cublas_lib",
+        ":cublas_lt_lib",
+        ":cuda_activation",
+        ":cuda_blas_utils",
+        ":cuda_gpu_executor",
+        ":cuda_helpers",
+        ":cuda_platform_id",
+        ":cuda_stream",
+        ":cuda_timer",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/synchronization",
+        "//third_party/eigen3",
+        "@local_config_cuda//cuda:cuda_headers",
+        "//tensorflow/compiler/xla:status_macros",
+        "//tensorflow/core/platform:tensor_float_32_hdr_lib",
+        "//tensorflow/core/platform:thread_annotations",
+        "//tensorflow/stream_executor:device_memory",
+        "//tensorflow/stream_executor:host_or_device_scalar",
+        "//tensorflow/stream_executor:scratch_allocator",
+        "//tensorflow/stream_executor:stream_header",
+        "//tensorflow/stream_executor/gpu:gpu_activation_header",
+        "//tensorflow/stream_executor/gpu:gpu_executor_header",
+        "//tensorflow/stream_executor/gpu:gpu_helpers_header",
+        "//tensorflow/stream_executor/gpu:gpu_stream_header",
+        "//tensorflow/stream_executor/gpu:gpu_timer_header",
+        "//tensorflow/stream_executor/gpu:gpu_types_header",
+        "//tensorflow/stream_executor/lib",
+        "//tensorflow/stream_executor/platform",
+    ]) + if_static([
+        "//tensorflow/core/platform:tensor_float_32_utils"
+    ]) + if_cuda11_is_configured([
+        ":cublas_lt_lib",
+    ]),
     alwayslink = True,
 )
 
