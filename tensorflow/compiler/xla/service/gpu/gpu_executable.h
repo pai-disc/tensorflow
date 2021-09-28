@@ -183,7 +183,16 @@ class GpuExecutable : public Executable {
   const BufferAssignment* buffer_assignment() const {
     return buffer_assignment_.get();
   }
-  const ThunkSchedule* thunk_schedule() const { return thunk_schedule_.get(); }
+  const ThunkSchedule* thunk_schedule() const {
+#if BEF_EXECUTABLE
+    return nullptr;
+#else   //  BFD_EXECUTABLE
+    if (absl::holds_alternative<OwnedThunkSchedule>(thunks_or_bef_)) {
+      return absl::get<OwnedThunkSchedule>(thunks_or_bef_).get();
+    }
+    return nullptr;
+#endif  //  BFD_EXECUTABLE
+  }
   const absl::flat_hash_map<ShapeIndex, OutputInfo>& output_info() const {
     return output_info_;
   }

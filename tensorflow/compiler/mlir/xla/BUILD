@@ -177,7 +177,9 @@ cc_library(
         ":legalize_utils",
         ":tf_xla_passes_inc_gen",
         ":type_to_shape",
-        ":xla_legalize_tf_passes_inc_gen",
+        #":xla_legalize_tf_passes_inc_gen",
+        "xla_passes_inc_gen",
+        "//tensorflow/compiler/mlir/disc:mhlo_disc",
         "//tensorflow/compiler/mlir/hlo",
         "//tensorflow/compiler/mlir/hlo:convert_op_folder",
         "//tensorflow/compiler/mlir/hlo:hlo_ops_base_structs",
@@ -190,7 +192,6 @@ cc_library(
         "//tensorflow/core/kernels:conv_grad_shape_utils",
         "//tensorflow/core/platform:bfloat16",
         "@llvm-project//llvm:Support",
-        "@llvm-project//mlir:ArithmeticDialect",
         "@llvm-project//mlir:Dialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
@@ -199,6 +200,7 @@ cc_library(
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TensorDialect",
     ],
+    alwayslink = 1,
 )
 
 cc_library(
