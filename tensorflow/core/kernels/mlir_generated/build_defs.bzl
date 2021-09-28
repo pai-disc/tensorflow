@@ -161,7 +161,6 @@ def _gen_kernel_bin_impl(ctx):
             "--jit_i64_indexed_for_large_tensors=%s" % ctx.attr.jit_i64_indexed_for_large_tensors,
             "--jit=%s" % ctx.attr.jit,
         ],
-        use_default_shell_env = True,
         mnemonic = "compile",
         progress_message = "Generating kernel '%{label}'",
     )
