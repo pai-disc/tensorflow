@@ -1752,8 +1752,11 @@ REGISTER_OP("StridedSlice")
         c->set_output(0, c->UnknownShape());
         return OkStatus();
       }
-
-      PartialTensorShape input_shape({});
+      // BladeDISC change starts: use explicit type instead of empty initializer
+      // to call correct constructor of PartialTensorShape.
+      std::vector<int64_t> init_dims;
+      PartialTensorShape input_shape(init_dims);
+      // BladeDISC change ends
       for (int i = 0; i < c->Rank(input); ++i) {
         auto dim = c->Dim(input, i);
         input_shape.AddDim(c->ValueKnown(dim) ? c->Value(dim) : -1);

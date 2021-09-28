@@ -203,6 +203,32 @@ class GpuExecutable : public Executable {
 
   const std::vector<ConstantInfo>& constants() const { return constants_; }
 
+  // ADDED_FOR_TAO
+  StatusOr<BufferAllocation::Slice> GetUniqueSlice(
+      const HloInstruction* instruction, const ShapeIndex& index) const {
+    if (!buffer_assignment_) {
+      return tensorflow::errors::Internal("buffer assignment not initialized");
+    }
+    return buffer_assignment_->GetUniqueSlice(instruction, index);
+  }
+  const BufferAssignment* buffer_assignment() const {
+    return buffer_assignment_.get();
+  }
+  const ThunkSequence* thunk_schedule() const {
+#if BEF_EXECUTABLE
+    return nullptr;
+#else   //  BFD_EXECUTABLE
+    if (thunks_) {
+      return thunks_.get();
+    }
+    return nullptr;
+#endif  //  BFD_EXECUTABLE
+  }
+  const absl::flat_hash_map<ShapeIndex, OutputInfo>& output_info() const {
+    return output_info_;
+  }
+  // END_OF_ADD
+
  private:
   // Use GpuExecutable::Create() to create an instance.
   explicit GpuExecutable(Params params);
