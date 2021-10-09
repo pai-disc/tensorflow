@@ -5715,6 +5715,395 @@ using ConvertConv3DBackpropInputOp =
     ConvertConvBackpropInputOp<TF::Conv3DBackpropInputV2Op,
                                /*num_spatial_dims=*/3>;
 
+// Information about a single spatial dimension for a convolution
+// backpropagation.
+struct ConvBackpropSpatialDimensionDyn {
+  Value input_size;
+  Value filter_size;
+  Value output_size;
+  int64_t stride;
+  int64_t dilation;
+
+  // Output size after scaling by the stride.
+  Value expanded_output_size;
+
+  // Number of padding elements to be added before/after this dimension of
+  // the input when computing Conv?DBackpropInput.
+  Value pad_before, pad_after;
+};
+
+// Computed dimensions for a backwards convolution.
+struct ConvBackpropDimensionsDyn {
+  // Information about each spatial dimension.
+  SmallVector<ConvBackpropSpatialDimensionDyn, 3> spatial_dims;
+
+  // Batch size.
+  Value batch_size;
+
+  // Input and output feature depth.
+  Value in_depth, out_depth;
+
+  // Convenience access methods for spatial dimensions properties.
+  Value input_size(int dim) const { return spatial_dims[dim].input_size; }
+  Value filter_size(int dim) const { return spatial_dims[dim].filter_size; }
+  Value output_size(int dim) const { return spatial_dims[dim].output_size; }
+  int64_t stride(int dim) const { return spatial_dims[dim].stride; }
+  int64_t dilation(int dim) const { return spatial_dims[dim].dilation; }
+
+  // Compute padding for the given spatial dimension.
+  int SpatialPadding(const tensorflow::Padding& padding, int dim) const;
+};
+
+// Converts tf.Conv?DBackpropInputOp into:
+//   %rev_filter = "mhlo.reverse"(%filter)
+//   %result = "mhlo.convolution"(%out_backprop, %rev_filter)
+template <typename OpTy, int num_spatial_dims>
+class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
+ public:
+  using OpRewritePattern<OpTy>::OpRewritePattern;
+
+  tensorflow::Status ConvBackpropExtractAndVerifyDimensionDyn(
+      OpTy& op, PatternRewriter& rewriter, std::vector<int64_t> dilations,
+      const std::vector<int64_t>& strides, tensorflow::Padding padding,
+      Value padding_before, Value padding_after, int spatial_dim,
+      int filter_spatial_dim, ConvBackpropSpatialDimensionDyn* dim) const {
+    Location loc = op.getLoc();
+    auto shape_scalar_type = rewriter.getIntegerType(32);
+    auto get_const = [&](int64_t val) {
+      return rewriter.create<mlir::ConstantIntOp>(loc, val, shape_scalar_type);
+    };
+    auto get_dim_value = [&](Value val, int64_t dim) {
+      Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
+      return rewriter.create<IndexCastOp>(loc, dim_value, shape_scalar_type);
+    };
+    auto sub_one = [&](Value val) {
+      auto one = rewriter.create<ConstantIntOp>(loc, 1, shape_scalar_type);
+      return rewriter.create<SubIOp>(loc, val, one);
+    };
+    auto plus_one = [&](Value val) {
+      auto one = rewriter.create<ConstantIntOp>(loc, 1, shape_scalar_type);
+      return rewriter.create<AddIOp>(loc, val, one);
+    };
+    auto mul_vals = [&](Value lhs, Value rhs) {
+      return rewriter.create<MulIOp>(loc, lhs, rhs);
+    };
+    auto add_vals = [&](Value lhs, Value rhs) {
+      return rewriter.create<AddIOp>(loc, lhs, rhs);
+    };
+    auto sub_vals = [&](Value lhs, Value rhs) {
+      return rewriter.create<SubIOp>(loc, lhs, rhs);
+    };
+    auto get_int = [](Attribute attr) {
+      return attr.template cast<IntegerAttr>().getInt();
+    };
+    Value idx = rewriter.create<ConstantIndexOp>(loc, spatial_dim);
+    dim->input_size =
+        rewriter.create<tensor::ExtractOp>(loc, op.input_sizes(), idx);
+    dim->filter_size = get_dim_value(op.filter(), filter_spatial_dim);
+    dim->output_size = get_dim_value(op.out_backprop(), spatial_dim);
+    dim->stride = strides[spatial_dim];
+    dim->dilation = dilations[spatial_dim];
+
+    if (!GetPaddingValues(op, rewriter, dim->input_size, dim->filter_size,
+                          dim->dilation, dim->stride, padding,
+                          shape_scalar_type, &padding_before, &padding_after)) {
+      return tensorflow::errors::InvalidArgument("Fail to get padding");
+    }
+
+    Value effective_filter_size =
+        plus_one(mul_vals(sub_one(dim->filter_size), get_const(dim->dilation)));
+    dim->expanded_output_size =
+        plus_one(mul_vals(sub_one(dim->output_size), get_const(dim->stride)));
+    Value padded_out_size =
+        sub_one(add_vals(dim->input_size, effective_filter_size));
+    dim->pad_before = sub_one(sub_vals(effective_filter_size, padding_before));
+    dim->pad_after = sub_vals(
+        sub_vals(padded_out_size, dim->expanded_output_size), dim->pad_before);
+
+    return tensorflow::Status::OK();
+  }
+
+  tensorflow::Status ConvBackpropComputeDimensionsV2Dyn(
+      OpTy& op, PatternRewriter& rewriter,
+      const ArrayRef<int64_t>& filter_shape,
+      const ArrayRef<int64_t>& out_backprop_shape,
+      std::vector<int64_t>& dilations, std::vector<int64_t>& strides,
+      tensorflow::Padding padding, std::vector<int64_t> explicit_paddings,
+      tensorflow::TensorFormat data_format,
+      ConvBackpropDimensionsDyn* dims) const {
+    Location loc = op.getLoc();
+    auto shape_scalar_type = rewriter.getIntegerType(32);
+    auto get_dim_value = [&](Value val, int64_t dim) {
+      Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
+      return rewriter.create<IndexCastOp>(loc, dim_value, shape_scalar_type);
+    };
+    auto get_int = [](Attribute attr) {
+      return attr.template cast<IntegerAttr>().getInt();
+    };
+    auto get_const = [&](int64_t val) {
+      return rewriter.create<mlir::ConstantIntOp>(loc, val, shape_scalar_type);
+    };
+    // The + 2 in the following line is for the batch and feature dimensions.
+    const int num_dims = num_spatial_dims + 2;
+    if (filter_shape.size() != num_dims) {
+      return tensorflow::errors::InvalidArgument("Filter must be ", num_dims,
+                                                 "-dimensional");
+    }
+    if (out_backprop_shape.size() != num_dims) {
+      return tensorflow::errors::InvalidArgument("Out_backprop must be ",
+                                                 num_dims, "-dimensional");
+    }
+    int batch_dim = GetTensorBatchDimIndex(num_dims, data_format);
+    dims->batch_size = get_dim_value(op.out_backprop(), batch_dim);
+
+    // TODO(feiwen) : check in_depth and out_depth
+    dims->in_depth = get_dim_value(op.filter(), num_dims - 2);
+    dims->out_depth = get_dim_value(op.filter(), num_dims - 1);
+
+    // TODO(feiwen): to support grouped conv
+    dims->spatial_dims.resize(num_spatial_dims);
+
+    for (int i = 0; i < num_spatial_dims; ++i) {
+      int image_dim = GetTensorSpatialDimIndex(num_dims, data_format, i);
+      Value padding_before, padding_after;
+      if (padding == tensorflow::Padding::EXPLICIT) {
+        padding_before = get_const(explicit_paddings[2 * image_dim]);
+        padding_after = get_const(explicit_paddings[2 * image_dim + 1]);
+      }
+      TF_RETURN_IF_ERROR(ConvBackpropExtractAndVerifyDimensionDyn(
+          op, rewriter, dilations, strides, padding, padding_before,
+          padding_after, image_dim, i, &dims->spatial_dims[i]));
+    }
+    return tensorflow::Status::OK();
+  }
+
+  bool GetPaddingValues(OpTy& op, PatternRewriter& rewriter, Value input_size,
+                        Value filter_size, int64_t dilation_rate,
+                        int64_t stride, tensorflow::Padding padding_type,
+                        Type shape_scalar_type, Value* padding_low,
+                        Value* padding_high) const {
+    // Stride must be > 0
+    if (stride <= 0) return false;
+    // Dilation rate must be >= 1
+    if (dilation_rate < 1) return false;
+
+    Location loc = op.getLoc();
+    switch (padding_type) {
+      case tensorflow::Padding::VALID: {
+        auto zero = rewriter.create<ConstantIntOp>(loc, 0, shape_scalar_type);
+        *padding_low = *padding_high = zero;
+        break;
+      }
+      case tensorflow::Padding::EXPLICIT:
+        break;
+      case tensorflow::Padding::SAME: {
+        auto zero = rewriter.create<ConstantIntOp>(loc, 0, shape_scalar_type);
+        auto one = rewriter.create<ConstantIntOp>(loc, 1, shape_scalar_type);
+        auto two = rewriter.create<ConstantIntOp>(loc, 2, shape_scalar_type);
+        // See also the parallel implementation in
+        // GetWindowedOutputSizeFromDimsV2. effective_filter_size = (filter_size
+        // - 1) * dilation_rate + 1
+        Value stride_value =
+            rewriter.create<ConstantIntOp>(loc, stride, shape_scalar_type);
+        Value dilation_rate_value = rewriter.create<ConstantIntOp>(
+            loc, dilation_rate, shape_scalar_type);
+        Value effective_filter_size_op = rewriter.create<AddIOp>(
+            loc, one,
+            rewriter.create<MulIOp>(
+                loc, dilation_rate_value,
+                rewriter.create<SubIOp>(loc, filter_size, one)));
+        // output_size = (input_size + stride - 1) / stride;
+        Value output_size = rewriter.create<UnsignedDivIOp>(
+            loc,
+            rewriter.create<AddIOp>(
+                loc, input_size,
+                rewriter.create<SubIOp>(loc, stride_value, one)),
+            stride_value);
+        // std::max(int64{0}, (output_size - 1) * stride +
+        //     effective_filter_size - input_size);
+        Value padding_needed = rewriter.create<SubIOp>(
+            loc,
+            rewriter.create<AddIOp>(
+                loc, effective_filter_size_op,
+                rewriter.create<MulIOp>(
+                    loc, stride_value,
+                    rewriter.create<SubIOp>(loc, output_size, one))),
+            input_size);
+        Value cond = rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::sge,
+                                                   padding_needed, zero);
+        padding_needed = rewriter.create<mlir::SelectOp>(
+            loc, padding_needed.getType(), cond, padding_needed, zero);
+        *padding_low =
+            rewriter.create<UnsignedDivIOp>(loc, padding_needed, two);
+        *padding_high =
+            rewriter.create<SubIOp>(loc, padding_needed, *padding_low);
+        break;
+      }
+    }
+    return true;
+  }
+
+  LogicalResult matchAndRewrite(OpTy op,
+                                PatternRewriter& rewriter) const override {
+    Location loc = op.getLoc();
+    auto shape_scalar_type = rewriter.getIntegerType(32);
+    auto get_const = [&](int64_t val) {
+      return rewriter.create<mlir::ConstantIntOp>(loc, val, shape_scalar_type);
+    };
+    auto get_dim_value = [&](Value val, int64_t dim) {
+      Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
+      return rewriter.create<IndexCastOp>(loc, dim_value, shape_scalar_type);
+    };
+
+    // Unpack all of the attributes.
+    tensorflow::TensorFormat data_format;
+    if (!FormatFromString(op.data_format().str(), &data_format))
+      return op.emitOpError("invalid data format");
+
+    tensorflow::Padding padding;
+    if (!GetPaddingFromString(op.padding().str(), &padding).ok())
+      return failure();
+
+    auto input_sizes_ty =
+        op.input_sizes().getType().template dyn_cast<RankedTensorType>();
+    constexpr int num_dims = num_spatial_dims + 2;
+    if (!input_sizes_ty || input_sizes_ty.getRank() != 1 
+        || input_sizes_ty.getShape()[0] != num_dims) 
+      return failure();
+    
+    auto filter_ty =
+        op.filter().getType().template dyn_cast<RankedTensorType>();
+    auto out_backprop_ty =
+        op.out_backprop().getType().template dyn_cast<RankedTensorType>();
+
+    DenseIntElementsAttr input_shape_attr;
+    if (!out_backprop_ty || !filter_ty ||
+        (out_backprop_ty.hasStaticShape() && filter_ty.hasStaticShape() &&
+         matchPattern(op.input_sizes(), m_Constant(&input_shape_attr)))) {
+      return failure();
+    }
+
+    auto dilations_attr = GetI64ElementsAttr(op.dilations());
+    std::vector<int64_t> dilations{
+        dilations_attr.template getValues<int64_t>().begin(),
+        dilations_attr.template getValues<int64_t>().end()};
+    auto strides_attr = GetI64ElementsAttr(op.strides());
+    std::vector<int64_t> strides{
+        strides_attr.template getValues<int64_t>().begin(),
+        strides_attr.template getValues<int64_t>().end()};
+
+    std::vector<int64_t> explicit_paddings;
+    if (padding == tensorflow::Padding::EXPLICIT) {
+      // EXPLICIT padding mode and the associated attribute is limited to
+      // Conv2DBackpropInput. So, fetch attribute by identifier instead of the
+      // op.explicit_paddings() attribute getter.
+      ArrayRef<Attribute> explicit_paddings_attr =
+          op->template getAttrOfType<ArrayAttr>("explicit_paddings").getValue();
+      explicit_paddings.reserve(explicit_paddings_attr.size());
+      for (Attribute explicit_padding : explicit_paddings_attr)
+        explicit_paddings.push_back(
+            explicit_padding.cast<IntegerAttr>().getInt());
+    }
+    
+    ArrayRef<int64_t> filter_shape = filter_ty.getShape();
+
+    // Reuse dimension computation logic from conv_grad_shape_utils.cc.
+    ConvBackpropDimensionsDyn dims;
+    if (!ConvBackpropComputeDimensionsV2Dyn(
+             op, rewriter, filter_shape, out_backprop_ty.getShape(), dilations,
+             strides, padding, explicit_paddings, data_format, &dims)
+             .ok()) {
+      return failure();
+    }
+    // Compute ConvDimensionNumbers, dilation, and padding.
+    SmallVector<int64_t, num_spatial_dims> spatial_dims;
+    SmallVector<int64_t, num_spatial_dims> lhs_dilation;
+    SmallVector<int64_t, num_spatial_dims> rhs_dilation;
+    SmallVector<Value, num_spatial_dims * 2> paddings;
+
+    for (int i : llvm::seq<int>(0, num_spatial_dims)) {
+      const int64_t dim = GetTensorSpatialDimIndex(num_dims, data_format, i);
+      spatial_dims.push_back(dim);
+      const auto& spatial_dim_i = dims.spatial_dims[i];
+      lhs_dilation.push_back(spatial_dim_i.stride);
+      rhs_dilation.push_back(dilations[dim]);
+      paddings.push_back(spatial_dim_i.pad_before);
+      paddings.push_back(spatial_dim_i.pad_after);
+    }
+
+    auto spatial_dims_attr = GetI64ElementsAttr(spatial_dims, &rewriter);
+
+    Value filter = op.filter();
+
+    // TODO(feiwen): support group conv
+    const int feature_dim =
+        tensorflow::GetTensorFeatureDimIndex(num_dims, data_format);
+    const int64_t feature_group_count = 1;
+
+    auto kernel_spatial_dims_attr =
+        GetI64ElementsAttrForSeq(0, num_spatial_dims, &rewriter);
+
+    // Mirror the filter in the spatial dimensions.
+    filter = rewriter.create<ReverseOp>(op.getLoc(), filter,
+                                        kernel_spatial_dims_attr);
+
+    const int batch_dim =
+        tensorflow::GetTensorBatchDimIndex(num_dims, data_format);
+    auto batch_dim_attr = rewriter.getI64IntegerAttr(batch_dim);
+    auto feature_dim_attr = rewriter.getI64IntegerAttr(feature_dim);
+
+    SmallVector<Value, 3> operands;
+    operands.push_back(op.out_backprop());
+    operands.push_back(filter);
+    Value paddings_op = rewriter.create<tensor::FromElementsOp>(
+        op.getLoc(), rewriter.getI32Type(), paddings);
+    operands.push_back(paddings_op);
+
+    auto rhs_dilations_attr = rewriter.getNamedAttr(
+        "rhs_dilation", GetI64ElementsAttr(rhs_dilation, &rewriter));
+    auto lhs_dilations_attr = rewriter.getNamedAttr(
+        "lhs_dilation", GetI64ElementsAttr(lhs_dilation, &rewriter));
+    auto feature_group_count_attr = rewriter.getNamedAttr(
+        "feature_group_count", rewriter.getI64IntegerAttr(feature_group_count));
+    auto window_strides_attr = rewriter.getNamedAttr(
+        "window_strides", GetI64ElementsAttrForValue(/*size=*/num_spatial_dims,
+                                                     /*val=*/1, &rewriter));
+
+    auto batch_group_count_attr = rewriter.getNamedAttr(
+        "batch_group_count", rewriter.getI64IntegerAttr(1));
+
+    auto dimension_numbers_attr = rewriter.getNamedAttr(
+        "dimension_numbers",
+        ConvDimensionNumbers::get(
+            /*input_batch_dimension=*/batch_dim_attr,
+            /*input_feature_dimension=*/feature_dim_attr,
+            /*input_spatial_dimensions=*/spatial_dims_attr,
+            // TF filter shape is [ H, W, ..., inC, outC ]
+            // Transpose the input and output features for computing the
+            // gradient.
+            /*kernel_input_feature_dimension=*/
+            rewriter.getI64IntegerAttr(num_spatial_dims + 1),
+            /*kernel_output_feature_dimension=*/
+            rewriter.getI64IntegerAttr(num_spatial_dims),
+            /*kernel_spatial_dimensions=*/kernel_spatial_dims_attr,
+            /*output_batch_dimension=*/batch_dim_attr,
+            /*output_feature_dimension=*/feature_dim_attr,
+            /*output_spatial_dimensions=*/spatial_dims_attr,
+            rewriter.getContext()));
+
+    NamedAttribute attrs[] = {rhs_dilations_attr,       lhs_dilations_attr,
+                              window_strides_attr,      dimension_numbers_attr,
+                              feature_group_count_attr, batch_group_count_attr};
+    rewriter.replaceOpWithNewOp<mhlo::DynamicConvOp>(op, op.getType(), operands,
+                                                     llvm::makeArrayRef(attrs));
+    return success();
+  }
+};
+
+using ConvertConv2DBackpropInputDynamic =
+    ConvertConvBackpropInputDynamic<TF::Conv2DBackpropInputOp,
+                                    /*num_spatial_dims=*/2>;
+
 // Converts tf.Conv?DBackpropFilterOp into:
 //   %result = "mhlo.convolution"(%input, %out_backprop)
 template <typename OpTy, int num_spatial_dims>
@@ -5927,39 +6316,6 @@ template <typename OpTy, int num_spatial_dims>
 class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
  public:
   using OpRewritePattern<OpTy>::OpRewritePattern;
-  // Information about a single spatial dimension for a convolution
-  // backpropagation.
-  struct ConvBackpropSpatialDimension_Dyn {
-    Value input_size;
-    Value filter_size;
-    Value output_size;
-    int64_t stride;
-    int64_t dilation;
-    // Output size after scaling by the stride.
-    Value expanded_output_size;
-    // Number of padding elements to be added before/after this dimension of
-    // the input when computing Conv?DBackpropInput.
-    Value pad_before, pad_after;
-  };
-
-  // Computed dimensions for a backwards convolution.
-  struct ConvBackpropDimensions_Dyn {
-    // Information about each spatial dimension.
-    SmallVector<ConvBackpropSpatialDimension_Dyn, 3> spatial_dims;
-    // Batch size.
-    Value batch_size;
-    // Input and output feature depth.
-    int64_t in_depth, out_depth;
-    // Convenience access methods for spatial dimensions properties.
-    Value input_size(int dim) const { return spatial_dims[dim].input_size; }
-    Value filter_size(int dim) const { return spatial_dims[dim].filter_size; }
-    Value output_size(int dim) const { return spatial_dims[dim].output_size; }
-    int64_t stride(int dim) const { return spatial_dims[dim].stride; }
-    int64_t dilation(int dim) const { return spatial_dims[dim].dilation; }
-
-    // Compute padding for the given spatial dimension.
-    int SpatialPadding(const tensorflow::Padding& padding, int dim) const;
-  };
 
   bool GetPaddingValues(OpTy& op, PatternRewriter& rewriter, Value input_size,
                         Value filter_size, int64_t dilation_rate,
@@ -6027,11 +6383,11 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
     return true;
   }
 
-  tensorflow::Status ConvBackpropExtractAndVerifyDimension_Dyn(
+  tensorflow::Status ConvBackpropExtractAndVerifyDimensionDyn(
       OpTy& op, PatternRewriter& rewriter, const std::vector<int64_t> dilations,
       const std::vector<int64_t>& strides, tensorflow::Padding padding,
       Value padding_before, Value padding_after, int spatial_dim,
-      int filter_spatial_dim, ConvBackpropSpatialDimension_Dyn* dim) const {
+      int filter_spatial_dim, ConvBackpropSpatialDimensionDyn* dim) const {
     Location loc = op.getLoc();
     auto shape_scalar_type = rewriter.getIntegerType(32);
     auto get_const = [&](int64_t val) {
@@ -6076,7 +6432,7 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
     }
 
     Value effective_filter_size =
-        mul_vals(sub_one(dim->filter_size), plus_one(get_const(dim->dilation)));
+        plus_one(mul_vals(sub_one(dim->filter_size), get_const(dim->dilation)));
     dim->expanded_output_size =
         plus_one(mul_vals(sub_one(dim->output_size), get_const(dim->stride)));
     Value padded_out_size =
@@ -6087,14 +6443,14 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
     return tensorflow::Status::OK();
   }
 
-  tensorflow::Status ConvBackpropComputeDimensionsV2_Dyn(
+  tensorflow::Status ConvBackpropComputeDimensionsV2Dyn(
       OpTy& op, PatternRewriter& rewriter, const ArrayRef<int64_t>& input_shape,
       const ArrayRef<int64_t>& out_backprop_shape,
       const std::vector<int64_t>& dilations,
       const std::vector<int64_t>& strides, tensorflow::Padding padding,
       std::vector<int64_t> explicit_paddings,
       tensorflow::TensorFormat data_format,
-      ConvBackpropDimensions_Dyn* dims) const {
+      ConvBackpropDimensionsDyn* dims) const {
     Location loc = op.getLoc();
     auto shape_scalar_type = rewriter.getIntegerType(32);
     auto get_dim_value = [&](Value val, int64_t dim) {
@@ -6119,10 +6475,11 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
     dims->batch_size = get_dim_value(op.out_backprop(), batch_dim);
 
     int feature_dim = GetTensorFeatureDimIndex(num_dims, data_format);
-    dims->in_depth = input_shape[feature_dim];
+    // TODO(feiwen) : check in_depth and out_depth
+    dims->in_depth = get_dim_value(op.input(), feature_dim);
     // The input and output feature dimensions are the second last and last
     // dimensions of the filter Tensor.
-    dims->out_depth = out_backprop_shape[feature_dim];
+    dims->out_depth = get_dim_value(op.out_backprop(), feature_dim);
 
     dims->spatial_dims.resize(num_spatial_dims);
     for (int i = 0; i < num_spatial_dims; ++i) {
@@ -6132,7 +6489,7 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
         padding_before = get_const(explicit_paddings[2 * image_dim]);
         padding_after = get_const(explicit_paddings[2 * image_dim + 1]);
       }
-      TF_RETURN_IF_ERROR(ConvBackpropExtractAndVerifyDimension_Dyn(
+      TF_RETURN_IF_ERROR(ConvBackpropExtractAndVerifyDimensionDyn(
           op, rewriter, dilations, strides, padding, padding_before,
           padding_after, image_dim, i, &dims->spatial_dims[i]));
     }
@@ -6216,8 +6573,8 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
 
     constexpr int num_dims = num_spatial_dims + 2;
     // Reuse dimension computation logic from conv_grad_shape_utils.cc.
-    ConvBackpropDimensions_Dyn dims;
-    if (!ConvBackpropComputeDimensionsV2_Dyn(
+    ConvBackpropDimensionsDyn dims;
+    if (!ConvBackpropComputeDimensionsV2Dyn(
              op, rewriter, input_shape, out_backprop_shape, dilations, strides,
              padding, explicit_paddings, data_format, &dims)
              .ok()) {
@@ -8438,7 +8795,8 @@ void PopulateLegalizeTfPatterns(MLIRContext *context,
     ConvertPadOpDynamic,
     ConvertGatherNdOpDynamic,
     ConvertStridedSliceOpDynamic,
-    ConvertConv2DBackpropFilterDynamic>(context);
+    ConvertConv2DBackpropFilterDynamic,
+    ConvertConv2DBackpropInputDynamic>(context);
   // clang-format on
 }
 
