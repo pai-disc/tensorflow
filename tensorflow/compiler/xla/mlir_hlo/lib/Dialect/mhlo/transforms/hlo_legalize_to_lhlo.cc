@@ -540,6 +540,7 @@ void populateHloToLhloConversionPattern(
       HloToLhloOpConverter<mhlo::IotaOp>,
       HloToLhloOpConverter<mhlo::IsFiniteOp>,
       HloToLhloOpConverter<mhlo::LogOp>,
+      HloToLhloOpConverter<mhlo::Log1pOp>,
       HloToLhloOpConverter<mhlo::LogisticOp>,
       HloToLhloOpConverter<mhlo::MaxOp>,
       HloToLhloOpConverter<mhlo::MinOp>,
