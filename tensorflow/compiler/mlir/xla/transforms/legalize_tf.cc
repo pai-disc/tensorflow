@@ -7019,7 +7019,7 @@ class ConvertUnpackOp : public OpRewritePattern<TF::UnpackOp> {
   LogicalResult matchAndRewrite(TF::UnpackOp op,
                                 PatternRewriter &rewriter) const override {
     auto value_type = op.value().getType().dyn_cast<RankedTensorType>();
-    if (!value_type) return failure();
+    if (!value_type || !value_type.hasStaticShape()) return failure();
 
     int64_t value_rank = value_type.getRank();
     int64_t axis = op.axis();
@@ -8020,6 +8020,92 @@ class ConvertDynamicSqueezeOp : public OpRewritePattern<TF::SqueezeOp> {
   }
 };
 
+class ConvertDynamicStitchOpDynamic : public OpRewritePattern<TF::DynamicStitchOp> {
+ public:
+  using OpRewritePattern::OpRewritePattern;
+
+  Type deriveRankedTensorTypes(Type ty, int64_t rank) const {
+    auto tensor_ty = ty.dyn_cast<TensorType>();
+    if (!tensor_ty) return ty;
+    SmallVector<int64_t, 8> shape(rank, ShapedType::kDynamicSize);
+    return RankedTensorType::get(shape, tensor_ty.getElementType());
+  }
+
+  LogicalResult matchAndRewrite(TF::DynamicStitchOp op,
+                                PatternRewriter &rewriter) const override {
+    // Static output type is used to compute intermediate values. Note that the
+    // output type doesn't have to be static but if input types and indices are
+    // constant, then the output type can be statically determined.
+    RankedTensorType out_ty =
+        op.getType().template dyn_cast<RankedTensorType>();
+    if (!out_ty) return failure();
+
+    // Extract out all the constant indices' attributes and verify that data
+    // types are static.
+    SmallVector<DenseIntElementsAttr, 4> indices;
+    indices.reserve(op.N());
+    for (auto it : llvm::zip(op.indices(), op.data())) {
+      Value index = std::get<0>(it);
+      Value data = std::get<1>(it);
+
+      DenseIntElementsAttr index_attr;
+      if (!matchPattern(index, m_Constant(&index_attr))) return failure();
+      indices.push_back(index_attr);
+
+      RankedTensorType data_ty =
+          data.getType().template dyn_cast<RankedTensorType>();
+      if (!data_ty) return failure();
+    }
+    Location loc = op.getLoc();
+
+    int64_t output_rank = out_ty.getRank();
+    SmallVector<Value, 8> values(out_ty.getDimSize(0));
+
+    for (auto it : llvm::zip(indices, op.data())) {
+      DenseIntElementsAttr index_attr = std::get<0>(it);
+      SmallVector<Value, 4> shapes;
+      Value data = std::get<1>(it);
+      Value first_dim = rewriter.create<ConstantIndexOp>(loc, index_attr.size());
+
+      auto data_ty = data.getType().template dyn_cast<RankedTensorType>();
+      if (!data_ty) return failure();
+
+      int64_t rank = data_ty.getRank();
+      shapes.push_back(first_dim);
+      int64_t extracted_ranks = output_rank - 1;
+      for (size_t i = 0; i < extracted_ranks; ++i) {
+        size_t idx = rank - extracted_ranks - i;
+        Value dim_idx = rewriter.create<ConstantIndexOp>(loc, idx);
+        shapes.push_back(
+            rewriter.create<tensor::DimOp>(loc, data, dim_idx));
+      }
+
+      Value new_shape =
+          rewriter.create<tensor::FromElementsOp>(loc, shapes);
+      auto reshaped_data =
+          rewriter.create<mhlo::DynamicReshapeOp>(loc,
+              deriveRankedTensorTypes(data.getType(), output_rank), data, new_shape);
+
+      // the number of UnpackOp output and indices are the same.
+      auto reshaped_data_ty = reshaped_data.getType().cast<RankedTensorType>().getElementType();
+      auto unpacked_ty = SmallVector<Type, 4>(
+          index_attr.size(), RankedTensorType::get(
+              SmallVector<int64_t, 8>(extracted_ranks, ShapedType::kDynamicSize), reshaped_data_ty));
+
+      auto items = rewriter.create<TF::UnpackOp>(
+          loc, unpacked_ty, reshaped_data, /*axis*/0);
+
+      for (auto index_item : llvm::zip(index_attr, items.getResults())) {
+        int64_t output_index = std::get<0>(index_item).getSExtValue();
+        Value item = std::get<1>(index_item);
+        values[output_index] = item;
+      }
+    }
+    rewriter.replaceOpWithNewOp<TF::PackOp>(op, op.getType(), values);
+    return success();
+  }
+};
+
 // Converts a TF QR op to HLO.
 class ConvertQrOp : public OpRewritePattern<TF::QrOp> {
  public:
@@ -8722,6 +8808,7 @@ void PopulateLegalizeTfPatterns(MLIRContext *context,
     ConvertDiagPartOp,
     ConvertDynamicExpandDimsOp,
     ConvertDynamicSqueezeOp,
+    ConvertDynamicStitchOpDynamic,
     ConvertEinsumOp,
     ConvertRFFTOp,
     ConvertIRFFTOp,
