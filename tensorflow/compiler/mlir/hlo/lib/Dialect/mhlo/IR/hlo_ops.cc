@@ -6716,9 +6716,15 @@ mlir::ElementsAttr TransposeElementsAttr(
 } // namespace
 
 OpFoldResult TransposeOp::fold(ArrayRef<Attribute> operands) {
+  // If the result has non-static shape, a transpsed op is necessary to go from
+  // static shape to non-static shape.
+  auto resultTy = getResult().getType().dyn_cast<RankedTensorType>();
+  if (!resultTy || !resultTy.hasStaticShape()) return {};
+
   if (auto elements = operands.front().dyn_cast_or_null<SplatElementsAttr>()) {
     return elements.reshape(getResult().getType().cast<ShapedType>());
   }
+
   // operand is const, thus fold it directly.
   if (auto elementsAttr = operands.front().dyn_cast_or_null<ElementsAttr>()) {
     return TransposeElementsAttr(elementsAttr, permutation());
