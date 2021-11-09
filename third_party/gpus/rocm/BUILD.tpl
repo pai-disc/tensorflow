@@ -11,6 +11,13 @@ config_setting(
     },
 )
 
+config_setting(
+    name = "using_dcu",
+    values = {
+        "define": "using_dcu=true",
+    },
+)
+
 cc_library(
     name = "rocm_headers",
     hdrs = [
