@@ -839,7 +839,7 @@ std::pair<std::string, std::string> GetFeatureStrFromGCNArchName(
   std::string feature_str;
 
   std::string gfx = gcn_arch_name;
-#if TF_ROCM_VERSION < 30900
+#if TF_ROCM_VERSION < 30900 || TENSORFLOW_USE_DCU
   // For ROCm versions older than 3.9, hardcode it to "+code-object-v3"
   // This is simply to preserve how things were...nohing else
   feature_str = "+code-object-v3";
@@ -890,7 +890,7 @@ void AMDGPUBackendInit(const HloModuleConfig& hlo_module_config) {
   LLVMInitializeAMDGPUTargetMC();
   LLVMInitializeAMDGPUAsmPrinter();
 
-#if TF_ROCM_VERSION < 40100
+#if TF_ROCM_VERSION < 40100 || TENSORFLOW_USE_DCU
   // Use code-object-v3 for ROCm versions 4.0.1 and lower, since the
   // HIP runtime for those ROCm versions expects the v3 HSACO objects
   // Default is now v4 for newer LLVM versions (starting around 210326)

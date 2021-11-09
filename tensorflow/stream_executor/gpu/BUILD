@@ -236,6 +236,7 @@ cc_library(
     hdrs = if_gpu_is_configured(["asm_compiler.h"]),
     copts = tf_copts(),
     visibility = [
+        "//tensorflow/compiler/mlir/disc:__subpackages__",
         "//tensorflow/compiler/mlir/tools/kernel_gen:__subpackages__",
         "//tensorflow/compiler/xla/service/gpu:__subpackages__",
         "//tensorflow/core/kernels:__subpackages__",
@@ -260,6 +261,8 @@ cc_library(
         "//tensorflow/stream_executor/cuda:cuda_driver",
         "//tensorflow/stream_executor/cuda:ptxas_wrapper",
         "//tensorflow/stream_executor/cuda:fatbinary_wrapper",
+    ]) + if_rocm_is_configured([
+        "//tensorflow/stream_executor/rocm:rocm_driver",
     ]) + ["@com_google_absl//absl/container:flat_hash_set"],
 )
 

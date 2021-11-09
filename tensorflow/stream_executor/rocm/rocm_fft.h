@@ -24,7 +24,7 @@ limitations under the License.
 
 #include "rocm/rocm_config.h"
 
-#if TF_ROCM_VERSION < 40100
+#if TF_ROCM_VERSION < 40100 || TENSORFLOW_USING_DCU
 #include "rocm/include/rocfft/hipfft.h"
 #else
 #include "rocm/include/hipfft/hipfft.h"
