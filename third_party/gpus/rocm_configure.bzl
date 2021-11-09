@@ -365,7 +365,6 @@ def _exec_find_rocm_config(repository_ctx, script_path):
         "f.close();" +
         "system('\"%s\" script.py');" % (python_bin)
     )
-
     return execute(repository_ctx, [python_bin, "-c", decompress_and_execute_cmd])
 
 def find_rocm_config(repository_ctx, script_path):
@@ -545,10 +544,11 @@ def _create_local_rocm_repository(repository_ctx):
 
     bash_bin = get_bash_bin(repository_ctx)
     rocm_config = _get_rocm_config(repository_ctx, bash_bin, find_rocm_config_script)
+    enable_dcu = get_host_environ(repository_ctx, "TF_NEED_DCU")
 
     # For ROCm 4.1 and above use hipfft, older ROCm versions use rocfft
     rocm_version_number = int(rocm_config.rocm_version_number)
-    hipfft_or_rocfft = "rocfft" if rocm_version_number < 40100 else "hipfft"
+    hipfft_or_rocfft = "rocfft" if rocm_version_number < 40100 or enable_dcu == '1' else "hipfft"
 
     # Copy header and library files to execroot.
     # rocm_toolkit_path
@@ -793,6 +793,7 @@ def _create_local_rocm_repository(repository_ctx):
             "%{hip_runtime_library}": "amdhip64",
             "%{crosstool_verbose}": _crosstool_verbose(repository_ctx),
             "%{gcc_host_compiler_path}": str(cc),
+            "%{using_dcu}": enable_dcu,
         },
     )
 
@@ -872,6 +873,7 @@ _ENVIRONS = [
     _GCC_HOST_COMPILER_PATH,
     _GCC_HOST_COMPILER_PREFIX,
     "TF_NEED_ROCM",
+    "TF_NEED_DCU",
     _ROCM_TOOLKIT_PATH,
     _TF_ROCM_AMDGPU_TARGETS,
 ]
