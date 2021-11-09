@@ -8,6 +8,11 @@ load(
 )
 load("//tensorflow:tensorflow.bzl", "tf_copts")
 load("@local_config_rocm//rocm:build_defs.bzl", "if_rocm_is_configured", "rocm_copts")
+load(
+    "@local_config_rocm//rocm:build_defs.bzl", 
+    "if_rocm_is_configured",
+    "if_dcu",
+)
 load("//tensorflow/core/platform:build_config_root.bzl", "if_static")
 
 package(
@@ -212,6 +217,7 @@ cc_library(
     srcs = if_rocm_is_configured(["rocm_fft.cc"]),
     hdrs = if_rocm_is_configured(["rocm_fft.h"]),
     visibility = ["//visibility:public"],
+    copts = if_dcu(["-DTENSORFLOW_USING_DCU"]),
     deps = if_rocm_is_configured([
         ":hipfft_if_static",
         ":rocm_platform_id",
@@ -416,12 +422,15 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = if_rocm_is_configured([
         ":miopen_plugin",
-        ":hipfft_plugin",
         ":rocblas_plugin",
         ":rocrand_plugin",
         ":rocm_driver",
         ":rocm_platform",
         ":rocm_helpers",
+    ]) + if_dcu([
+        ":rocfft_plugin",
+    ], [
+        ":hipfft_plugin",
     ]),
     alwayslink = 1,
 )

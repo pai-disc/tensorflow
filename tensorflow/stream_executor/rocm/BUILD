@@ -96,6 +96,39 @@ cc_library(
 )
 
 cc_library(
+    name = "rocfft_if_static",
+    deps = if_static([
+        "@local_config_rocm//rocm:rocfft",
+    ]),
+)
+
+cc_library(
+    name = "rocfft_plugin",
+    srcs = if_rocm_is_configured(["rocm_fft.cc"]),
+    hdrs = if_rocm_is_configured(["rocm_fft.h"]),
+    visibility = ["//visibility:public"],
+    copts = if_dcu(["-DTENSORFLOW_USING_DCU"]),
+    deps = if_rocm_is_configured([
+        ":rocfft_if_static",
+        ":rocm_platform_id",
+        "//tensorflow/stream_executor:event",
+        "//tensorflow/stream_executor:fft",
+        "//tensorflow/stream_executor:plugin_registry",
+        "//tensorflow/stream_executor:scratch_allocator",
+        "//tensorflow/stream_executor/gpu:gpu_activation",
+        "//tensorflow/stream_executor/gpu:gpu_helpers_header",
+        "//tensorflow/stream_executor/gpu:gpu_executor_header",
+        "//tensorflow/stream_executor/gpu:gpu_stream_header",
+        "//tensorflow/stream_executor/gpu:gpu_kernel_header",
+        "//tensorflow/stream_executor/lib",
+        "//tensorflow/stream_executor/platform",
+        "//tensorflow/stream_executor/platform:dso_loader",
+        "@local_config_rocm//rocm:rocm_headers",
+    ]),
+    alwayslink = True,
+)
+
+cc_library(
     name = "miopen_if_static",
     deps = ["//tensorflow/compiler/xla/stream_executor/rocm:miopen_if_static"],
 )
