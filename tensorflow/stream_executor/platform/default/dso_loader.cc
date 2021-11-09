@@ -146,7 +146,11 @@ port::StatusOr<void*> GetMiopenDsoHandle() {
 }
 
 port::StatusOr<void*> GetHipfftDsoHandle() {
+#if TF_ROCM_VERSION < 40100 || TENSORFLOW_USE_DCU
+  return GetDsoHandle("rocfft", "");
+#else
   return GetDsoHandle("hipfft", "");
+#endif
 }
 
 port::StatusOr<void*> GetRocrandDsoHandle() {

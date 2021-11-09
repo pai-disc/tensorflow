@@ -269,6 +269,10 @@ build:rocm --define=tensorflow_mkldnn_contraction_kernel=0
 build:rocm --repo_env TF_NEED_ROCM=1
 build:rocm --experimental_link_static_libraries_once=false  # b/230048163
 
+build:dcu --crosstool_top=@local_config_rocm//crosstool:toolchain
+build:dcu --define=using_rocm=true --define=using_rocm_hipcc=true --define=using_dcu=true
+build:dcu --repo_env TF_NEED_ROCM=1 --repo_env TF_NEED_DCU=1
+
 # Options extracted from configure script
 build:numa --define=with_numa_support=true
 
