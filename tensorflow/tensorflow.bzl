@@ -28,6 +28,7 @@ load(
 load(
     "@local_config_rocm//rocm:build_defs.bzl",
     "if_rocm",
+    "if_dcu",
     "if_rocm_is_configured",
     "rocm_copts",
 )
@@ -379,6 +380,7 @@ def tf_copts(
         ]) +
         (if_not_windows(["-fno-exceptions"]) if not allow_exceptions else []) +
         if_cuda(["-DGOOGLE_CUDA=1"]) +
+        if_dcu(["-DTENSORFLOW_USE_DCU=1"]) +
         if_nvcc(["-DTENSORFLOW_USE_NVCC=1"]) +
         if_libtpu(["-DLIBTPU_ON_GCE"], []) +
         if_xla_available(["-DTENSORFLOW_USE_XLA=1"]) +

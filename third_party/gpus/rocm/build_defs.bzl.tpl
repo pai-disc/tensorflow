@@ -11,6 +11,18 @@ def if_rocm(if_true, if_false = []):
         "//conditions:default": if_false
     })
 
+def if_dcu(if_true, if_false = []):
+    """Shorthand for select()'ing on whether we're building with DCU.
+
+    Returns a select statement which evaluates to if_true if we're building
+    with DCU enabled.  Otherwise, the select statement evaluates to if_false.
+
+    """
+    return select({
+        "@local_config_rocm//rocm:using_dcu": if_true,
+        "//conditions:default": if_false
+    })
+
 
 def rocm_default_copts():
     """Default options for all ROCm compilations."""

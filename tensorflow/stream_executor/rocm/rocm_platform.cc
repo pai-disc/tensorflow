@@ -117,6 +117,16 @@ port::StatusOr<StreamExecutor*> ROCmPlatform::ExecutorForDevice(int ordinal) {
   return GetExecutor(config);
 }
 
+port::StatusOr<StreamExecutor*> ROCmPlatform::ExecutorForDevice(int ordinal,
+                                                                void* hash) {
+  StreamExecutorConfig config;
+  config.ordinal = ordinal;
+  config.hash = hash;
+  config.plugin_config = PluginConfig();
+  config.device_options = DeviceOptions::Default();
+  return GetExecutor(config);
+}
+
 port::StatusOr<StreamExecutor*> ROCmPlatform::ExecutorForDeviceWithPluginConfig(
     int device_ordinal, const PluginConfig& plugin_config) {
   StreamExecutorConfig config;
