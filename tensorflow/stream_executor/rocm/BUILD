@@ -229,7 +229,7 @@ cc_library(
     srcs = if_rocm_is_configured(["rocm_fft.cc"]),
     hdrs = if_rocm_is_configured(["rocm_fft.h"]),
     visibility = ["//visibility:public"],
-    copts = if_dcu(["-DTENSORFLOW_USING_DCU"]),
+    copts = if_dcu(["-DTENSORFLOW_USE_DCU"]),
     deps = if_rocm_is_configured([
         ":hipfft_if_static",
         ":rocm_platform_id",
@@ -262,7 +262,7 @@ cc_library(
     srcs = if_rocm_is_configured(["rocm_fft.cc"]),
     hdrs = if_rocm_is_configured(["rocm_fft.h"]),
     visibility = ["//visibility:public"],
-    copts = if_dcu(["-DTENSORFLOW_USING_DCU"]),
+    copts = if_dcu(["-DTENSORFLOW_USE_DCU"]),
     deps = if_rocm_is_configured([
         ":rocfft_if_static",
         ":rocm_platform_id",
