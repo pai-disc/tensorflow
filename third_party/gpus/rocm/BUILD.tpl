@@ -18,6 +18,11 @@ config_setting(
     },
 )
 
+load(
+    ":build_defs.bzl",
+    "if_dcu",
+)
+
 cc_library(
     name = "rocm_headers",
     hdrs = [
@@ -169,8 +174,8 @@ cc_library(
 
 cc_library(
     name = "hipsolver",
-    srcs = ["rocm/lib/%{hipsolver_lib}"],
-    data = ["rocm/lib/%{hipsolver_lib}"],
+    srcs = if_dcu([], if_false=["rocm/lib/%{hipsolver_lib}"]),
+    data = if_dcu([], if_false=["rocm/lib/%{hipsolver_lib}"]),
 )
 
 cc_library(
