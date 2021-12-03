@@ -281,6 +281,8 @@ bool CouldNeedDeviceBitcode(const llvm::Module& module) {
   return false;
 }
 
+}  // namespace
+
 // Links the module with a vector of path to bitcode modules.
 // The caller must guarantee that the paths exist.
 Status LinkWithBitcodeVector(llvm::Module* module,
@@ -313,6 +315,8 @@ Status LinkWithBitcodeVector(llvm::Module* module,
   }
   return Status::OK();
 }
+
+namespace {
 
 // Links libdevice into the given module if the module needs libdevice.
 Status LinkLibdeviceIfNecessary(llvm::Module* module,
@@ -564,13 +568,11 @@ StatusOr<string> CompileToPtx(
 
 }  // namespace nvptx
 
-namespace {
-
 // Gets the ROCm-Device-Libs filenames for a particular AMDGPU version.
 std::vector<string> GetROCDLPaths(std::string amdgpu_version,
                                   const string& rocdl_dir_path) {
   // AMDGPU version-neutral bitcodes.
-#if TF_ROCM_VERSION >= 30900
+#if TF_ROCM_VERSION >= 30900 || TENSORFLOW_USE_DCU
   static std::vector<string>* rocdl_filenames = new std::vector<string>(
       {"hc.bc", "opencl.bc", "ocml.bc", "ockl.bc", "oclc_finite_only_off.bc",
        "oclc_daz_opt_off.bc", "oclc_correctly_rounded_sqrt_on.bc",
@@ -596,13 +598,15 @@ std::vector<string> GetROCDLPaths(std::string amdgpu_version,
   }
   result.push_back(tensorflow::io::JoinPath(
       rocdl_dir_path,
-#if TF_ROCM_VERSION >= 30900
+#if TF_ROCM_VERSION >= 30900 || TENSORFLOW_USE_DCU
       absl::StrCat("oclc_isa_version_", amdgpu_version, ".bc")));
 #else
       absl::StrCat("oclc_isa_version_", amdgpu_version, ".amdgcn.bc")));
 #endif
   return result;
 }
+
+namespace {
 
 struct HsacoCacheEntry {
   uint64 hash;
