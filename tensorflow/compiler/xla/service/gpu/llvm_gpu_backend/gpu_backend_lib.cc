@@ -282,6 +282,8 @@ bool CouldNeedDeviceBitcode(const llvm::Module& module) {
   return false;
 }
 
+}  // namespace
+
 // Links the module with a vector of path to bitcode modules.
 // The caller must guarantee that the paths exist.
 Status LinkWithBitcodeVector(
@@ -314,6 +316,8 @@ Status LinkWithBitcodeVector(
   }
   return Status::OK();
 }
+
+namespace {
 
 // Links libdevice into the given module if the module needs libdevice.
 Status LinkLibdeviceIfNecessary(llvm::Module* module,
@@ -576,8 +580,6 @@ StatusOr<std::string> CompileToPtx(
 
 }  // namespace nvptx
 
-namespace {
-
 // Gets the ROCm-Device-Libs filenames for a particular AMDGPU version.
 std::vector<std::string> GetROCDLPaths(std::string amdgpu_version,
                                        const std::string& rocdl_dir_path) {
@@ -605,6 +607,8 @@ std::vector<std::string> GetROCDLPaths(std::string amdgpu_version,
       absl::StrCat("oclc_isa_version_", amdgpu_version, ".bc")));
   return result;
 }
+
+namespace {
 
 struct HsacoCacheEntry {
   uint64_t hash;
