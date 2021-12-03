@@ -31,6 +31,12 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
+Status LinkWithBitcodeVector(llvm::Module* module,
+                             const std::vector<string>& bitcode_path_vector);
+
+std::vector<std::string> GetROCDLPaths(std::string amdgpu_version,
+                                       const std::string& rocdl_dir_path);
+
 namespace nvptx {
 // Compiles the argument module and returns it. libdevice_dir_path is the parent
 // directory of the libdevice bitcode libraries. The contents of the module may
