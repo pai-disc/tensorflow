@@ -960,7 +960,7 @@ std::string ToStringTruncated(const LiteralSlice& literal) {
 }
 
 // ADDED_FOR_TAO
-string ToStringSampled(const LiteralSlice& literal) {
+std::string ToStringSampled(const LiteralSlice& literal) {
   const Shape& shape = literal.shape();
   if (shape.IsTuple()) {
     return ToStringTruncated(literal);
@@ -969,7 +969,7 @@ string ToStringSampled(const LiteralSlice& literal) {
   if (RecursiveElementCount(literal.shape()) < 1000) {
     return literal.ToString();
   } else {
-    string str = "{ ";
+    std::string str = "{ ";
     if (shape.element_type() == F32) {
       absl::Span<const float> data = literal.data<float>();
       int64_t n = (data.size() < 32) ? data.size() : 32;

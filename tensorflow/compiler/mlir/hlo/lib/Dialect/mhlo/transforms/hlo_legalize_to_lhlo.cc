@@ -25,6 +25,7 @@ limitations under the License.
 #include "mlir-hlo/Dialect/mhlo/transforms/passes.h"
 #include "mlir-hlo/Dialect/mhlo/transforms/rewriters.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arithmetic/Transforms/Passes.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Bufferization/Transforms/Bufferize.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -34,6 +35,7 @@ limitations under the License.
 #include "mlir/Dialect/Shape/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Shape/Transforms/Passes.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Tensor/Transforms/Passes.h"
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
@@ -452,8 +454,9 @@ struct HloLegalizeToLhlo : public HloLegalizeToLhloPassBase<HloLegalizeToLhlo> {
     target.addIllegalDialect<mhlo::MhloDialect>();
     // bufferization.to_memref is illegal if it has uses.
     // TODO(b/175670649) Make bufferization.to_memref illegal.
-    target.addDynamicallyLegalOp<mlir::bufferization::ToMemrefOp>(
-        [](auto op) { return op->use_empty(); });
+    // DISC will do this later
+    // target.addDynamicallyLegalOp<mlir::bufferization::ToMemrefOp>(
+    //     [](auto op) { return op->use_empty(); });
 
     bufferization::BufferizeTypeConverter converter;
     auto isMemRefType = [](Type type) { return type.isa<BaseMemRefType>(); };
@@ -479,7 +482,8 @@ struct HloLegalizeToLhlo : public HloLegalizeToLhloPassBase<HloLegalizeToLhlo> {
     populateCallOpTypeConversionPattern(patterns, converter);
     populateBranchOpInterfaceTypeConversionPattern(patterns, converter);
     populateReturnOpTypeConversionPattern(patterns, converter);
-    populateEliminateBufferizeMaterializationsPatterns(converter, patterns);
+    // DISC will do this later
+    // populateEliminateBufferizeMaterializationsPatterns(converter, patterns);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))

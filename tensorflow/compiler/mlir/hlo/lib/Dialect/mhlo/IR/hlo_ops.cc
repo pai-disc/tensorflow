@@ -202,10 +202,10 @@ Value MaybeCastTo(OpBuilder& b, Location loc, Value value, Type type) {
   if (type == value.getType()) return value;
   if (!type.isIndex() && !value.getType().isIndex()) {
     // in case of i32 -> i64 or vice versa
-    Value casted = b.create<IndexCastOp>(loc, value, b.getIndexType());
-    return b.create<IndexCastOp>(loc, casted, type);
+    Value casted = b.create<arith::IndexCastOp>(loc, value, b.getIndexType());
+    return b.create<arith::IndexCastOp>(loc, casted, type);
   }
-  return b.create<IndexCastOp>(loc, value, type);
+  return b.create<arith::IndexCastOp>(loc, value, type);
 }
 
 //===----------------------------------------------------------------------===//
@@ -742,6 +742,7 @@ LogicalResult CustomCallOp::verify() {
 
   // Verify that results and result layouts match.
   return verify_types_and_layouts(result_types, result_layouts, "result");
+}
 
 //===----------------------------------------------------------------------===//
 // DotOp
@@ -783,8 +784,8 @@ LogicalResult DotOp::reifyReturnTypeShapes(
         to_shape_scalar_type(builder.create<tensor::DimOp>(loc, rhs, 1)));
   }
 
-  Value output_shape = builder.create<tensor::FromElementsOp>(
-      loc, shape_scalar_type, shape_values);
+  Value output_shape =
+      builder.create<tensor::FromElementsOp>(loc, shape_values);
   reifiedReturnShapes.push_back(output_shape);
 
   return success();
@@ -950,19 +951,13 @@ LogicalResult DotGeneralOp::reifyReturnTypeShapes(
     return MaybeCastTo(builder, loc, v, shape_scalar_type);
   };
 
-  DotDimensionNumbers dot_dimension_numbers = this->dot_dimension_numbers();
-  DenseIntElementsAttr rhs_contracting_dimensions =
-      dot_dimension_numbers.rhs_contracting_dimensions()
-          .cast<DenseIntElementsAttr>();
-  DenseIntElementsAttr lhs_contracting_dimensions =
-      dot_dimension_numbers.lhs_contracting_dimensions()
-          .cast<DenseIntElementsAttr>();
-  DenseIntElementsAttr rhs_batch_dimensions =
-      dot_dimension_numbers.rhs_batching_dimensions()
-          .cast<DenseIntElementsAttr>();
-  DenseIntElementsAttr lhs_batch_dimensions =
-      dot_dimension_numbers.lhs_batching_dimensions()
-          .cast<DenseIntElementsAttr>();
+  auto dot_dimension_numbers = this->dot_dimension_numbers();
+  auto rhs_contracting_dimensions =
+      dot_dimension_numbers.getRhsContractingDimensions();
+  auto lhs_contracting_dimensions =
+      dot_dimension_numbers.getLhsContractingDimensions();
+  auto rhs_batch_dimensions = dot_dimension_numbers.getRhsBatchingDimensions();
+  auto lhs_batch_dimensions = dot_dimension_numbers.getLhsBatchingDimensions();
 
   if (rhs_batch_dimensions.size() != lhs_batch_dimensions.size()) {
     return failure();
@@ -972,15 +967,15 @@ LogicalResult DotGeneralOp::reifyReturnTypeShapes(
   // same. A bad case is '[b0, b1, m, k] dot [b1, b0, k, n]', for which we do
   // not know the output batch-dim order. We use the order in
   // lhs_batch_dimensions currently.
-  for (auto dim : lhs_batch_dimensions.getValues<int64_t>()) {
+  for (auto dim : lhs_batch_dimensions) {
     Value value_dim =
         to_shape_scalar_type(builder.create<tensor::DimOp>(loc, lhs, dim));
     shape_values.push_back(value_dim);
   }
 
   auto generate_mn_dim = [&](Value operand, RankedTensorType type,
-                             DenseIntElementsAttr contracting_dimensions,
-                             DenseIntElementsAttr batch_dimensions) {
+                             llvm::ArrayRef<int64_t> contracting_dimensions,
+                             llvm::ArrayRef<int64_t> batch_dimensions) {
     SmallVector<Value, 4> out_mn_dim;
     for (const auto& element : llvm::enumerate(type.getShape())) {
       int64_t idx = element.index();
@@ -1008,8 +1003,8 @@ LogicalResult DotGeneralOp::reifyReturnTypeShapes(
   generate_mn_dim(rhs, rhs_type, rhs_contracting_dimensions,
                   rhs_batch_dimensions);
 
-  Value output_shape = builder.create<tensor::FromElementsOp>(
-      loc, shape_scalar_type, shape_values);
+  Value output_shape =
+      builder.create<tensor::FromElementsOp>(loc, shape_values);
   reifiedReturnShapes.push_back(output_shape);
 
   return success();
@@ -1205,7 +1200,8 @@ Type GetSliceSizeValuesAndType(GatherOp* gather, OpBuilder& builder, Location lo
                                ValueRange /*operands*/,
                                SmallVectorImpl<Value>& slice_size_values) {
   for (int64_t val : gather->slice_sizes().getValues<int64_t>()) {
-    slice_size_values.push_back(builder.create<ConstantIndexOp>(loc, val));
+    slice_size_values.push_back(
+        builder.create<arith::ConstantIndexOp>(loc, val));
   }
   return builder.getIndexType();
 }
@@ -1825,62 +1821,59 @@ LogicalResult ConvReifyReturnTypeImpl(
     return MaybeCastTo(builder, loc, v, shape_scalar_type);
   };
 
-  ConvDimensionNumbers dimension_numbers = op->dimension_numbers();
-  int64_t input_batch_dimension =
-      dimension_numbers.input_batch_dimension().getInt();
+  auto dimension_numbers = op->dimension_numbers();
+  int64_t input_batch_dimension = dimension_numbers.getInputBatchDimension();
   int64_t kernel_output_feature_dimension =
-      dimension_numbers.kernel_output_feature_dimension().getInt();
-  DenseIntElementsAttr input_spatial_dimensions_attr =
-      dimension_numbers.input_spatial_dimensions().cast<DenseIntElementsAttr>();
-  DenseIntElementsAttr kernel_spatial_dimensions_attr =
-      dimension_numbers.kernel_spatial_dimensions()
-          .cast<DenseIntElementsAttr>();
-  DenseIntElementsAttr output_spatial_dimensions_attr =
-      dimension_numbers.output_spatial_dimensions()
-          .cast<DenseIntElementsAttr>();
+      dimension_numbers.getKernelOutputFeatureDimension();
+  auto input_spatial_dimensions_attr =
+      dimension_numbers.getInputSpatialDimensions();
+  auto kernel_spatial_dimensions_attr =
+      dimension_numbers.getKernelSpatialDimensions();
+  auto output_spatial_dimensions_attr =
+      dimension_numbers.getOutputSpatialDimensions();
 
-  SmallVector<Value, 4> shape_values(
-      output_spatial_dimensions_attr.getNumElements() + 2);
+  SmallVector<Value, 4> shape_values(output_spatial_dimensions_attr.size() + 2);
 
   // batch dim = lhs-batch-dim / batch_group_count
   Value lhs_batch_dim = to_shape_scalar_type(
       builder.create<tensor::DimOp>(loc, lhs, input_batch_dimension));
   Value batch_group_count = to_shape_scalar_type(
-      builder.create<ConstantIndexOp>(loc, op->batch_group_count()));
+      builder.create<arith::ConstantIndexOp>(loc, op->batch_group_count()));
   Value batch_dim = to_shape_scalar_type(
-      builder.create<SignedDivIOp>(loc, lhs_batch_dim, batch_group_count));
-  int64_t output_batch_dimension =
-      dimension_numbers.output_batch_dimension().getInt();
+      builder.create<arith::DivSIOp>(loc, lhs_batch_dim, batch_group_count));
+  int64_t output_batch_dimension = dimension_numbers.getOutputBatchDimension();
   shape_values[output_batch_dimension] = batch_dim;
 
   // Output's feature dim is the same with kernel's output feature dim.
   Value feature_dim = to_shape_scalar_type(
       builder.create<tensor::DimOp>(loc, rhs, kernel_output_feature_dimension));
   int64_t output_feature_dimension =
-      dimension_numbers.output_feature_dimension().getInt();
+      dimension_numbers.getOutputFeatureDimension();
   shape_values[output_feature_dimension] = feature_dim;
 
-  DenseIntElementsAttr window_strides_attr = op->window_strides().getValue();
-  DenseIntElementsAttr lhs_dilation_attr = op->lhs_dilation().getValue();
-  DenseIntElementsAttr rhs_dilation_attr = op->rhs_dilation().getValue();
+  Optional<DenseIntElementsAttr> window_strides_attr = op->window_strides();
+  Optional<DenseIntElementsAttr> lhs_dilation_attr = op->lhs_dilation();
+  Optional<DenseIntElementsAttr> rhs_dilation_attr = op->rhs_dilation();
 
-  Value one = to_shape_scalar_type(builder.create<ConstantIndexOp>(loc, 1));
-  for (uint64_t i = 0; i < output_spatial_dimensions_attr.getNumElements();
-       i++) {
+  Value one =
+      to_shape_scalar_type(builder.create<arith::ConstantIndexOp>(loc, 1));
+  for (uint64_t i = 0; i < output_spatial_dimensions_attr.size(); i++) {
     // effective_input_value =
     //    (input_size - 1) * input_dilation + 1 + padding_left + padding_right
     Value effective_input_value =
         to_shape_scalar_type(builder.create<tensor::DimOp>(
-            loc, lhs, input_spatial_dimensions_attr.getValue<int64_t>(i)));
+            loc, lhs, input_spatial_dimensions_attr[i]));
     // Dilation.
     if (lhs_dilation_attr) {
       Value input_dilation =
-          to_shape_scalar_type(builder.create<ConstantIndexOp>(
-              loc, lhs_dilation_attr.getValue<int64_t>(i)));
-      effective_input_value = builder.create<AddIOp>(
-          loc, builder.create<MulIOp>(
-                   loc, builder.create<SubIOp>(loc, effective_input_value, one),
-                   input_dilation),
+          to_shape_scalar_type(builder.create<arith::ConstantIndexOp>(
+              loc, lhs_dilation_attr.getValue().getValues<int64_t>()[i]));
+      effective_input_value = builder.create<arith::AddIOp>(
+          loc,
+          builder.create<arith::MulIOp>(
+              loc,
+              builder.create<arith::SubIOp>(loc, effective_input_value, one),
+              input_dilation),
           one);
     }
 
@@ -1888,45 +1881,45 @@ LogicalResult ConvReifyReturnTypeImpl(
     if (!spatial_padding_values.empty()) {
       Value padding_left = spatial_padding_values[i * 2];
       Value padding_right = spatial_padding_values[i * 2 + 1];
-      effective_input_value = builder.create<AddIOp>(
+      effective_input_value = builder.create<arith::AddIOp>(
           loc, effective_input_value,
-          builder.create<AddIOp>(loc, padding_left, padding_right));
+          builder.create<arith::AddIOp>(loc, padding_left, padding_right));
     }
 
     // effective_kernel_size = (kernel_size - 1) * dilation + 1
     Value effective_kernel_size_value =
         to_shape_scalar_type(builder.create<tensor::DimOp>(
-            loc, rhs, kernel_spatial_dimensions_attr.getValue<int64_t>(i)));
+            loc, rhs, kernel_spatial_dimensions_attr[i]));
     if (rhs_dilation_attr) {
       Value kernel_dilation =
-          to_shape_scalar_type(builder.create<ConstantIndexOp>(
-              loc, rhs_dilation_attr.getValue<int64_t>(i)));
-      effective_kernel_size_value = builder.create<AddIOp>(
+          to_shape_scalar_type(builder.create<arith::ConstantIndexOp>(
+              loc, rhs_dilation_attr.getValue().getValues<int64_t>()[i]));
+      effective_kernel_size_value = builder.create<arith::AddIOp>(
           loc, one,
-          builder.create<MulIOp>(
+          builder.create<arith::MulIOp>(
               loc, kernel_dilation,
-              builder.create<SubIOp>(loc, effective_kernel_size_value, one)));
+              builder.create<arith::SubIOp>(loc, effective_kernel_size_value,
+                                            one)));
     }
 
     // output_size =
     //     (effective_input_value - effective_kernel_size_value) / stride + 1
-    Value output_dim_value = builder.create<SubIOp>(
+    Value output_dim_value = builder.create<arith::SubIOp>(
         loc, effective_input_value, effective_kernel_size_value);
     if (window_strides_attr) {
-      Value stride_value = to_shape_scalar_type(builder.create<ConstantIndexOp>(
-          loc, window_strides_attr.getValue<int64_t>(i)));
+      Value stride_value =
+          to_shape_scalar_type(builder.create<arith::ConstantIndexOp>(
+              loc, window_strides_attr.getValue().getValues<int64_t>()[i]));
       output_dim_value =
-          builder.create<SignedDivIOp>(loc, output_dim_value, stride_value);
+          builder.create<arith::DivSIOp>(loc, output_dim_value, stride_value);
     }
-    output_dim_value = builder.create<AddIOp>(loc, output_dim_value, one);
-    shape_values[output_spatial_dimensions_attr.getValue<int64_t>(i)] =
-        output_dim_value;
+    output_dim_value =
+        builder.create<arith::AddIOp>(loc, output_dim_value, one);
+    shape_values[output_spatial_dimensions_attr[i]] = output_dim_value;
   }
-
-  Value output_shape = builder.create<tensor::FromElementsOp>(
-      loc, shape_scalar_type, shape_values);
+  Value output_shape =
+      builder.create<tensor::FromElementsOp>(loc, shape_values);
   reifiedReturnShapes.push_back(output_shape);
-
   return success();
 }
 }
@@ -1943,7 +1936,7 @@ LogicalResult ConvOp::reifyReturnTypeShapes(
   SmallVector<Value> spatial_padding_values;
   if (padding_attr) {
     for (int64_t pad : padding_attr.getValues<int64_t>()) {
-      Value pad_value = builder.create<ConstantIndexOp>(loc, pad);
+      Value pad_value = builder.create<arith::ConstantIndexOp>(loc, pad);
       pad_value = MaybeCastTo(builder, loc, pad_value, shape_scalar_type);
       spatial_padding_values.push_back(pad_value);
     }
@@ -1971,12 +1964,12 @@ LogicalResult DynamicConvOp::reifyReturnTypeShapes(
   };
 
   SmallVector<Value> spatial_padding_values;
-  ConvDimensionNumbers dimension_numbers = this->dimension_numbers();
-  DenseIntElementsAttr input_spatial_dimensions_attr =
-      dimension_numbers.input_spatial_dimensions().cast<DenseIntElementsAttr>();
-  int64_t padding_num = input_spatial_dimensions_attr.getNumElements() * 2;
+  auto dimension_numbers = this->dimension_numbers();
+  auto input_spatial_dimensions_attr =
+      dimension_numbers.getInputSpatialDimensions();
+  int64_t padding_num = input_spatial_dimensions_attr.size() * 2;
   for (int64_t i = 0; i < padding_num; i++) {
-    Value offset = builder.create<ConstantIndexOp>(loc, i);
+    Value offset = builder.create<arith::ConstantIndexOp>(loc, i);
     Value pad_value = to_shape_scalar_type(
         builder.create<tensor::ExtractOp>(loc, d_padding, offset));
     spatial_padding_values.push_back(pad_value);
@@ -5342,7 +5335,7 @@ OpFoldResult RsqrtOp::fold(ArrayRef<Attribute> operands) {
   int bit_width = type.getIntOrFloatBitWidth();
   llvm::SmallVector<APFloat, 4> values;
   values.reserve(val.getNumElements());
-  for (auto it : val.getFloatValues()) {
+  for (const auto it : val.getValues<APFloat>()) {
     double value = bit_width == 32 ? it.convertToFloat() : it.convertToDouble();
     if (value < 0) return {};
     value = 1.0 / std::sqrt(value);
@@ -6160,7 +6153,7 @@ mlir::ElementsAttr TransposeElementsAttr(
   }
 
   SmallVector<int64_t, 4> perm;
-  for (auto v : perm_attr.getIntValues()) {
+  for (auto v : perm_attr.getValues<APInt>()) {
     perm.push_back(static_cast<int64_t>(v.getSExtValue()));
   }
 
@@ -6187,7 +6180,8 @@ mlir::ElementsAttr TransposeElementsAttr(
     for (int64_t dim = 1; dim < rank; ++dim) {
       new_linear_index = new_linear_index * new_shape[dim] + new_index[dim];
     }
-    transposed_attrs[new_linear_index] = elements.getValue(orig_index);
+    transposed_attrs[new_linear_index] =
+        elements.getValues<Attribute>()[orig_index];
   }
   return DenseElementsAttr::get(RankedTensorType::get(
       new_shape, type.getElementType()), transposed_attrs);

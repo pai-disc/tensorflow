@@ -87,7 +87,7 @@ std::string ToStringTruncated(const LiteralSlice& literal);
 
 // ADDED_FOR_TAO
 // a variant verion of ToStringTruncated for debug
-string ToStringSampled(const LiteralSlice& literal);
+std::string ToStringSampled(const LiteralSlice& literal);
 // END_OF_ADD
 
 }  // namespace literal_comparison

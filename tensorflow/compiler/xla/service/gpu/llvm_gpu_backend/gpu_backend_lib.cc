@@ -868,6 +868,7 @@ std::pair<std::string, std::string> GetFeatureStrFromGCNArchName(
     }
   }
   feature_str = absl::StrJoin(mapped_tokens, ",");
+#endif
 
   return std::make_pair(gfx, feature_str);
 }
