@@ -59,7 +59,7 @@ class Memset32BitValueThunk : public Thunk {
 
   // ADDED_FOR_TAO
   const BufferAllocation::Slice& destination_buffer() const { return dest_; }
-  uint32 value() const { return value_; }
+  uint32_t value() const { return value_; }
   // END_OF_ADD
 
  private:

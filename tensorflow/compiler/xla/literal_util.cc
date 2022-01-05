@@ -619,21 +619,26 @@ template <>
 }
 
 template <>
-/* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<S32, std::minstd_rand0, int32>(
-    const Shape& shape, std::minstd_rand0* engine, int32 mean, int32 stddev) {
-  std::discrete_distribution<int32> generator(mean, stddev);
-  return CreateLiteralWithGenerator<S32, int32>(
-      shape,
-      [&](absl::Span<const int64_t> /*indexes*/) { return generator(*engine); });
+/* static */ StatusOr<Literal>
+LiteralUtil::CreateRandomLiteral<S32, std::minstd_rand0, int32_t>(
+    const Shape& shape, std::minstd_rand0* engine, int32_t mean,
+    int32_t stddev) {
+  std::discrete_distribution<int32_t> generator(mean, stddev);
+  return CreateLiteralWithGenerator<S32, int32_t>(
+      shape, [&](absl::Span<const int64_t> /*indexes*/) {
+        return generator(*engine);
+      });
 }
 
 template <>
-/* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<S8, std::minstd_rand0, int8>(
-    const Shape& shape, std::minstd_rand0* engine, int8 mean, int8 stddev) {
-  std::discrete_distribution<int8> generator(mean, stddev);
-  return CreateLiteralWithGenerator<S8, int8>(
-      shape,
-      [&](absl::Span<const int64_t> /*indexes*/) { return generator(*engine); });
+/* static */ StatusOr<Literal>
+LiteralUtil::CreateRandomLiteral<S8, std::minstd_rand0, int8_t>(
+    const Shape& shape, std::minstd_rand0* engine, int8_t mean, int8_t stddev) {
+  std::discrete_distribution<int8_t> generator(mean, stddev);
+  return CreateLiteralWithGenerator<S8, int8_t>(
+      shape, [&](absl::Span<const int64_t> /*indexes*/) {
+        return generator(*engine);
+      });
 }
 
 template <>
@@ -646,30 +651,39 @@ template <>
 }
 
 template <>
-/* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<U8, std::minstd_rand0, uint8>(
-    const Shape& shape, std::minstd_rand0* engine, uint8 mean, uint8 stddev) {
-  std::discrete_distribution<uint8> generator(mean, stddev);
-  return CreateLiteralWithGenerator<U8, uint8>(
-      shape,
-      [&](absl::Span<const int64_t> /*indexes*/) { return generator(*engine); });
+/* static */ StatusOr<Literal>
+LiteralUtil::CreateRandomLiteral<U8, std::minstd_rand0, uint8_t>(
+    const Shape& shape, std::minstd_rand0* engine, uint8_t mean,
+    uint8_t stddev) {
+  std::discrete_distribution<uint8_t> generator(mean, stddev);
+  return CreateLiteralWithGenerator<U8, uint8_t>(
+      shape, [&](absl::Span<const int64_t> /*indexes*/) {
+        return generator(*engine);
+      });
 }
 
 template <>
-/* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<U32, std::minstd_rand0, uint32>(
-    const Shape& shape, std::minstd_rand0* engine, uint32 mean, uint32 stddev) {
-  std::discrete_distribution<uint32> generator(mean, stddev);
-  return CreateLiteralWithGenerator<U32, uint32>(
-      shape,
-      [&](absl::Span<const int64_t> /*indexes*/) { return generator(*engine); });
+/* static */ StatusOr<Literal>
+LiteralUtil::CreateRandomLiteral<U32, std::minstd_rand0, uint32_t>(
+    const Shape& shape, std::minstd_rand0* engine, uint32_t mean,
+    uint32_t stddev) {
+  std::discrete_distribution<uint32_t> generator(mean, stddev);
+  return CreateLiteralWithGenerator<U32, uint32_t>(
+      shape, [&](absl::Span<const int64_t> /*indexes*/) {
+        return generator(*engine);
+      });
 }
 
 template <>
-/* static */ StatusOr<Literal> LiteralUtil::CreateRandomLiteral<U64, std::minstd_rand0, uint64>(
-    const Shape& shape, std::minstd_rand0* engine, uint64 mean, uint64 stddev) {
-  std::discrete_distribution<uint64> generator(mean, stddev);
-  return CreateLiteralWithGenerator<U64, uint64>(
-      shape,
-      [&](absl::Span<const int64_t> /*indexes*/) { return generator(*engine); });
+/* static */ StatusOr<Literal>
+LiteralUtil::CreateRandomLiteral<U64, std::minstd_rand0, uint64_t>(
+    const Shape& shape, std::minstd_rand0* engine, uint64_t mean,
+    uint64_t stddev) {
+  std::discrete_distribution<uint64_t> generator(mean, stddev);
+  return CreateLiteralWithGenerator<U64, uint64_t>(
+      shape, [&](absl::Span<const int64_t> /*indexes*/) {
+        return generator(*engine);
+      });
 }
 
 // END_OF_ADD
