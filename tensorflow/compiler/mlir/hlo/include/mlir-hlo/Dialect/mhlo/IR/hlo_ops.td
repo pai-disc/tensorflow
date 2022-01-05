@@ -1404,9 +1404,9 @@ def HLO_CholeskyOp : HLO_Op<"cholesky",
   let results = (outs HLO_FpOrComplexTensor);
 }
 
-def HLO_ClampOp : HLO_Op<"clamp", [NoSideEffect,
-    SameOperandsAndResultElementType, HLO_BroadcastingElementwise,
-    InferShapedTypeOpInterface]> {
+def HLO_ClampOp : HLO_ShapedInterfaceOp<"clamp",
+    [NoSideEffect,
+     SameOperandsAndResultElementType, HLO_BroadcastingElementwise]> {
   let summary = "Clamp operator";
   let description = [{
     Clamps an operand to within the range between a minimum and maximum value.
@@ -1432,13 +1432,6 @@ def HLO_ClampOp : HLO_Op<"clamp", [NoSideEffect,
         ValueRange operands, DictionaryAttr attributes, RegionRange regions,
         SmallVectorImpl<ShapedTypeComponents>& inferedReturnShapes) {
       return failure();
-    }
-    LogicalResult reifyReturnTypeShapes(
-        OpBuilder& builder, ValueRange operands,
-        SmallVectorImpl<Value>& reifiedReturnShapes) {
-      return ::mlir::mhlo::deriveShapeFromOperand(&builder, getOperation(),
-                                                  operands[1],
-                                                  &reifiedReturnShapes);
     }
     llvm::Optional<SmallVector<int64_t, 3>> getInputRanks() {
       auto min_ty = min().getType().dyn_cast<ShapedType>();
@@ -2476,7 +2469,7 @@ def HLO_DynamicGatherOp: HLO_Op<"dynamic_gather",
   }];
 }
 
-def HLO_DynamicConvOp : HLO_ShapedInterfaceOp<"dynamic_conv", [NoSideEffect]>, BASE_HLO_ConvOp {
+def HLO_DynamicConvOp : HLO_ShapedInterfaceOp<"dynamic_conv", [NoSideEffect]> {
   let summary = "Dynamic Convolution operator";
   let description = [{
     The dynamic shape version of ConvOp. Computes a convolution with dynamic padding.

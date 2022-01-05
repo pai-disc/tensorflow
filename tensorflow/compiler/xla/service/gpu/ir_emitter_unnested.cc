@@ -5618,6 +5618,8 @@ Thunk::ThunkInfo IrEmitterUnnested::GetThunkInfo(mlir::Operation* op) {
       mlir::GetNameFromLoc(module->getLoc()), unique_id_str);
 
   // ADDED_FOR_TAO
+  auto module_name = mlir::GetNameFromLoc(module->getLoc());
+  auto op_name = mlir::GetNameFromLoc(op->getLoc());
   thunk_info.hlo_instr =
       mlir::LhloDialectEmitter::GetHloInstruction(module_name, op_name);
   // END_OF_ADD
