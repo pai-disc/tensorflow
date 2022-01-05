@@ -29,6 +29,8 @@ limitations under the License.
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/TypeUtilities.h"
 
+#include "llvm/Support/Debug.h"
+
 namespace mlir {
 namespace mhlo {
 namespace impl {
@@ -601,10 +603,25 @@ inline Value mapConvertOpToStdScalarOp(Location loc, ArrayRef<Type> targetTypes,
 
   // A boolean value is considered to be unsigned when converting to
   // floating-point. Otherwise, it will become `-1`.
-  if (IsUnsignedIntegerType{}(sourceType) &&
+<<<<<<< HEAD
+  if (sourceType.isSignlessInteger(1) &&
       mlir::arith::UIToFPOp::areCastCompatible(convertedSourceType,
                                                targetType)) {
     return b->create<mlir::arith::UIToFPOp>(loc, resultTypes, args, mlir::None);
+  }
+  if (sourceType.isUnsignedInteger() &&
+      mlir::arith::UIToFPOp::areCastCompatible(convertedSourceType,
+                                               targetType)) {
+    // Added by DISC
+    auto int_type = IntegerType::get(sourceType.getContext(),
+                                     sourceType.getIntOrFloatBitWidth());
+    SmallVector<Type> int_types(args.size(), int_type);
+    auto converted_arg = b->create<UnrealizedConversionCastOp>(
+                              loc, llvm::makeArrayRef(int_types), args)
+                             .getResults();
+    return b->create<mlir::arith::UIToFPOp>(loc, result_types, converted_arg,
+                                            mlir::None);
+    // End of Added by DISC
   }
   if (mlir::arith::SIToFPOp::areCastCompatible(sourceType, targetType)) {
     return b->create<mlir::arith::SIToFPOp>(loc, resultTypes, args, mlir::None);
