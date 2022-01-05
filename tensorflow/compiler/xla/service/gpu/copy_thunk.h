@@ -33,7 +33,7 @@ class HostToDeviceCopyThunk : public Thunk {
   // bytes.
   HostToDeviceCopyThunk(ThunkInfo thunk_info, const void* source_address,
                         const BufferAllocation::Slice& destination_buffer,
-                        uint64 mem_size);
+                        uint64_t mem_size);
 
   HostToDeviceCopyThunk(const HostToDeviceCopyThunk&) = delete;
   HostToDeviceCopyThunk& operator=(const HostToDeviceCopyThunk&) = delete;
@@ -45,13 +45,13 @@ class HostToDeviceCopyThunk : public Thunk {
   const BufferAllocation::Slice& destination_buffer() const {
     return destination_buffer_;
   }
-  uint64 mem_size() const { return mem_size_; }
+  uint64_t mem_size() const { return mem_size_; }
   // END_OF_ADD
 
  private:
   const void* source_address_;
   const BufferAllocation::Slice destination_buffer_;
-  const uint64 mem_size_;
+  const uint64_t mem_size_;
 };
 
 // A thunk that copies data from a device buffer to another device buffer.

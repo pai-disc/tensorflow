@@ -1122,6 +1122,7 @@ cc_library(
         "@llvm-project//mlir:ShapeTransforms",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TensorDialect",
+        "@llvm-project//mlir:TensorTransforms",
         "@llvm-project//mlir:Transforms",
     ],
 )
