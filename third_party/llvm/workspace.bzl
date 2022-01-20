@@ -16,5 +16,5 @@ def repo(name):
             "https://github.com/llvm/llvm-project/archive/{commit}.tar.gz".format(commit = LLVM_COMMIT),
         ],
         build_file = "//third_party/llvm:BUILD.bazel",
-        patch_file = "//third_party/llvm:0001-mlir-ROCm-Add-shfl.sync.bfly-lowering.patch",
+        patch_file = "//third_party/llvm:0001-AICompiler-llvm-patches.patch",
     )
