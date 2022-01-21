@@ -19,6 +19,7 @@ def repo(name):
         patch_file = [
             "//third_party/llvm:macos_build_fix.patch",
             "//third_party/llvm:0001-mlir-ROCm-Add-shfl.sync.bfly-lowering.patch",
+            "//third_party/llvm:0001-llvm-nvptx-Fix-error-GVN-on-shared-memory-load.patch",
         ],
         link_files = {"//third_party/llvm:run_lit.sh": "mlir/run_lit.sh"},
     )
