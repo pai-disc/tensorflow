@@ -1,17 +1,8 @@
-From 43aea3fe12e4243246d8f38e4844381c9193d517 Mon Sep 17 00:00:00 2001
-From: "ZHENG,Zhen" <zzchman@gmail.com>
-Date: Wed, 8 Dec 2021 20:39:06 +0800
-Subject: [PATCH] [llvm][nvptx] Fix error GVN on shared memory load.
-
----
- llvm/lib/Transforms/Scalar/GVN.cpp | 53 ++++++++++++++++++++++++++++++
- 1 file changed, 53 insertions(+)
-
 diff --git a/llvm/lib/Transforms/Scalar/GVN.cpp b/llvm/lib/Transforms/Scalar/GVN.cpp
-index 16368aec7c3f..d2f54dca486a 100644
+index ee7a2e4aed25..0628289eaacd 100644
 --- a/llvm/lib/Transforms/Scalar/GVN.cpp
 +++ b/llvm/lib/Transforms/Scalar/GVN.cpp
-@@ -1002,6 +1002,40 @@ static void reportMayClobberedLoad(LoadInst *Load, MemDepResult DepInfo,
+@@ -1023,6 +1023,40 @@ static void reportMayClobberedLoad(LoadInst *Load, MemDepResult DepInfo,
    ORE->emit(R);
  }
  
@@ -49,10 +40,10 @@ index 16368aec7c3f..d2f54dca486a 100644
 +  }
 +}
 +
- bool GVN::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
-                                   Value *Address, AvailableValue &Res) {
+ bool GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
+                                       Value *Address, AvailableValue &Res) {
    assert((DepInfo.isDef() || DepInfo.isClobber()) &&
-@@ -1011,6 +1045,25 @@ bool GVN::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
+@@ -1032,6 +1066,25 @@ bool GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
    const DataLayout &DL = Load->getModule()->getDataLayout();
  
    Instruction *DepInst = DepInfo.getInst();
@@ -78,6 +69,3 @@ index 16368aec7c3f..d2f54dca486a 100644
    if (DepInfo.isClobber()) {
      // If the dependence is to a store that writes to a superset of the bits
      // read by the load, we can extract the bits we need for the load from the
--- 
-2.24.3 (Apple Git-128)
-
