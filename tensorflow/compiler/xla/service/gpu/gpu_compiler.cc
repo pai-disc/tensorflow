@@ -1235,10 +1235,6 @@ StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
         profile_index_map->GetProfileIndexFor(*module->entry_computation());
   }
 
-  // Make it shared to be captured in the following lambda.
-  std::shared_ptr<const BufferAssignment> buffer_assignment(
-      std::move(compile_module_results.buffer_assignment));
-
   GpuVersion gpu_version = GetGpuVersion(stream_exec);
   auto* gpu_executable = new GpuExecutable(
       {std::move(backend_result.first), std::move(backend_result.second),
@@ -1249,7 +1245,6 @@ StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
        compile_module_results.module_name, compile_module_results.output_shape,
        std::move(compile_module_results.allocations),
        std::move(buffer_assignment_proto),
-       [buffer_assignment] { return buffer_assignment->ToVerboseString(); },
        std::move(module), profile_index, std::move(profile_printer),
        std::move(profile_index_map),
        std::move(compile_module_results.buffer_assignment) /*ADDED_FOR_TAO*/});
@@ -1268,10 +1263,10 @@ StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
     } else {
       *hlo_proto->mutable_hlo_module() = gpu_executable->module().ToProto();
     }
-    *hlo_proto->mutable_buffer_assignment() = buffer_assignment->ToProto();
+    *hlo_proto->mutable_buffer_assignment() = gpu_executable->buffer_assignment()->ToProto();
     gpu_executable->set_hlo_proto(std::move(hlo_proto));
   }
-  gpu_executable->set_debug_info(buffer_assignment->GetStats().ToString());
+  gpu_executable->set_debug_info(gpu_executable->buffer_assignment()->GetStats().ToString());
   return std::unique_ptr<Executable>(gpu_executable);
 }
 

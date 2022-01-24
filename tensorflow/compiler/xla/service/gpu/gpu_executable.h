@@ -93,19 +93,20 @@ class GpuExecutable : public Executable {
     std::vector<BufferAllocation> allocations;
     std::unique_ptr<BufferAssignmentProto> debug_buffer_assignment = nullptr;
 
-    // A callable that dumps out a debug string upon device OOM. It's not the
-    // string itself, as the string can be huge and increase peak host memory
-    // usage for the common (non-OOM) case.
-    std::function<std::string()> verbose_buffer_assignment_string_dumper = [] {
-      return std::string();
-    };
-
     std::unique_ptr<HloModule> debug_module = nullptr;
     size_t entry_computation_profile_index = 0;
     std::unique_ptr<HloProfilePrinterData> hlo_profile_printer_data = nullptr;
     std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map = nullptr;
     std::unique_ptr<BufferAssignment> buffer_assignment_ =
         nullptr; /*ADDED_FOR_TAO*/
+
+    // A callable that dumps out a debug string upon device OOM. It's not the
+    // string itself, as the string can be huge and increase peak host memory
+    // usage for the common (non-OOM) case.
+    std::function<std::string()> verbose_buffer_assignment_string_dumper = [this] {
+      return buffer_assignment_->ToVerboseString();
+    };
+
   };
 
   // TODO(hanbinyoon): Once BEF replaces Thunks, hide this method as an
