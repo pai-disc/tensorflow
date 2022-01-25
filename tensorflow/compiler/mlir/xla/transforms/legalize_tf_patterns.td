@@ -360,11 +360,13 @@ class SliceDenseIntElementsAttr<string index, string axis> : NativeCodeCall<
 def GetInteriorPadding : NativeCodeCall <
   "GetInteriorPadding($0.cast<ElementsAttr>())">;
 
-def : Pat<(TF_PadV2Op $input, (ConstantLikeMatcher ElementsAttr:$padding), $c),
-          (HLO_PadOp $input, $c,
-           (SliceDenseIntElementsAttrColumn2D<"0"> $padding),
-           (SliceDenseIntElementsAttrColumn2D<"1"> $padding),
-           (GetInteriorPadding $padding))>;
+// TODO: commented by DISC due to mhlo.pad is not supported in bufferization
+//       and all the consequent passes.
+// def : Pat<(TF_PadV2Op AnyStaticShapeTensor:$input, (ConstantLikeMatcher ElementsAttr:$padding), $c),
+//           (HLO_PadOp $input, $c,
+//            (SliceDenseIntElementsAttrColumn2D<"0"> $padding),
+//            (SliceDenseIntElementsAttrColumn2D<"1"> $padding),
+//            (GetInteriorPadding $padding))>;
 
 //===----------------------------------------------------------------------===//
 // Identity op patterns.
