@@ -1583,10 +1583,6 @@ class ConvertPadOpDynamic : public OpRewritePattern<TF::PadV2Op> {
     if (!input_type || !paddings_type || !paddings_type.hasStaticShape())
       return failure();
 
-    // TODO(disc): Remove this constraint once fold and canonicalization is
-    // implemented.
-    if (input_type.hasStaticShape()) return failure();
-
     int input_rank = input_type.getRank();
     // interior padding
     std::vector<int64_t> interior_values(input_rank, 0);
