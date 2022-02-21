@@ -955,7 +955,24 @@ Status GpuExecutable::SetUpMlirAllocation(
             // erase the starting "buffer_for_"
             CHECK(str.size() > 11);
             str.erase(str.begin(), str.begin() + 11);
-            if (item.first->instruction()->name() == str) {
+            // SanitizeConstantName() in buffer_assignment_util.cc will replace
+            // '.' and '-' into '_'. We need to handle the difference here.
+            auto is_equal = [](const std::string& a, const std::string& b) {
+              size_t size = a.size();
+              if (size != b.size()) return false;
+              for (size_t i = 0; i < size; ++i) {
+                if (a[i] == '_' || a[i] == '.' || a[i] == '-') {
+                  if (b[i] != '_' && b[i] != '.' && b[i] != '-') {
+                    return false;
+                  }
+                } else if (a[i] != b[i]) {
+                  return false;
+                }
+              }
+              return true;
+            };
+            VLOG(2) << "str: " << str << " , " << item.first->instruction()->name();
+            if (is_equal(item.first->instruction()->name(), str)) {
               allocations->at(i).set_assigned_buffers(
                   orig_allocation.assigned_buffers());
               break;
