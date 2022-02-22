@@ -1545,7 +1545,7 @@ static Status GetMlirAllocationInfo(mlir::FuncOp func,
           .str());
 
   return GpuExecutable::SetUpMlirAllocation(func, buffer_sizes, allocations,
-                                            output_info, output_shape,
+                                            output_info, output_shape, 0,
                                             buffer_assignment /*ADDED_FOR_TAO*/);
 }
 
