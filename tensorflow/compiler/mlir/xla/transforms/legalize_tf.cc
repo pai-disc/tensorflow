@@ -1160,8 +1160,7 @@ class ConvertGatherV2OpDynamic : public OpRewritePattern<TF::GatherV2Op> {
               rewriter.getIntegerAttr(indices_ty.getElementType(), dim_size)));
         } else {
           slice_sizes_vals.push_back(rewriter.create<arith::IndexCastOp>(
-              loc, rewriter.create<tensor::DimOp>(loc, params, dim_idx),
-              indices_ty.getElementType()));
+              loc, indices_ty.getElementType(), rewriter.create<tensor::DimOp>(loc, params, dim_idx)));
         }
       }
     }
@@ -4136,7 +4135,7 @@ constexpr void CopyBit(const T& src, unsigned src_index, T& dst,
 Value MaybeCastTo(OpBuilder& b, Location loc, Value value, Type type) {
   if (type == value.getType()) return value;
   assert(type.isIndex() || value.getType().isIndex());
-  return b.create<arith::IndexCastOp>(loc, value, type);
+  return b.create<arith::IndexCastOp>(loc, type, value);
 }
 
 struct SparseSliceSpec {
@@ -4254,8 +4253,8 @@ static void CalculateSlicedShapeFromDenseIndices(
     auto dim_i_minus_one = rewriter->create<arith::SubIOp>(loc, dim_i, one);
     SmallVector<Value, 2> bounds(2, nullptr);
     bounds[0] =
-        rewriter->create<mlir::SelectOp>(loc, stride_is_pos, zero, neg_one);
-    bounds[1] = rewriter->create<mlir::SelectOp>(loc, stride_is_pos, dim_i,
+        rewriter->create<mlir::arith::SelectOp>(loc, stride_is_pos, zero, neg_one);
+    bounds[1] = rewriter->create<mlir::arith::SelectOp>(loc, stride_is_pos, dim_i,
                                                  dim_i_minus_one);
 
     auto clamp = [&](Value val, Value low, Value high) {
@@ -4263,8 +4262,8 @@ static void CalculateSlicedShapeFromDenseIndices(
           loc, arith::CmpIPredicate::slt, val, low);
       auto high_lt_val = rewriter->create<arith::CmpIOp>(
           loc, arith::CmpIPredicate::slt, high, val);
-      auto t = rewriter->create<mlir::SelectOp>(loc, high_lt_val, high, val);
-      Value result = rewriter->create<mlir::SelectOp>(loc, val_lt_low, low, t);
+      auto t = rewriter->create<mlir::arith::SelectOp>(loc, high_lt_val, high, val);
+      Value result = rewriter->create<mlir::arith::SelectOp>(loc, val_lt_low, low, t);
       return result;
     };
 
@@ -4273,7 +4272,7 @@ static void CalculateSlicedShapeFromDenseIndices(
     auto canonicalize = [&](Value point, int c) {
       if (masks[c]) {
         // return stride_i > 0 ? bounds[c] : bounds[(c + 1) & 1];
-        Value r = rewriter->create<mlir::SelectOp>(
+        Value r = rewriter->create<mlir::arith::SelectOp>(
             loc, stride_is_pos, bounds[c], bounds[(c + 1) & 1]);
         return r;
       }
@@ -4284,7 +4283,7 @@ static void CalculateSlicedShapeFromDenseIndices(
           loc, arith::CmpIPredicate::slt, point, zero);
       auto dim_i_plus_point =
           rewriter->create<arith::AddIOp>(loc, dim_i, point);
-      auto point_pos = rewriter->create<mlir::SelectOp>(
+      auto point_pos = rewriter->create<mlir::arith::SelectOp>(
           loc, point_is_neg, dim_i_plus_point, point);
       return clamp(point_pos, bounds[0], bounds[1]);
     };
@@ -4318,10 +4317,10 @@ static void CalculateSlicedShapeFromDenseIndices(
         loc, arith::CmpIPredicate::ne, interval_len_rem_stride, zero);
     auto interval_len_div_stride_plus_1 =
         rewriter->create<arith::AddIOp>(loc, interval_len_div_stride, one);
-    auto size_i_val = rewriter->create<mlir::SelectOp>(
+    auto size_i_val = rewriter->create<mlir::arith::SelectOp>(
         loc, interval_len_rem_stride_not_zero, interval_len_div_stride_plus_1,
         interval_len_div_stride);
-    auto size_i = rewriter->create<mlir::SelectOp>(loc, not_degenerated,
+    auto size_i = rewriter->create<mlir::arith::SelectOp>(loc, not_degenerated,
                                                    size_i_val, zero);
 
     begin[i] = begin_i;
@@ -4439,7 +4438,7 @@ bool GetSlicedBoundRanges(
     Value isNeg = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
                                                  val, zero);
     Value refinedVal = rewriter.create<arith::AddIOp>(loc, val, to_plus);
-    Value result = rewriter.create<mlir::SelectOp>(loc, isNeg, refinedVal, val);
+    Value result = rewriter.create<mlir::arith::SelectOp>(loc, isNeg, refinedVal, val);
     return result;
   };
 
@@ -4520,15 +4519,15 @@ class ConvertStridedSliceOpDynamic : public OpRewritePattern<TF::StridedSliceOp>
       //end = std::min(end, input_shape[i]);
       auto cmp1 = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sgt,
                                                  begin, zero);
-      begin = rewriter.create<mlir::SelectOp>(loc, cmp1, begin, zero);
+      begin = rewriter.create<mlir::arith::SelectOp>(loc, cmp1, begin, zero);
 
       auto cmp2 = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sgt,
                                                  begin, end);
-      end = rewriter.create<mlir::SelectOp>(loc, cmp2, begin, end);
+      end = rewriter.create<mlir::arith::SelectOp>(loc, cmp2, begin, end);
 
       auto cmp3 = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
                                                  end, shape_val);
-      end = rewriter.create<mlir::SelectOp>(loc, cmp3, end, shape_val);
+      end = rewriter.create<mlir::arith::SelectOp>(loc, cmp3, end, shape_val);
 
       hlo_begin_indices.push_back(begin);
       hlo_end_indices.push_back(end);
@@ -5777,8 +5776,7 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
     };
     auto get_dim_value = [&](Value val, int64_t dim) {
       Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
-      return rewriter.create<arith::IndexCastOp>(loc, dim_value,
-                                                 shape_scalar_type);
+      return rewriter.create<arith::IndexCastOp>(loc, shape_scalar_type, dim_value);
     };
     auto sub_one = [&](Value val) {
       auto one =
@@ -5841,8 +5839,7 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
     auto shape_scalar_type = rewriter.getIntegerType(32);
     auto get_dim_value = [&](Value val, int64_t dim) {
       Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
-      return rewriter.create<arith::IndexCastOp>(loc, dim_value,
-                                                 shape_scalar_type);
+      return rewriter.create<arith::IndexCastOp>(loc, shape_scalar_type, dim_value);
     };
     auto get_int = [](Attribute attr) {
       return attr.template cast<IntegerAttr>().getInt();
@@ -5942,7 +5939,7 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
             input_size);
         Value cond = rewriter.create<arith::CmpIOp>(
             loc, arith::CmpIPredicate::sge, padding_needed, zero);
-        padding_needed = rewriter.create<mlir::SelectOp>(
+        padding_needed = rewriter.create<mlir::arith::SelectOp>(
             loc, padding_needed.getType(), cond, padding_needed, zero);
         *padding_low =
             rewriter.create<arith::DivUIOp>(loc, padding_needed, two);
@@ -5963,8 +5960,7 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
     };
     auto get_dim_value = [&](Value val, int64_t dim) {
       Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
-      return rewriter.create<arith::IndexCastOp>(loc, dim_value,
-                                                 shape_scalar_type);
+      return rewriter.create<arith::IndexCastOp>(loc, shape_scalar_type, dim_value);
     };
 
     // Unpack all of the attributes.
@@ -5979,10 +5975,10 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
     auto input_sizes_ty =
         op.input_sizes().getType().template dyn_cast<RankedTensorType>();
     constexpr int num_dims = num_spatial_dims + 2;
-    if (!input_sizes_ty || input_sizes_ty.getRank() != 1 
-        || input_sizes_ty.getShape()[0] != num_dims) 
+    if (!input_sizes_ty || input_sizes_ty.getRank() != 1
+        || input_sizes_ty.getShape()[0] != num_dims)
       return failure();
-    
+
     auto filter_ty =
         op.filter().getType().template dyn_cast<RankedTensorType>();
     auto out_backprop_ty =
@@ -6016,7 +6012,7 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
         explicit_paddings.push_back(
             explicit_padding.cast<IntegerAttr>().getInt());
     }
-    
+
     ArrayRef<int64_t> filter_shape = filter_ty.getShape();
 
     // Reuse dimension computation logic from conv_grad_shape_utils.cc.
@@ -6384,7 +6380,7 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
             input_size);
         Value cond = rewriter.create<arith::CmpIOp>(
             loc, arith::CmpIPredicate::sge, padding_needed, zero);
-        padding_needed = rewriter.create<mlir::SelectOp>(
+        padding_needed = rewriter.create<mlir::arith::SelectOp>(
             loc, padding_needed.getType(), cond, padding_needed, zero);
         *padding_low =
             rewriter.create<arith::DivUIOp>(loc, padding_needed, two);
@@ -6408,8 +6404,7 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
     };
     auto get_dim_value = [&](Value val, int64_t dim) {
       Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
-      return rewriter.create<arith::IndexCastOp>(loc, dim_value,
-                                                 shape_scalar_type);
+      return rewriter.create<arith::IndexCastOp>(loc, shape_scalar_type, dim_value);
     };
     auto sub_one = [&](Value val) {
       auto one =
@@ -6472,8 +6467,7 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
     auto shape_scalar_type = rewriter.getIntegerType(32);
     auto get_dim_value = [&](Value val, int64_t dim) {
       Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
-      return rewriter.create<arith::IndexCastOp>(loc, dim_value,
-                                                 shape_scalar_type);
+      return rewriter.create<arith::IndexCastOp>(loc, shape_scalar_type, dim_value);
     };
     auto get_const = [&](int64_t val) {
       return rewriter.create<arith::ConstantIntOp>(loc, val, shape_scalar_type);

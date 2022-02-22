@@ -178,7 +178,7 @@ cc_library(
         ":legalize_utils",
         ":tf_xla_passes_inc_gen",
         ":type_to_shape",
-        #":xla_legalize_tf_passes_inc_gen",
+        ":xla_legalize_tf_passes_inc_gen",
         "xla_passes_inc_gen",
         "//tensorflow/compiler/mlir/disc:mhlo_disc",
         "//tensorflow/compiler/mlir/hlo",

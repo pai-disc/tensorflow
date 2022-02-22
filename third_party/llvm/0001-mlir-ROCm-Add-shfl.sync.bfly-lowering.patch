@@ -1,9 +1,9 @@
 diff --git a/mlir/include/mlir/Dialect/LLVMIR/ROCDLOps.td b/mlir/include/mlir/Dialect/LLVMIR/ROCDLOps.td
-index c594d3f2f8c3..56ee2f441310 100644
+index bd80bde25960..33d4f031b0ba 100644
 --- a/mlir/include/mlir/Dialect/LLVMIR/ROCDLOps.td
 +++ b/mlir/include/mlir/Dialect/LLVMIR/ROCDLOps.td
-@@ -189,4 +189,16 @@ def ROCDL_MubufStoreOp :
-   }];
+@@ -179,4 +179,16 @@ def ROCDL_MubufStoreOp :
+   let hasCustomAssemblyFormat = 1;
  }
  
 +def ROCDL_ShflBflyOp :

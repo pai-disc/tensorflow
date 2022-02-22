@@ -202,10 +202,10 @@ Value MaybeCastTo(OpBuilder& b, Location loc, Value value, Type type) {
   if (type == value.getType()) return value;
   if (!type.isIndex() && !value.getType().isIndex()) {
     // in case of i32 -> i64 or vice versa
-    Value casted = b.create<arith::IndexCastOp>(loc, value, b.getIndexType());
-    return b.create<arith::IndexCastOp>(loc, casted, type);
+    Value casted = b.create<arith::IndexCastOp>(loc, b.getIndexType(), value);
+    return b.create<arith::IndexCastOp>(loc, type, casted);
   }
-  return b.create<arith::IndexCastOp>(loc, value, type);
+  return b.create<arith::IndexCastOp>(loc, type, value);
 }
 
 //===----------------------------------------------------------------------===//

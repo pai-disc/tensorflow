@@ -229,7 +229,7 @@ class LhloDialectEmitter : public xla::ConstDfsHloVisitorWithDefault {
   // Return an MLIR location for an HLO instruction.
   Location getLocation(const xla::HloInstruction* inst) {
     // MODIFY_FOR_TAO
-    Location loc(NameLoc::get(builder_.getIdentifier(inst->name())));
+    Location loc(NameLoc::get(builder_.getStringAttr(inst->name())));
     std::lock_guard<std::mutex> lock(hlo_insts_mtx_);
     auto loc_name = mlir::GetNameFromLoc(loc);
     hlo_insts_[module_name_][loc_name] = inst;

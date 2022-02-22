@@ -1,9 +1,9 @@
 diff --git a/llvm/lib/Transforms/Scalar/GVN.cpp b/llvm/lib/Transforms/Scalar/GVN.cpp
-index ee7a2e4aed25..0628289eaacd 100644
+index ddfaf9c2c9fb..5cd78f480175 100644
 --- a/llvm/lib/Transforms/Scalar/GVN.cpp
 +++ b/llvm/lib/Transforms/Scalar/GVN.cpp
-@@ -1023,6 +1023,40 @@ static void reportMayClobberedLoad(LoadInst *Load, MemDepResult DepInfo,
-   ORE->emit(R);
+@@ -1108,6 +1108,40 @@ tryToConvertLoadOfPtrSelect(BasicBlock *DepBB, BasicBlock::iterator End,
+   return AvailableValue::getSelect(Sel);
  }
  
 +/// Get instructions between two given instructions.
@@ -42,8 +42,8 @@ index ee7a2e4aed25..0628289eaacd 100644
 +
  bool GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
                                        Value *Address, AvailableValue &Res) {
-   assert((DepInfo.isDef() || DepInfo.isClobber()) &&
-@@ -1032,6 +1066,25 @@ bool GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
+   if (!DepInfo.isDef() && !DepInfo.isClobber()) {
+@@ -1128,6 +1162,25 @@ bool GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
    const DataLayout &DL = Load->getModule()->getDataLayout();
  
    Instruction *DepInst = DepInfo.getInst();
