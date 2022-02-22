@@ -971,13 +971,9 @@ Status GpuExecutable::SetUpMlirAllocation(
     }
     // TODO(timshen): this information is redundant. This is here only for
     // smooth migration to LMHLO. Remove it.
-<<<<<<< HEAD
-    if (func.getArgAttr(i, "lmhlo.constant_name")) {
-      allocations->at(buffer_index).set_constant(true);
-=======
     if (auto const_name_attr = func.getArgAttr(i, "lmhlo.constant_name")) {
-      allocations->at(i).set_constant(true);
-      
+      allocations->at(buffer_index).set_constant(true);
+
       // ADDED_FOR_TAO
       // Looking into buffer_assignment and copy proper assigned_buffers
       // The information is redundant and ignored in xla, but is useful
@@ -1024,8 +1020,6 @@ Status GpuExecutable::SetUpMlirAllocation(
         CHECK(allocations->at(i).assigned_buffers().size() > 0);
       }
       // END_OF_ADD
-      
->>>>>>> ac0e412a634... [to #35951581] add more necessary information for GpuExecutable::allocations_
     }
     if (auto output_index_attr = func.getArgAttr(i, "lmhlo.output_index")) {
       allocations->at(buffer_index).set_maybe_live_out(true);

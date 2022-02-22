@@ -137,6 +137,7 @@ class GpuExecutable : public Executable {
     // initializing GPU resources.
     OwnedGpuContextCache gpu_ctx_cache;
     std::shared_ptr<BufferAssignment> buffer_assignment_ =
+    std::shared_ptr<const BufferAssignment> buffer_assignment_ =
         nullptr; /*ADDED_FOR_TAO*/
   };
 
@@ -229,8 +230,8 @@ class GpuExecutable : public Executable {
 #if BEF_EXECUTABLE
     return nullptr;
 #else   //  BFD_EXECUTABLE
-    if (absl::holds_alternative<OwnedThunkSchedule>(thunks_or_bef_)) {
-      return absl::get<OwnedThunkSchedule>(thunks_or_bef_).get();
+    if (thunks_) {
+      return thunks_.get();
     }
     return nullptr;
 #endif  //  BFD_EXECUTABLE
@@ -353,7 +354,7 @@ class GpuExecutable : public Executable {
   GpuExecutable(const GpuExecutable&) = delete;
   GpuExecutable& operator=(const GpuExecutable&) = delete;
 
-  std::unique_ptr<BufferAssignment> buffer_assignment_; /*ADDED_FOR_TAO*/
+  std::shared_ptr<const BufferAssignment> buffer_assignment_; /*ADDED_FOR_TAO*/
 };
 
 StatusOr<absl::flat_hash_map<ShapeIndex, GpuExecutable::OutputInfo>>
