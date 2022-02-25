@@ -989,7 +989,7 @@ static Status CompileModuleToLlvmIrImpl(
     // TODO(b/218907125): Implement this feature for ROCm as well.
     bool supports_runtime_managed_constants =
         !(IsBefThunkEnabled() || platform_id == se::rocm::kROCmPlatformId);
-    if (supports_runtime_managed_constants) {
+    if (false /* ADDED FOR TAO */ && supports_runtime_managed_constants) {
       // Remove these globals from the generated code to indicate that XLA is
       // responsible for allocating and initializing them.
       RemoveUnusedAndUninitializedGlobals(ir_emitter_context.llvm_module(),
