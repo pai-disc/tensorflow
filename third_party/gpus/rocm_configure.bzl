@@ -36,6 +36,7 @@ _TF_ROCM_AMDGPU_TARGETS = "TF_ROCM_AMDGPU_TARGETS"
 _TF_ROCM_CONFIG_REPO = "TF_ROCM_CONFIG_REPO"
 
 _DEFAULT_ROCM_TOOLKIT_PATH = "/opt/rocm"
+_DEFAULT_ROCM_AMDGPU_TARGETS = ["gfx900", "gfx906", "gfx908", "gfx90a"]
 
 def verify_build_defines(params):
     """Verify all variables that crosstool/BUILD.rocm.tpl expects are substituted.
@@ -212,6 +213,8 @@ def _amdgpu_targets(repository_ctx, rocm_toolkit_path, bash_bin):
     """Returns a list of strings representing AMDGPU targets."""
     amdgpu_targets_str = get_host_environ(repository_ctx, _TF_ROCM_AMDGPU_TARGETS)
     if not amdgpu_targets_str:
+        return _DEFAULT_ROCM_AMDGPU_TARGETS
+    if not amdgpu_targets_str:
         cmd = "%s/bin/rocm_agent_enumerator" % rocm_toolkit_path
         result = execute(repository_ctx, [bash_bin, "-c", cmd])
         targets = [target for target in result.stdout.strip().split("\n") if target != "gfx000"]
@@ -314,7 +317,7 @@ def _select_rocm_lib_paths(repository_ctx, libs_paths, bash_bin):
 
     return libs
 
-def _find_libs(repository_ctx, rocm_config, hipfft_or_rocfft, bash_bin):
+def _find_libs(repository_ctx, rocm_config, hipfft_or_rocfft, bash_bin, enable_dcu):
     """Returns the ROCm libraries on the system.
 
     Args:
@@ -339,7 +342,7 @@ def _find_libs(repository_ctx, rocm_config, hipfft_or_rocfft, bash_bin):
             ("rocsolver", rocm_config.rocm_toolkit_path + "/rocsolver"),
         ]
     ]
-    if int(rocm_config.rocm_version_number) >= 40500:
+    if int(rocm_config.rocm_version_number) >= 40500 and enable_dcu != "1":
         libs_paths.append(("hipsolver", _rocm_lib_paths(repository_ctx, "hipsolver", rocm_config.rocm_toolkit_path + "/hipsolver")))
         libs_paths.append(("hipblas", _rocm_lib_paths(repository_ctx, "hipblas", rocm_config.rocm_toolkit_path + "/hipblas")))
     return _select_rocm_lib_paths(repository_ctx, libs_paths, bash_bin)
@@ -606,7 +609,7 @@ def _create_local_rocm_repository(repository_ctx):
     ]
 
     # Add Hipsolver on ROCm4.5+
-    if rocm_version_number >= 40500:
+    if rocm_version_number >= 40500 and enable_dcu != '1':
         copy_rules.append(
             make_copy_dir_rule(
                 repository_ctx,
@@ -655,7 +658,7 @@ def _create_local_rocm_repository(repository_ctx):
             ),
         )
 
-    rocm_libs = _find_libs(repository_ctx, rocm_config, hipfft_or_rocfft, bash_bin)
+    rocm_libs = _find_libs(repository_ctx, rocm_config, hipfft_or_rocfft, bash_bin, enable_dcu)
     rocm_lib_srcs = []
     rocm_lib_outs = []
     for lib in rocm_libs.values():
@@ -719,7 +722,7 @@ def _create_local_rocm_repository(repository_ctx):
                             '":hipsparse-include",\n' +
                             '":rocsolver-include"'),
     }
-    if rocm_version_number >= 40500:
+    if rocm_version_number >= 40500 and  enable_dcu != '1':
         repository_dict["%{hipsolver_lib}"] = rocm_libs["hipsolver"].file_name
         repository_dict["%{rocm_headers}"] += ',\n":hipsolver-include"'
         repository_dict["%{hipblas_lib}"] = rocm_libs["hipblas"].file_name
