@@ -4707,20 +4707,19 @@ class ConvertDynamicRangeOp : public OpRewritePattern<TF::RangeOp> {
     // Compute the length of the sequence we are going to need. This includes
     // some conversion to float for the operations.
     //
-    // %size = ceil(abs((%limit - %start) / %delta))
+    // %size = ceil((%limit - %start) / %delta)
     auto range = rewriter.create<mhlo::SubOp>(op.getLoc(), limit, start);
-    auto abs = rewriter.create<mhlo::AbsOp>(op.getLoc(), range);
 
     // Delta is not necessarily the same type as start and limit.
-    auto abs_cast =
-        rewriter.create<mhlo::ConvertOp>(op.getLoc(), compute_type, abs);
+    auto range_cast =
+        rewriter.create<mhlo::ConvertOp>(op.getLoc(), compute_type, range);
     auto delta_cast =
         rewriter.create<mhlo::ConvertOp>(op.getLoc(), compute_type, delta);
 
     // Compute the total number of integer steps and convert to the HLO
     // dimension tensor.
     auto normalized =
-        rewriter.create<mhlo::DivOp>(op.getLoc(), abs_cast, delta_cast);
+        rewriter.create<mhlo::DivOp>(op.getLoc(), range_cast, delta_cast);
     auto ceil = rewriter.create<mhlo::CeilOp>(op.getLoc(), normalized);
     auto steps = rewriter.create<mhlo::ConvertOp>(
         op.getLoc(), RankedTensorType::get({}, rewriter.getI64Type()), ceil);
