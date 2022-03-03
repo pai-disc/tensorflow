@@ -4447,7 +4447,9 @@ bool GetSlicedBoundRanges(
     Value idx = rewriter.create<arith::ConstantIndexOp>(loc, i);
     input_shape_vec.push_back(to_shape_scalar_type(
         rewriter.create<tensor::ExtractOp>(loc, in_shape, idx)));
-    if (i >= sparse_rank) continue;
+  }
+  for (int64_t i = 0; i < sparse_rank; ++i) {
+    Value idx = rewriter.create<arith::ConstantIndexOp>(loc, i);
     sparse_begin.push_back(
       rewriter.create<tensor::ExtractOp>(loc, op.begin(), idx));
     sparse_end.push_back(
@@ -4566,7 +4568,7 @@ class ConvertStridedSliceOpDynamic : public OpRewritePattern<TF::StridedSliceOp>
     }
 
     SmallVector<int64_t, 4> sparse_strides;
-    for (int64_t i = 0; i < input_ty.getRank(); ++i) {
+    for (int64_t i = 0; i < strides_ty.getShape()[0]; ++i) {
       sparse_strides.push_back((*(sparse_strides_attr.begin() + i)).getSExtValue());
     }
 
