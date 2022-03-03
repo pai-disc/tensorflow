@@ -3650,8 +3650,6 @@ LogicalResult DynamicBroadcastInDimOp::verify() {
 }
 
 namespace {
-// If a DynamicBroadCastInDimOp is not actually dynamic, use an ordinary
-// BroadcastInDimOp.
 class DynamicBroadcastInDimOpNotActuallyDynamic
     : public OpRewritePattern<DynamicBroadcastInDimOp> {
   using OpRewritePattern::OpRewritePattern;
@@ -3967,6 +3965,43 @@ class ConcatenateForwarding : public OpRewritePattern<ConcatenateOp> {
   }
 };
 
+// Do canonicalization if the infered return type has less dynamic dims
+class ConcatenateFixedShape : public OpRewritePattern<ConcatenateOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(ConcatenateOp op,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<Type, 1> inferedReturnTypes;
+    op.inferReturnTypes(op.getContext(), op.getLoc(), op->getOperands(),
+                        DictionaryAttr::get(op.getContext(), op->getAttrs()),
+                        RegionRange{}, inferedReturnTypes);
+    bool need_update = false;
+    auto old_type = op.getType().dyn_cast<RankedTensorType>();
+    auto new_type = inferedReturnTypes[0].dyn_cast<RankedTensorType>();
+    if (!old_type || !new_type) {
+      return failure();
+    }
+    auto rank = old_type.getRank();
+    if (rank != new_type.getRank())
+      return failure();
+    for (int i = 0; i < rank; ++i) {
+      if (old_type.getDimSize(i) == new_type.getDimSize(i)) {
+        continue;
+      } else if (old_type.getDimSize(i) == ShapedType::kDynamicSize) {
+        need_update = true;
+      } else if (new_type.getDimSize(i) == ShapedType::kDynamicSize) {
+        return failure();
+      }
+    }
+
+    if (need_update) {
+      rewriter.replaceOpWithNewOp<ConcatenateOp>(
+          op, new_type, op->getOperands(), op.dimension());
+      return success();
+    }
+    return failure();
+  }
+};
+
 }  // namespace
 
 LogicalResult ConcatenateOp::inferReturnTypes(
@@ -4042,7 +4077,7 @@ LogicalResult ConcatenateOp::inferReturnTypes(
 void ConcatenateOp::getCanonicalizationPatterns(RewritePatternSet& results,
                                                 MLIRContext* context) {
   results.add<ConcatenateOperandRemoval, ConcatenateForwarding,
-              SingleOperandConcatenateToCast>(context);
+              SingleOperandConcatenateToCast, ConcatenateFixedShape>(context);
 }
 
 template <typename T>
@@ -4492,68 +4527,69 @@ namespace {
 // Canonicalizes RealDynamicSlice ops that can be replaced instead with Slice
 // ops. This canonicalization is applied the case when the `begin` input values
 // are compile time constants and thus can be made into a tensor.
-struct RealDynamicSliceIsStatic : public OpRewritePattern<RealDynamicSliceOp> {
+struct RealDynamicSliceOpToSliceOp
+    : public OpRewritePattern<RealDynamicSliceOp> {
   using OpRewritePattern<RealDynamicSliceOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(RealDynamicSliceOp realDynamicSlice,
+  LogicalResult matchAndRewrite(RealDynamicSliceOp real_dynamic_slice,
                                 PatternRewriter& rewriter) const override {
-    Location loc = realDynamicSlice.getLoc();
-    Value input = realDynamicSlice.operand();
-    Value output = realDynamicSlice.result();
-    auto inputTy = input.getType().dyn_cast<RankedTensorType>();
-    auto outputTy = output.getType().dyn_cast<RankedTensorType>();
+    Location loc = real_dynamic_slice.getLoc();
+    Value input = real_dynamic_slice.operand();
+    Value output = real_dynamic_slice.result();
+    auto input_ty = input.getType().dyn_cast<RankedTensorType>();
+    auto output_ty = output.getType().dyn_cast<RankedTensorType>();
 
-    if (!inputTy || !outputTy || !inputTy.hasStaticShape() ||
-        !outputTy.hasStaticShape()) {
+    if (!input_ty || !input_ty.hasStaticShape()) {
       return failure();
     }
 
-    int64_t inputRank = inputTy.getRank();
+    int64_t input_rank = input_ty.getRank();
 
-    auto startVal = realDynamicSlice.start_indices();
-    auto limitVal = realDynamicSlice.limit_indices();
-    auto strideVal = realDynamicSlice.strides();
-    auto startOp = startVal.getDefiningOp<mlir::arith::ConstantOp>();
-    auto limitOp = limitVal.getDefiningOp<mlir::arith::ConstantOp>();
-    auto strideOp = strideVal.getDefiningOp<mlir::arith::ConstantOp>();
-    if (!startOp || !limitOp || !strideOp) return failure();
-
-    auto startAttr =
-        startOp.getValue().dyn_cast_or_null<DenseIntElementsAttr>();
-    auto limitAttr =
-        limitOp.getValue().dyn_cast_or_null<DenseIntElementsAttr>();
-    auto strideAttr =
-        strideOp.getValue().dyn_cast_or_null<DenseIntElementsAttr>();
-    if (!startAttr || !limitAttr || !strideAttr) return failure();
-
-    SmallVector<int64_t, 4> tempStartIndices;
-    SmallVector<int64_t, 4> tempLimitIndices;
-    SmallVector<int64_t, 4> tempStride;
-    for (int64_t dimIdx = 0; dimIdx < inputRank; dimIdx++) {
-      int64_t start = startAttr.getValues<IntegerAttr>()[dimIdx].getInt();
-      tempStartIndices.push_back(start);
-      int64_t limit = limitAttr.getValues<IntegerAttr>()[dimIdx].getInt();
-      tempLimitIndices.push_back(limit);
-      int64_t end = strideAttr.getValues<IntegerAttr>()[dimIdx].getInt();
-      tempStride.push_back(end);
+    auto start_indices = real_dynamic_slice.start_indices();
+    auto limit_indices = real_dynamic_slice.limit_indices();
+    auto strides = real_dynamic_slice.strides();
+    DenseIntElementsAttr start_attr;
+    if (!matchPattern(start_indices, m_Constant(&start_attr))) {
+      return failure();
+    }
+    DenseIntElementsAttr limit_attr;
+    if (!matchPattern(limit_indices, m_Constant(&limit_attr))) {
+      return failure();
+    }
+    DenseIntElementsAttr stride_attr;
+    if (!matchPattern(strides, m_Constant(&stride_attr))) {
+      return failure();
     }
 
-    DenseIntElementsAttr sliceStartIndices =
-        rewriter.getI64TensorAttr(tempStartIndices);
-    DenseIntElementsAttr sliceLimitIndices =
-        rewriter.getI64TensorAttr(tempLimitIndices);
-    DenseIntElementsAttr sliceStrides = rewriter.getI64TensorAttr(tempStride);
-    auto result = rewriter.create<SliceOp>(loc, input, sliceStartIndices,
-                                           sliceLimitIndices, sliceStrides);
-    rewriter.replaceOp(realDynamicSlice, {result});
+    // cast to i64 attrs
+    SmallVector<int64_t, 4> temp_start_indices;
+    SmallVector<int64_t, 4> temp_limit_indices;
+    SmallVector<int64_t, 4> temp_stride;
+    for (int64_t dim_idx = 0; dim_idx < input_rank; dim_idx++) {
+      int64_t start = start_attr.getValues<APInt>()[dim_idx].getSExtValue();
+      temp_start_indices.push_back(start);
+      int64_t limit = limit_attr.getValues<APInt>()[dim_idx].getSExtValue();
+      temp_limit_indices.push_back(limit);
+      int64_t end = stride_attr.getValues<APInt>()[dim_idx].getSExtValue();
+      temp_stride.push_back(end);
+    }
+
+    DenseIntElementsAttr slice_start_indices =
+        rewriter.getI64TensorAttr(temp_start_indices);
+    DenseIntElementsAttr slice_limit_indices =
+        rewriter.getI64TensorAttr(temp_limit_indices);
+    DenseIntElementsAttr slice_strides = rewriter.getI64TensorAttr(temp_stride);
+    auto result = rewriter.create<SliceOp>(loc, input, slice_start_indices,
+                                           slice_limit_indices, slice_strides);
+    rewriter.replaceOp(real_dynamic_slice, {result});
     return success();
   }
 };
 }  // namespace
 
-void RealDynamicSliceOp::getCanonicalizationPatterns(RewritePatternSet& results,
-                                                     MLIRContext* context) {
-  results.add<RealDynamicSliceIsStatic, RealDSliceToSlice>(context);
+void RealDynamicSliceOp::getCanonicalizationPatterns(
+    RewritePatternSet& results, MLIRContext* context) {
+  results.insert<RealDynamicSliceOpToSliceOp>(context);
 }
 
 LogicalResult RealDynamicSliceOp::reifyReturnTypeShapes(
