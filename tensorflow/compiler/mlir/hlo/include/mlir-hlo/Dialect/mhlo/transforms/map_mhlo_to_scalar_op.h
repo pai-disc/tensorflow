@@ -397,8 +397,20 @@ inline Value MapCompareOpToStdScalarOp(Location loc,
         getCmpPredicate<arith::CmpIPredicate>(
             comparison_direction, !element_type.isUnsignedInteger());
     assert(predicate.hasValue() && "expected valid comparison direction");
-    return b->create<ScalarIOp<CompareOpTy>>(loc, predicate.getValue(), lhs,
-                                             rhs);
+    auto int_type = IntegerType::get(element_type.getContext(),
+                                     element_type.getIntOrFloatBitWidth());
+    SmallVector<Type> int_types(1, int_type);
+    if (element_type.isUnsignedInteger()) {
+      Value casted_lhs = b->create<UnrealizedConversionCastOp>(
+          loc, int_types, lhs).getResults().front();
+      Value casted_rhs = b->create<UnrealizedConversionCastOp>(
+          loc, int_types, rhs).getResults().front();
+      return b->create<ScalarIOp<CompareOpTy>>(loc, predicate.getValue(),
+                                               casted_lhs, casted_rhs);
+    } else {
+      return b->create<ScalarIOp<CompareOpTy>>(loc, predicate.getValue(), lhs,
+                                               rhs);
+    }
   }
   if (element_type.isa<FloatType>()) {
     Optional<arith::CmpFPredicate> predicate =
@@ -528,12 +540,39 @@ inline Value MapMhloOpToStdScalarOp<mhlo::ConvertOp>(
     IntegerType src = sourceType.cast<IntegerType>();
     IntegerType res = targetType.cast<IntegerType>();
     if (src.getWidth() > res.getWidth()) {
-      return b->create<mlir::arith::TruncIOp>(loc, result_types, args,
+      llvm::dbgs() << "truncate: \n";
+      if (res.isUnsignedInteger()) {
+        // Added by DISC
+        llvm::dbgs() << "truncate to ui: \n";
+        auto int_type = IntegerType::get(res.getContext(),
+                                         res.getIntOrFloatBitWidth());
+        SmallVector<Type> int_types(args.size(), int_type);
+        auto truncated = b->create<mlir::arith::TruncIOp>(loc, int_types, args,
+                                                          mlir::None).getResult();
+        SmallVector<Type> unsigned_types(args.size(), targetType);
+        return b->create<UnrealizedConversionCastOp>(loc,
+                                                     llvm::makeArrayRef(unsigned_types),
+                                                     truncated).getResults().front();
+        // End of Added by DISC
+      } else {
+        return b->create<mlir::arith::TruncIOp>(loc, result_types, args,
                                               mlir::None);
+      }
     }
     if (src.getWidth() < res.getWidth()) {
-      // Special case boolean values, so they get casted to `1` instead of `-1`.
-      if (src.isUnsignedInteger() || src.getWidth() == 1) {
+      if (src.isUnsignedInteger()) {
+        // Added by DISC
+        auto int_type = IntegerType::get(sourceType.getContext(),
+                                         sourceType.getIntOrFloatBitWidth());
+        SmallVector<Type> int_types(args.size(), int_type);
+        auto converted_arg = b->create<UnrealizedConversionCastOp>(
+                                  loc, llvm::makeArrayRef(int_types), args)
+                                 .getResults();
+        return b->create<mlir::arith::ExtUIOp>(loc, result_types, converted_arg,
+                                               mlir::None);
+        // End of Added by DISC
+      } else if (src.getWidth() == 1) {
+        // Special case boolean values, so they get casted to `1` instead of `-1`.
         return b->create<mlir::arith::ExtUIOp>(loc, result_types, args,
                                                mlir::None);
       }
