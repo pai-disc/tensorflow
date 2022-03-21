@@ -74,8 +74,8 @@ namespace {
 //   After conversion:
 //     func @test(%arg0: tensor<?x?x?xf32>) -> tensor<?x?xf32> {
 //       // [a, b, c] -> [a*b, c]
-//       %1 = mhlo.dynamic_reshape(%arg0, ...) : (tensor<?x?x?xf32>,
-//       tensor<2xi64>) -> tensor<?x?xf32> %2 = "mhlo.reduce"(%1, ...) ({...})
+//       %1 = mhlo.dynamic_reshape(%arg0, ...) : (tensor<?x?x?xf32>, tensor<2xi64>) -> tensor<?x?xf32>
+//       %2 = "mhlo.reduce"(%1, ...) ({...})
 //         {dimensions = dense<[1]> : tensor<1xi64>} :
 //         (tensor<?x?xf32>, tensor<f32>) -> tensor<?xf32>
 //       %3 = "mhlo.dynamic_reshape"(%2, ...) : (tensor<?xf32>, tensor<1xi64>)
@@ -100,12 +100,38 @@ namespace {
 //   After conversion:
 //     func @test(%arg0: tensor<?x?x?xf32>) -> tensor<f32> {
 //       // [a, b, c] -> [a*b*c, 1]
-//       %1 = mhlo.dynamic_reshape(%arg0, ...) : (tensor<?x?x?xf32>,
-//       tensor<2xi64>) -> tensor<?x?xf32> %2 = "mhlo.reduce"(%1, ...) ({...})
+//       %1 = mhlo.dynamic_reshape(%arg0, ...) : (tensor<?x?x?xf32>, tensor<2xi64>) -> tensor<?x?xf32>
+//       %2 = "mhlo.reduce"(%1, ...) ({...})
 //         {dimensions = dense<[0]> : tensor<1xi64>} :
 //         (tensor<?x?xf32>, tensor<f32>) -> tensor<?xf32>
 //       %3 = "mhlo.reshape"(%2, ...) : (tensor<?xf32>, tensor<1xi64>) ->
 //       tensor<f32> return %3 : tensor<f32>
+//     }
+//  ```
+//
+// For case d):
+// ====================================================================================
+//   we convert all non-reduce-to-vector to rank-2 row reduction.
+//
+//   For example, suppose we have:
+//   ```
+//     func @test(%arg0: tensor<?x?x?x?xf32>) -> tensor<?x?xf32> {
+//       ...
+//       %2 = "mhlo.reduce"(%arg0, ...) ({...})
+//         {dimensions = dense<[0,2]> : tensor<2xi64>} :
+//         (tensor<?x?x?x?xf32>, tensor<f32>) -> tensor<?x?xf32>
+//       return %2 : tensor<?x?xf32>
+//     }
+//  ```
+//   After conversion:
+//     func @test(%arg0: tensor<?x?x?x?xf32>) -> tensor<?x?xf32> {
+//       %1 = mhlo.transpose(%arg0) {dimensions = dense<[1, 3, 0, 2]>}
+//       %2 = mhlo.dynamic_reshape(%1, ...) : (tensor<?x?x?x?f32>, tensor<2xi64>) -> tensor<?x?xf32>
+//       %3 = "mhlo.reduce"(%1, ...) ({...})
+//         {dimensions = dense<[0, 2]> : tensor<2xi64>} :
+//         (tensor<?x?xf32>, tensor<f32>) -> tensor<?xf32>
+//       %4 = "mhlo.dynamic_reshape"(%3, ...) : (tensor<?xf32>, tensor<2xi64>) -> tensor<?x?xf32>
+//       return %4 : tensor<?x?xf32>
 //     }
 //  ```
 
@@ -115,6 +141,66 @@ struct HloCanonicalizeReductionPass
     registry.insert<tensor::TensorDialect>();
   }
   void runOnOperation() override {
+    // emit transpose for non-reduce-to-vector reductions
+    getOperation().walk([&](ReduceOp op) {
+      auto orig_ty = op.getOperand(0).getType().dyn_cast<RankedTensorType>();
+      if (!orig_ty) return signalPassFailure();
+      int orig_rank = orig_ty.getRank();
+      SmallVector<int64_t, 4> dims_to_reduce;
+      DenseSet<int64_t> dims_to_reduce_set;
+      SmallVector<int64_t, 4> dims_to_keep;
+      for (auto dim : op.dimensions().getValues<APInt>()) {
+        dims_to_reduce.push_back(dim.getSExtValue());
+        dims_to_reduce_set.insert(dims_to_reduce.back());
+      }
+      for (int i = 0; i < orig_rank; ++i) {
+        if (!dims_to_reduce_set.count(i)) dims_to_keep.push_back(i);
+      }
+      llvm::sort(dims_to_reduce);
+      llvm::sort(dims_to_keep);
+      // if either dims_to_reduce or dims_to_keep is non-continuous
+      if (((dims_to_reduce.back() - dims_to_reduce[0]) != (dims_to_reduce.size() - 1)) ||
+          ((dims_to_reduce[0] != 0) && (dims_to_reduce.back() != (orig_rank - 1)))) {
+        SmallVector<int64_t> permutation;       
+        std::copy(dims_to_keep.begin(), dims_to_keep.end(),
+                  std::back_inserter(permutation));
+        std::copy(dims_to_reduce.begin(), dims_to_reduce.end(),
+                  std::back_inserter(permutation));
+        OpBuilder b(op);
+        auto loc = op.getLoc();
+        auto permutation_attr = DenseIntElementsAttr::get(
+            RankedTensorType::get({permutation.size()}, b.getI64Type()),
+            permutation);
+        auto orig_shape = orig_ty.getShape();
+        SmallVector<int64_t> transposed_shape;
+        for (int64_t i : permutation) {
+          transposed_shape.push_back(orig_shape[i]);
+        }
+        auto transposed_type =
+            RankedTensorType::get(transposed_shape, orig_ty.getElementType());
+        SmallVector<Value, 4> new_operands;
+        for (Value operand : op.inputs()) {
+          auto transposed = b.create<mhlo::TransposeOp>(loc, transposed_type, operand,
+                                                        permutation_attr);
+          new_operands.push_back(transposed);
+        }
+        SmallVector<int64_t> reduce_dimensions;
+        for (int64_t i = dims_to_keep.size(); i < orig_rank; ++i) {
+          reduce_dimensions.push_back(i);
+        }
+        auto reduce_dimensions_attr = DenseIntElementsAttr::get(
+            RankedTensorType::get({reduce_dimensions.size()}, b.getI64Type()),
+            reduce_dimensions);
+        auto new_op = b.create<ReduceOp>(loc, new_operands, op.init_values(),
+                                         reduce_dimensions_attr);
+        new_op.body().takeBody(op.body());
+        for (auto&& e : llvm::zip(op.getResults(), new_op.getResults())) {
+          std::get<0>(e).replaceAllUsesWith(std::get<1>(e));
+        }
+        op.erase();
+      }
+    });
+
     getOperation().walk([&](ReduceOp op) {
       SmallVector<int64_t, 4> dims_to_reduce;
       DenseSet<int64_t> dims_to_reduce_set;
@@ -140,6 +226,7 @@ struct HloCanonicalizeReductionPass
           (dims_to_reduce[0] != 0 && dims_to_reduce.back() != (rank - 1))) {
         return;
       }
+      // TODO
 
       // rank 2 row/column reduction is already supported.
       if (rank == 2 && ndims_to_reduce == 1) {
