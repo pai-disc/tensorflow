@@ -741,7 +741,7 @@ def : Pat<(srcDstOpPair[0]:$old $shape, $seed, $seed2),
 
 // TODO(hinsu): Handle unranked inputs by broadcasting constant one to the
 // shape of $l instead of having it as a constant.
-def : Pat<(TF_SigmoidGradOp AnyRankedTensor:$l, AnyRankedTensor:$r),
+def : Pat<(TF_SigmoidGradOp AnyStaticShapeTensor:$l, AnyStaticShapeTensor:$r),
           (HLO_MulOp
            (HLO_MulOp $r, $l),
            (HLO_SubOp (HLO_ConstOp (ConstantSplat<"1"> $l)), $l))>;
