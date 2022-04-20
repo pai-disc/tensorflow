@@ -19,6 +19,7 @@ def repo(name):
         patch_file = ["//third_party/llvm:macos_build_fix.patch", "//third_party/llvm:fix_ppc64le.patch", "//third_party/llvm:disable_typeid_check.patch",
             "//third_party/llvm:0001-mlir-ROCm-Add-shfl.sync.bfly-lowering.patch",
             "//third_party/llvm:0001-llvm-nvptx-Fix-error-GVN-on-shared-memory-load.patch",
+            "//third_party/llvm:0001-mlir-not-fold-UnrealizedConversionCastOp-with-ui-si.patch",
         ],
         link_files = {"//third_party/llvm:run_lit.sh": "mlir/run_lit.sh"},
     )
