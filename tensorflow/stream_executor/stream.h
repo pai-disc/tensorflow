@@ -116,8 +116,9 @@ class Stream {
   explicit Stream(StreamExecutor *parent);
 
   // Create stream for an existing stream handle.
-  Stream(StreamExecutor *parent,
-         std::unique_ptr<internal::StreamInterface> implementation);
+  Stream(StreamExecutor* parent,
+         std::unique_ptr<internal::StreamInterface> implementation,
+         bool allocated = true);
 
   // Deallocates any stream resources that the parent StreamExecutor has
   // bestowed

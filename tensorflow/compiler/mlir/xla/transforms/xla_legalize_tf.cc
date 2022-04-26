@@ -303,7 +303,6 @@ LogicalResult legalizeTF(Operation *op, bool allow_partial_conversion,
   target.addLegalDialect<arith::ArithmeticDialect>();
   target.addLegalDialect<func::FuncDialect>();
   target.addLegalDialect<mhlo_disc::MhloDiscDialect>();
-  target.addLegalDialect<StandardOpsDialect>();
   target.addLegalDialect<tensor::TensorDialect>();
   target.addLegalDialect<shape::ShapeDialect>();
   target.addLegalOp<func::CallOp>();

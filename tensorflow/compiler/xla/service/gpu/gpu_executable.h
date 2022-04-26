@@ -136,7 +136,7 @@ class GpuExecutable : public Executable {
     // prevents the initial execution step from being slowed down due to
     // initializing GPU resources.
     OwnedGpuContextCache gpu_ctx_cache;
-    std::shared_ptr<BufferAssignment> buffer_assignment_ =
+
     std::shared_ptr<const BufferAssignment> buffer_assignment_ =
         nullptr; /*ADDED_FOR_TAO*/
   };

@@ -1673,7 +1673,9 @@ def HLO_CustomCallOp: HLO_Op<"custom_call",
 }
 
 def HLO_DotOp: HLO_Op<"dot",
-    [NoSideEffect, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+    [NoSideEffect, DeclareOpInterfaceMethods<InferTypeOpInterface>,
+    DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+                              ["reifyReturnTypeShapes"]>]> {
   let summary = "Dot operator";
   let description = [{
     Performs dot products between vectors, vector/matrix and matrix/matrix

@@ -91,6 +91,7 @@ DebugOptions DefaultDebugOptionsIgnoringFlags() {
 
   // Set 4GB space limit for redzone scratch allocator.
   opts.set_xla_gpu_redzone_scratch_max_megabytes(1LL << 12);
+
   // ADDED_FOR_TAO
   opts.set_tao_disable_hlo_passes(false);
   opts.set_tao_enforce_xla_codegen(false);
