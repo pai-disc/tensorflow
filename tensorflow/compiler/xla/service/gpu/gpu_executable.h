@@ -135,7 +135,6 @@ class GpuExecutable : public Executable {
     // GPU contexts. This isn't required for correct execution. However, it
     // prevents the initial execution step from being slowed down due to
     // initializing GPU resources.
-    std::shared_ptr<BufferAssignment> buffer_assignment_ =
     std::shared_ptr<const BufferAssignment> buffer_assignment_ =
         nullptr; /*ADDED_FOR_TAO*/
   };
