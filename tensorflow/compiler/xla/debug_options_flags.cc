@@ -99,6 +99,7 @@ DebugOptions DefaultDebugOptionsIgnoringFlags() {
   opts.set_xla_cpu_enable_mlir_lowering(false);
   opts.set_xla_gpu_enable_mlir_lowering(false);
   opts.set_xla_gpu_normalize_layouts(false);
+
   // ADDED_FOR_TAO
   opts.set_tao_disable_hlo_passes(false);
   opts.set_tao_enforce_xla_codegen(false);
