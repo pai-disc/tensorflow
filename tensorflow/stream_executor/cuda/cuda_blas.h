@@ -67,7 +67,9 @@ class CUDABlas : public blas::BlasSupport {
 
   TENSORFLOW_STREAM_EXECUTOR_GPU_BLAS_SUPPORT_OVERRIDES
 
+#if CUDA_VERSION >= 11000
   BlasLt &blas_lt() { return blas_lt_; }
+#endif
 
  private:
   // Tells cuBLAS to enqueue the BLAS operation onto a particular Stream.
@@ -145,7 +147,9 @@ class CUDABlas : public blas::BlasSupport {
   // cuBLAS library handle on the device.
   cublasHandle_t blas_ ABSL_GUARDED_BY(mu_);
 
+#if CUDA_VERSION >= 11000
   BlasLt blas_lt_;
+#endif
 
   SE_DISALLOW_COPY_AND_ASSIGN(CUDABlas);
 };
