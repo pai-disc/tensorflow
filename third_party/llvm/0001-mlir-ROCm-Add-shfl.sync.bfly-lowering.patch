@@ -1,5 +1,5 @@
 diff --git a/mlir/include/mlir/Dialect/LLVMIR/ROCDLOps.td b/mlir/include/mlir/Dialect/LLVMIR/ROCDLOps.td
-index bd80bde25960..33d4f031b0ba 100644
+index bd80bde..33d4f03 100644
 --- a/mlir/include/mlir/Dialect/LLVMIR/ROCDLOps.td
 +++ b/mlir/include/mlir/Dialect/LLVMIR/ROCDLOps.td
 @@ -179,4 +179,16 @@ def ROCDL_MubufStoreOp :
@@ -20,10 +20,10 @@ index bd80bde25960..33d4f031b0ba 100644
 +
  #endif // ROCDLIR_OPS
 diff --git a/mlir/lib/Target/LLVMIR/Dialect/ROCDL/ROCDLToLLVMIRTranslation.cpp b/mlir/lib/Target/LLVMIR/Dialect/ROCDL/ROCDLToLLVMIRTranslation.cpp
-index 5bc02dc55270..d2c176da50ec 100644
+index 71d0a61..bc4b7d9 100644
 --- a/mlir/lib/Target/LLVMIR/Dialect/ROCDL/ROCDLToLLVMIRTranslation.cpp
 +++ b/mlir/lib/Target/LLVMIR/Dialect/ROCDL/ROCDLToLLVMIRTranslation.cpp
-@@ -42,6 +42,77 @@ static llvm::Value *createDeviceFunctionCall(llvm::IRBuilderBase &builder,
+@@ -42,6 +42,72 @@ static llvm::Value *createDeviceFunctionCall(llvm::IRBuilderBase &builder,
    return builder.CreateCall(fn, ArrayRef<llvm::Value *>(fnOp0));
  }
  
@@ -88,12 +88,7 @@ index 5bc02dc55270..d2c176da50ec 100644
 +
 +  auto i32_value = builder.CreateBitCast(value, int32Type);
 +
-+  auto function_type2 =
-+      llvm::FunctionType::get(int32Type, {int32Type, int32Type}, false);
-+  auto fn2 = dyn_cast<llvm::Function>(
-+      module->getOrInsertFunction("__amdgcn_ds_bpermute", function_type2)
-+          .getCallee());
-+  auto shfl_value = builder.CreateCall(fn2, {shl_index, i32_value});
++  auto shfl_value = createIntrinsicCall(builder, llvm::Intrinsic::amdgcn_ds_bpermute, {shl_index, i32_value});
 +
 +  return builder.CreateBitCast(shfl_value, valueTy);
 +}

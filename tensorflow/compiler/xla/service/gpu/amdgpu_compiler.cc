@@ -60,7 +60,7 @@ std::string GetROCDLDir(const HloModuleConfig& config) {
   static std::string rocm_path;
   static bool checked = false;
   if (!checked) {
-    const char* tf_env_var_val = getenv("DISC_ROCM_PATH");
+    const char* tf_env_var_val = getenv("ROCM_PATH");
     if (tf_env_var_val != nullptr) {
       rocm_path = tf_env_var_val;
     } else {
