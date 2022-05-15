@@ -40,6 +40,18 @@ XlaOp One(XlaBuilder* builder, PrimitiveType type) {
   return ConstantLiteral(builder, LiteralUtil::One(type));
 }
 
+XlaOp Ones(XlaBuilder* builder, const Shape& shape) {
+  return Broadcast(One(builder, shape.element_type()), shape.dimensions());
+}
+
+XlaOp OnesLike(XlaOp prototype) {
+  XlaBuilder* builder = prototype.builder();
+  return builder->ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
+    TF_ASSIGN_OR_RETURN(Shape shape, builder->GetShape(prototype));
+    return Ones(builder, shape);
+  });
+}
+
 XlaOp Epsilon(XlaBuilder* builder, PrimitiveType type) {
   switch (type) {
     case F16:

@@ -103,6 +103,7 @@ cc_library(
         "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/client:xla_builder",
     ],
+    visibility = ["//visibility:public"],
 )
 
 cc_library(

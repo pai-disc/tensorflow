@@ -380,6 +380,32 @@ cc_library(
 )
 
 cc_library(
+    name = "shape_util_deps",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":permutation_util",
+        ":protobuf_util",
+        ":status",
+        ":status_macros",
+        ":statusor",
+        ":types",
+        ":util",
+        ":xla_data_proto_cc",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:lib_internal",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/hash",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+cc_library(
     name = "sharding_op_util",
     srcs = ["sharding_op_util.cc"],
     hdrs = ["sharding_op_util.h"],

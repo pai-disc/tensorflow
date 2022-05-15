@@ -113,21 +113,21 @@ class Shape {
   void set_element_type(PrimitiveType value) { element_type_ = value; }
 
   // Methods for accessing the dimensions array.
-  int dimensions_size() const { return dimensions_.size(); }
-  int64_t dimensions(int index) const { return dimensions_.at(index); }
-  void set_dimensions(int index, int64_t value) {
+  virtual int dimensions_size() const { return dimensions_.size(); }
+  virtual int64_t dimensions(int index) const { return dimensions_.at(index); }
+  virtual void set_dimensions(int index, int64_t value) {
     dimensions_.at(index) = value;
   }
-  void add_dimensions(int64_t value) {
+  virtual void add_dimensions(int64_t value) {
     dimensions_.push_back(value);
     dynamic_dimensions_.push_back(false);
   }
-  void clear_dimensions() {
+  virtual void clear_dimensions() {
     dimensions_.clear();
     dynamic_dimensions_.clear();
   }
-  absl::Span<const int64_t> dimensions() const { return dimensions_; }
-  absl::Span<int64_t> mutable_dimensions() {
+  virtual absl::Span<const int64_t> dimensions() const { return dimensions_; }
+  virtual absl::Span<int64_t> mutable_dimensions() {
     return absl::MakeSpan(dimensions_);
   }
 
@@ -271,7 +271,7 @@ class Shape {
     return Shape::Hash(std::move(h), s);
   }
 
- private:
+ protected:
   // The element type of this shape (tuple, array, etc).
   PrimitiveType element_type_ = PRIMITIVE_TYPE_INVALID;
 

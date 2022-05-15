@@ -418,7 +418,7 @@ class XlaBuilder {
   // Converts the op to string for the ease of debugging.
   std::string OpToString(XlaOp op) const;
 
- private:
+ protected:
   void ToStringHelper(std::string* out, int ident, int64_t op_handle) const;
 
   // Build helper which takes the id of the root operation..
@@ -503,7 +503,7 @@ class XlaBuilder {
   virtual StatusOr<XlaOp> TupleInternal(const Shape& shape,
                                         absl::Span<const XlaOp> elements);
 
-  XlaOp GetTupleElement(XlaOp tuple_data, int64_t index);
+  virtual XlaOp GetTupleElement(XlaOp tuple_data, int64_t index);
   virtual StatusOr<XlaOp> GetTupleElementInternal(const Shape& shape,
                                                   XlaOp tuple_data,
                                                   int64_t index);
@@ -680,7 +680,7 @@ class XlaBuilder {
                const XlaComputation& computation,
                absl::Span<const int64_t> dimensions_to_reduce);
 
-  XlaOp Reduce(absl::Span<const XlaOp> operands,
+  virtual XlaOp Reduce(absl::Span<const XlaOp> operands,
                absl::Span<const XlaOp> init_values,
                const XlaComputation& computation,
                absl::Span<const int64_t> dimensions_to_reduce);
@@ -790,7 +790,7 @@ class XlaBuilder {
 
   XlaOp Iota(PrimitiveType type, int64_t size);
 
-  XlaOp ConvertElementType(XlaOp operand, PrimitiveType new_element_type);
+  virtual XlaOp ConvertElementType(XlaOp operand, PrimitiveType new_element_type);
 
   XlaOp BitcastConvertType(XlaOp operand, PrimitiveType new_element_type);
   virtual StatusOr<XlaOp> BitcastConvertTypeInternal(const Shape& shape,
@@ -888,26 +888,26 @@ class XlaBuilder {
   XlaOp RecvWithToken(XlaOp token, const Shape& shape,
                       const ChannelHandle& handle);
 
-  XlaOp BatchNormTraining(XlaOp operand, XlaOp scale, XlaOp offset,
+  virtual XlaOp BatchNormTraining(XlaOp operand, XlaOp scale, XlaOp offset,
                           float epsilon, int64_t feature_index);
 
-  XlaOp BatchNormInference(XlaOp operand, XlaOp scale, XlaOp offset, XlaOp mean,
+  virtual XlaOp BatchNormInference(XlaOp operand, XlaOp scale, XlaOp offset, XlaOp mean,
                            XlaOp variance, float epsilon,
                            int64_t feature_index);
 
-  XlaOp BatchNormGrad(XlaOp operand, XlaOp scale, XlaOp batch_mean,
+  virtual XlaOp BatchNormGrad(XlaOp operand, XlaOp scale, XlaOp batch_mean,
                       XlaOp batch_var, XlaOp grad_output, float epsilon,
                       int64_t feature_index);
 
-  XlaOp GetDimensionSize(XlaOp operand, int64_t dimension);
+  virtual XlaOp GetDimensionSize(XlaOp operand, int64_t dimension);
 
-  XlaOp SetDimensionSize(XlaOp operand, XlaOp val, int64_t dimension);
+  virtual XlaOp SetDimensionSize(XlaOp operand, XlaOp val, int64_t dimension);
 
   virtual StatusOr<XlaOp> SetDimensionSizeInternal(const Shape& shape,
                                                    XlaOp operand, XlaOp val,
                                                    int64_t dimension);
 
-  XlaOp RemoveDynamicDimension(XlaOp operand, int64_t dimension);
+  virtual XlaOp RemoveDynamicDimension(XlaOp operand, int64_t dimension);
 
   virtual StatusOr<XlaOp> AddInstruction(HloInstructionProto&& instr,
                                          HloOpcode opcode,
@@ -934,7 +934,7 @@ class XlaBuilder {
   // broadcast_dimensions specifies which dimensions to use for broadcasting
   // when the operation is between tensors of different ranks. The direction is
   // only used if opcode is kCompare.
-  XlaOp BinaryOp(HloOpcode binop, XlaOp lhs, XlaOp rhs,
+  virtual XlaOp BinaryOp(HloOpcode binop, XlaOp lhs, XlaOp rhs,
                  absl::Span<const int64_t> broadcast_dimensions,
                  absl::optional<ComparisonDirection> direction = absl::nullopt,
                  absl::optional<Comparison::Type> type = absl::nullopt);

@@ -372,7 +372,7 @@ class ShapeInference {
       absl::Span<const int64_t> lhs_dilation,
       absl::Span<const int64_t> rhs_dilation);
 
- private:
+ protected:
   // Helper that infers the shape produced by performing an element-wise binary
   // operation with the given LHS and RHS shapes.
   // Note: By "element-wise" we mean operations that look at a single element in
