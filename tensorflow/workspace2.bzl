@@ -3,6 +3,7 @@
 # Import third party config rules.
 load("//tensorflow:version_check.bzl", "check_bazel_version_at_least")
 load("//third_party/gpus:cuda_configure.bzl", "cuda_configure")
+load("//third_party/blade_helper:blade_helper_configure.bzl", "blade_helper_configure")
 load("//third_party/gpus:rocm_configure.bzl", "rocm_configure")
 load("//third_party/tensorrt:tensorrt_configure.bzl", "tensorrt_configure")
 load("//third_party/nccl:nccl_configure.bzl", "nccl_configure")
@@ -94,6 +95,7 @@ def _tf_toolchains():
     clang6_configure(name = "local_config_clang6")
     cc_download_clang_toolchain(name = "local_config_download_clang")
     cuda_configure(name = "local_config_cuda")
+    blade_helper_configure(name = "local_config_blade_helper")
     tensorrt_configure(name = "local_config_tensorrt")
     nccl_configure(name = "local_config_nccl")
     git_configure(name = "local_config_git")
