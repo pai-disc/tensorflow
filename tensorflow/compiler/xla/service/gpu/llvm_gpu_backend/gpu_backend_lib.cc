@@ -607,6 +607,7 @@ std::vector<std::string> GetROCDLPaths(std::string gcn_arch_name,
   for (auto& filename : *rocdl_filenames) {
     result.push_back(tensorflow::io::JoinPath(rocdl_dir_path, filename));
   }
+
   // Add AMDGPU version-specific bitcodes.
   std::vector<std::string> tokens = absl::StrSplit(gcn_arch_name, ':');
   std::string amdgpu_version = gcn_arch_name;
@@ -860,7 +861,7 @@ std::pair<std::string, std::string> GetFeatureStrFromGCNArchName(
   std::string feature_str;
 
   std::string gfx = gcn_arch_name;
-#if TF_ROCM_VERSION < 30900 //|| TENSORFLOW_USE_DCU
+#if TF_ROCM_VERSION < 30900
   // For ROCm versions older than 3.9, hardcode it to "+code-object-v3"
   // This is simply to preserve how things were...nohing else
   feature_str = "+code-object-v3";
