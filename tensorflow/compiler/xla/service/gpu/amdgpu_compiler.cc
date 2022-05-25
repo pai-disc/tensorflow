@@ -38,6 +38,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/llvm_ir/llvm_util.h"
 #include "tensorflow/compiler/xla/service/tuple_simplifier.h"
 #include "tensorflow/core/platform/rocm_rocdl_path.h"
+#include "tensorflow/core/platform/path.h"
 
 namespace xla {
 namespace gpu {
@@ -55,6 +56,27 @@ std::string GetROCDLDir(const HloModuleConfig& config) {
     potential_rocdl_dirs.push_back(datadir);
   }
   potential_rocdl_dirs.push_back(tensorflow::RocdlRoot());
+
+  static std::string rocm_path;
+  static bool checked = false;
+  if (!checked) {
+    const char* tf_env_var_val = getenv("ROCM_PATH");
+    if (tf_env_var_val != nullptr) {
+      rocm_path = tf_env_var_val;
+    } else {
+      rocm_path = "/opt/rocm";
+    }
+    checked = true;
+  }
+
+#if (TF_ROCM_VERSION >= 30900 || TENSORFLOW_USE_DCU)
+  std::string libdevice_dir = tensorflow::io::JoinPath(rocm_path, "amdgcn/bitcode");
+#else
+  std::string libdevice_dir = tensorflow::io::JoinPath(rocm_path, "lib");
+#endif
+  potential_rocdl_dirs.push_back(libdevice_dir);
+  VLOG(1) << "Get rocdl dirs " << libdevice_dir;
+  
 
   // Tries all potential ROCDL directories in the order they are inserted.
   // Returns the first directory that exists in the file system.

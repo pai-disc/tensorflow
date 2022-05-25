@@ -584,12 +584,23 @@ StatusOr<std::string> CompileToPtx(
 std::vector<std::string> GetROCDLPaths(std::string gcn_arch_name,
                                        const std::string& rocdl_dir_path) {
   // AMDGPU version-neutral bitcodes.
-  static std::vector<std::string>* rocdl_filenames =
-      new std::vector<std::string>(
-          {"opencl.bc", "ocml.bc", "ockl.bc", "oclc_finite_only_off.bc",
-           "oclc_daz_opt_off.bc", "oclc_correctly_rounded_sqrt_on.bc",
-           "oclc_unsafe_math_off.bc", "oclc_wavefrontsize64_on.bc"});
-
+#if TF_ROCM_VERSION >= 50000
+  static std::vector<std::string>* rocdl_filenames = new std::vector<std::string>(
+      {"opencl.bc", "ocml.bc", "ockl.bc", "oclc_finite_only_off.bc",
+       "oclc_daz_opt_off.bc", "oclc_correctly_rounded_sqrt_on.bc",
+       "oclc_unsafe_math_off.bc", "oclc_wavefrontsize64_on.bc"});
+#elif TF_ROCM_VERSION >= 30900 || TENSORFLOW_USE_DCU
+  static std::vector<std::string>* rocdl_filenames = new std::vector<std::string>(
+      {"hc.bc", "opencl.bc", "ocml.bc", "ockl.bc", "oclc_finite_only_off.bc",
+       "oclc_daz_opt_off.bc", "oclc_correctly_rounded_sqrt_on.bc",
+       "oclc_unsafe_math_off.bc", "oclc_wavefrontsize64_on.bc"});
+#else
+  static std::vector<std::string>* rocdl_filenames = new std::vector<std::string>(
+      {"hc.amdgcn.bc", "opencl.amdgcn.bc", "ocml.amdgcn.bc", "ockl.amdgcn.bc",
+       "oclc_finite_only_off.amdgcn.bc", "oclc_daz_opt_off.amdgcn.bc",
+       "oclc_correctly_rounded_sqrt_on.amdgcn.bc",
+       "oclc_unsafe_math_off.amdgcn.bc", "oclc_wavefrontsize64_on.amdgcn.bc"});
+#endif
   // Construct full path to ROCDL bitcode libraries.
   std::vector<std::string> result;
   result.reserve(rocdl_filenames->size() + 1);
@@ -605,7 +616,12 @@ std::vector<std::string> GetROCDLPaths(std::string gcn_arch_name,
   }
   result.push_back(tensorflow::io::JoinPath(
       rocdl_dir_path,
+#if TF_ROCM_VERSION >= 30900 || TENSORFLOW_USE_DCU
       absl::StrCat("oclc_isa_version_", amdgpu_version, ".bc")));
+#else
+      absl::StrCat("oclc_isa_version_", amdgpu_version, ".amdgcn.bc")));
+#endif
+
   return result;
 }
 
@@ -845,7 +861,7 @@ std::pair<std::string, std::string> GetFeatureStrFromGCNArchName(
   std::string feature_str;
 
   std::string gfx = gcn_arch_name;
-#if TF_ROCM_VERSION < 30900 || TENSORFLOW_USE_DCU
+#if TF_ROCM_VERSION < 30900
   // For ROCm versions older than 3.9, hardcode it to "+code-object-v3"
   // This is simply to preserve how things were...nohing else
   feature_str = "+code-object-v3";

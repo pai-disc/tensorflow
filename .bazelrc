@@ -266,7 +266,7 @@ build:tensorrt --repo_env TF_NEED_TENSORRT=1
 build:rocm --crosstool_top=@local_config_rocm//crosstool:toolchain
 build:rocm --define=using_rocm_hipcc=true
 build:rocm --define=tensorflow_mkldnn_contraction_kernel=0
-build:rocm --repo_env TF_NEED_ROCM=1
+build:rocm --repo_env TF_NEED_ROCM=1 --repo_env TF_NEED_DCU=0
 build:rocm --experimental_link_static_libraries_once=false  # b/230048163
 
 build:dcu --crosstool_top=@local_config_rocm//crosstool:toolchain
