@@ -342,7 +342,7 @@ def _find_libs(repository_ctx, rocm_config, hipfft_or_rocfft, bash_bin, enable_d
             ("rocsolver", rocm_config.rocm_toolkit_path + "/rocsolver"),
         ]
     ]
-    if int(rocm_config.rocm_version_number) >= 40500 and enable_dcu != "1":
+    if int(rocm_config.rocm_version_number) >= 40500 and not enable_dcu:
         libs_paths.append(("hipsolver", _rocm_lib_paths(repository_ctx, "hipsolver", rocm_config.rocm_toolkit_path + "/hipsolver")))
         libs_paths.append(("hipblas", _rocm_lib_paths(repository_ctx, "hipblas", rocm_config.rocm_toolkit_path + "/hipblas")))
     return _select_rocm_lib_paths(repository_ctx, libs_paths, bash_bin)
@@ -547,11 +547,11 @@ def _create_local_rocm_repository(repository_ctx):
 
     bash_bin = get_bash_bin(repository_ctx)
     rocm_config = _get_rocm_config(repository_ctx, bash_bin, find_rocm_config_script)
-    enable_dcu = get_host_environ(repository_ctx, "TF_NEED_DCU")
+    enable_dcu = get_host_environ(repository_ctx, "TF_NEED_DCU") == '1'
 
     # For ROCm 4.1 and above use hipfft, older ROCm versions use rocfft
     rocm_version_number = int(rocm_config.rocm_version_number)
-    hipfft_or_rocfft = "rocfft" if rocm_version_number < 40100 or enable_dcu == '1' else "hipfft"
+    hipfft_or_rocfft = "rocfft" if rocm_version_number < 40100 or enable_dcu else "hipfft"
 
     # Copy header and library files to execroot.
     # rocm_toolkit_path
@@ -609,7 +609,7 @@ def _create_local_rocm_repository(repository_ctx):
     ]
 
     # Add Hipsolver on ROCm4.5+
-    if rocm_version_number >= 40500 and enable_dcu != '1':
+    if rocm_version_number >= 40500 and not enable_dcu:
         copy_rules.append(
             make_copy_dir_rule(
                 repository_ctx,
@@ -722,7 +722,7 @@ def _create_local_rocm_repository(repository_ctx):
                             '":hipsparse-include",\n' +
                             '":rocsolver-include"'),
     }
-    if rocm_version_number >= 40500 and  enable_dcu != '1':
+    if rocm_version_number >= 40500 and not enable_dcu:
         repository_dict["%{hipsolver_lib}"] = rocm_libs["hipsolver"].file_name
         repository_dict["%{rocm_headers}"] += ',\n":hipsolver-include"'
         repository_dict["%{hipblas_lib}"] = rocm_libs["hipblas"].file_name
@@ -796,7 +796,7 @@ def _create_local_rocm_repository(repository_ctx):
             "%{hip_runtime_library}": "amdhip64",
             "%{crosstool_verbose}": _crosstool_verbose(repository_ctx),
             "%{gcc_host_compiler_path}": str(cc),
-            "%{using_dcu}": enable_dcu,
+            "%{using_dcu}": str(enable_dcu),
         },
     )
 

@@ -69,7 +69,7 @@ std::string GetROCDLDir(const HloModuleConfig& config) {
     checked = true;
   }
 
-  #if (TF_ROCM_VERSION >= 30900 || TENSORFLOW_USE_DCU)
+#if (TF_ROCM_VERSION >= 30900 || TENSORFLOW_USE_DCU)
   std::string libdevice_dir = tensorflow::io::JoinPath(rocm_path, "amdgcn/bitcode");
 #else
   std::string libdevice_dir = tensorflow::io::JoinPath(rocm_path, "lib");
