@@ -21,6 +21,7 @@ load(
 load(
     "@local_config_rocm//rocm:build_defs.bzl",
     "if_rocm_is_configured",
+    "if_dcu",
 )
 load(
     "//tensorflow/stream_executor:build_defs.bzl",
@@ -309,7 +310,9 @@ cc_library(
         "ir_emitter_unnested.h",
         "kernel_mapping_scheme.h",
     ],
-    copts = if_cuda_is_configured(["-DGOOGLE_CUDA=1"]),
+    copts = if_cuda_is_configured(["-DGOOGLE_CUDA=1"
+    ]) + if_dcu(["-DTENSORFLOW_USE_DCU=1"
+    ]),
     deps = [
         ":backend_configs_cc",
         ":buffer_allocations",
@@ -723,7 +726,11 @@ cc_library(
         "sequential_thunk.h",
         "thunk_schedule.h",
         "while_thunk.h",
-    ],
+    ] + if_gpu_is_configured([
+        "cholesky_thunk.h",
+        "triangular_solve_thunk.h",
+    ]),
+    copts = if_dcu(["-DTENSORFLOW_USE_DCU=1"]),
     local_defines = select({
         ":is_xlir_enabled": ["XLA_ENABLE_XLIR=1"],
         "//conditions:default": [],
@@ -1216,6 +1223,7 @@ cc_library(
     name = "cusolver_context",
     srcs = if_gpu_is_configured(["cusolver_context.cc"]),
     hdrs = if_gpu_is_configured(["cusolver_context.h"]),
+    copts = if_dcu(["-DTENSORFLOW_USE_DCU=1"]),
     deps = [
         "//tensorflow/compiler/xla:comparison_util",
         "//tensorflow/compiler/xla:statusor",
@@ -1231,6 +1239,7 @@ cc_library(
         "@local_config_rocm//rocm:rocm_headers",
         "//tensorflow/stream_executor/rocm:rocblas_wrapper",
         "//tensorflow/stream_executor/rocm:rocsolver_wrapper",
+    ]) + if_dcu([], if_false=[
         "//tensorflow/stream_executor/rocm:hipsolver_wrapper",
     ]),
 )
@@ -1239,6 +1248,7 @@ cc_library(
     name = "cusolver_rewriter",
     srcs = if_gpu_is_configured(["cusolver_rewriter.cc"]),
     hdrs = if_gpu_is_configured(["cusolver_rewriter.h"]),
+    copts = if_dcu(["-DTENSORFLOW_USE_DCU=1"]),
     deps = if_gpu_is_configured([
         ":cusolver_context",
         ":ir_emission_utils",
@@ -1990,6 +2000,7 @@ cc_library(
     hdrs = if_rocm_is_configured([
         "amdgpu_compiler.h",
     ]),
+    copts = if_dcu(["-DTENSORFLOW_USE_DCU=1"]),
     deps = if_rocm_is_configured([
         ":cusolver_rewriter",
         ":gemm_rewriter",

@@ -24,7 +24,7 @@ limitations under the License.
 
 #include "rocm/rocm_config.h"
 
-#if TF_ROCM_VERSION < 40100 || TENSORFLOW_USING_DCU
+#if TF_ROCM_VERSION < 40100 || TENSORFLOW_USE_DCU
 #include "rocm/include/rocfft/hipfft.h"
 #else
 #include "rocm/include/hipfft/hipfft.h"
@@ -148,4 +148,5 @@ class ROCMFft : public fft::FftSupport {
 }  // namespace gpu
 }  // namespace stream_executor
 
+#endif
 #endif  // TENSORFLOW_STREAM_EXECUTOR_ROCM_ROCM_FFT_H_
