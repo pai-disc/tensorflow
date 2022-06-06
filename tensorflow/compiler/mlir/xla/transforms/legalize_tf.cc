@@ -1327,12 +1327,29 @@ class ConvertConvDynamic : public OpRewritePattern<OpT> {
       llvm::SmallVector<int64_t, num_dims> new_shape(
           filter_shape.begin(), filter_shape.begin() + num_spatial_dims);
       new_shape.push_back(1);
-      new_shape.push_back(filter_shape[num_spatial_dims] *
-                          filter_shape[num_spatial_dims + 1]);
-      operands[1] = rewriter.create<mhlo::ReshapeOp>(
+      if (filter_shape[num_spatial_dims] == ShapedType::kDynamicSize ||
+         filter_shape[num_spatial_dims + 1] == ShapedType::kDynamicSize) {
+        new_shape.push_back(ShapedType::kDynamicSize);
+      } else {
+        new_shape.push_back(filter_shape[num_spatial_dims] *
+                            filter_shape[num_spatial_dims + 1]);
+      }
+
+      int rank = filter_ty.getRank();
+      SmallVector<Value> filter_dim_sizes;
+      for (int i = 0; i < rank; ++i) {
+        filter_dim_sizes.push_back(
+            rewriter.create<tensor::DimOp>(loc, op.filter(), i));
+      }
+      filter_dim_sizes[rank-1] = rewriter.create<arith::MulIOp>(
+          loc, filter_dim_sizes[rank-1], filter_dim_sizes[rank-2]);
+      filter_dim_sizes[rank-2] = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+      Value new_filter_shape = rewriter.create<tensor::FromElementsOp>(loc, filter_dim_sizes);
+
+      operands[1] = rewriter.create<mhlo::DynamicReshapeOp>(
           op.getLoc(),
           RankedTensorType::get(new_shape, filter_ty.getElementType()),
-          operands[1]);
+          operands[1], new_filter_shape);
     }
     NamedAttribute attrs[] = {rhs_dilations_attr, window_strides_attr,
                               dimension_numbers_attr, feature_group_count_attr,
@@ -1350,6 +1367,10 @@ class ConvertConvDynamic : public OpRewritePattern<OpT> {
 
 using ConvertConv2DDynamic =
     ConvertConvDynamic<TF::Conv2DOp, /*num_spatial_dims=*/2>;
+
+using ConvertDepthConv2DOpDynamic =
+    ConvertConvDynamic<TF::DepthwiseConv2dNativeOp, /*num_spatial_dims=*/2,
+                  /*depthwise_conv=*/true>;
 
 // Converts the TensorFlow conv op in template to the generic HLO conv op by
 // converting TensorFlow op attributes to HLO op attributes.
@@ -8821,6 +8842,7 @@ void PopulateLegalizeTfPatterns(MLIRContext *context,
     ConvertConv3DBackpropInputOp,
     ConvertCumprodOp,
     ConvertCumsumOp,
+    ConvertDepthConv2DOpDynamic,
     ConvertDiagPartOp,
     ConvertDynamicExpandDimsOp,
     ConvertDynamicSqueezeOp,
