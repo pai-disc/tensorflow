@@ -47,6 +47,8 @@ limitations under the License.
 #include "mlir/IR/Types.h"  // from @llvm-project
 #include "mlir/Pass/Pass.h"  // from @llvm-project
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
+#include "mlir/Transforms/DialectConversion.h"  // from @llvm-project
+#include "tensorflow/compiler/mlir/disc/IR/hlo_disc_ops.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
 #include "tensorflow/compiler/mlir/xla/attribute_importer.h"
 #include "tensorflow/compiler/mlir/xla/transforms/passes.h"
@@ -1083,23 +1085,22 @@ class ConvertGatherV2OpDynamic : public OpRewritePattern<TF::GatherV2Op> {
     SmallVector<Value, 4> slice_sizes_vals;
     for (int64_t dim_idx = 0; dim_idx < params_rank; ++dim_idx) {
       if (dim_idx == axis) {
-        slice_sizes_vals.push_back(rewriter.create<ConstantOp>(
+        slice_sizes_vals.push_back(rewriter.create<arith::ConstantOp>(
             loc, rewriter.getIntegerAttr(indices_ty.getElementType(), 1)));
       } else {
         int64_t dim_size = params_ty.getDimSize(dim_idx);
         if (dim_size != ShapedType::kDynamicSize) {
-          slice_sizes_vals.push_back(rewriter.create<ConstantOp>(
+          slice_sizes_vals.push_back(rewriter.create<arith::ConstantOp>(
               loc,
               rewriter.getIntegerAttr(indices_ty.getElementType(), dim_size)));
         } else {
-          slice_sizes_vals.push_back(rewriter.create<IndexCastOp>(
-              loc, rewriter.create<tensor::DimOp>(loc, params, dim_idx),
-              indices_ty.getElementType()));
+          slice_sizes_vals.push_back(rewriter.create<arith::IndexCastOp>(
+              loc, indices_ty.getElementType(), rewriter.create<tensor::DimOp>(loc, params, dim_idx)));
         }
       }
     }
-    Value slice_sizes_value = rewriter.create<tensor::FromElementsOp>(
-        loc, indices_ty.getElementType(), slice_sizes_vals);
+    Value slice_sizes_value =
+        rewriter.create<tensor::FromElementsOp>(loc, slice_sizes_vals);
     // offset_dims
     SmallVector<int64_t, 4> offset_dims;
     for (int64_t dim_idx = 0; dim_idx < params_rank; dim_idx++) {
@@ -1115,13 +1116,12 @@ class ConvertGatherV2OpDynamic : public OpRewritePattern<TF::GatherV2Op> {
     SmallVector<int64_t, 4> start_index_map(1, axis);
     // index_vector_dim
     int64_t index_vector_dim = indices_rank;
-    auto dims_attr = GatherDimensionNumbers::get(
-        /*offset_dims=*/GetI64ElementsAttr(offset_dims, &rewriter),
-        /*collapsed_slice_dims=*/
-        GetI64ElementsAttr(collapsed_slice_dims, &rewriter),
-        /*start_index_map=*/GetI64ElementsAttr(start_index_map, &rewriter),
-        /*index_vector_dim=*/rewriter.getI64IntegerAttr(index_vector_dim),
-        rewriter.getContext());
+    auto dims_attr = GatherDimensionNumbersAttr::get(
+        rewriter.getContext(),
+        /*offset_dims=*/offset_dims,
+        /*collapsed_slice_dims=*/collapsed_slice_dims,
+        /*start_index_map=*/start_index_map,
+        /*index_vector_dim=*/index_vector_dim);
 
     rewriter.replaceOpWithNewOp<mhlo::DynamicGatherOp>(
         op, op.getType(), op.params(), op.indices(), slice_sizes_value,
@@ -1327,12 +1327,29 @@ class ConvertConvDynamic : public OpRewritePattern<OpT> {
       llvm::SmallVector<int64_t, num_dims> new_shape(
           filter_shape.begin(), filter_shape.begin() + num_spatial_dims);
       new_shape.push_back(1);
-      new_shape.push_back(filter_shape[num_spatial_dims] *
-                          filter_shape[num_spatial_dims + 1]);
-      operands[1] = rewriter.create<mhlo::ReshapeOp>(
+      if (filter_shape[num_spatial_dims] == ShapedType::kDynamicSize ||
+         filter_shape[num_spatial_dims + 1] == ShapedType::kDynamicSize) {
+        new_shape.push_back(ShapedType::kDynamicSize);
+      } else {
+        new_shape.push_back(filter_shape[num_spatial_dims] *
+                            filter_shape[num_spatial_dims + 1]);
+      }
+
+      int rank = filter_ty.getRank();
+      SmallVector<Value> filter_dim_sizes;
+      for (int i = 0; i < rank; ++i) {
+        filter_dim_sizes.push_back(
+            rewriter.create<tensor::DimOp>(loc, op.filter(), i));
+      }
+      filter_dim_sizes[rank-1] = rewriter.create<arith::MulIOp>(
+          loc, filter_dim_sizes[rank-1], filter_dim_sizes[rank-2]);
+      filter_dim_sizes[rank-2] = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+      Value new_filter_shape = rewriter.create<tensor::FromElementsOp>(loc, filter_dim_sizes);
+
+      operands[1] = rewriter.create<mhlo::DynamicReshapeOp>(
           op.getLoc(),
           RankedTensorType::get(new_shape, filter_ty.getElementType()),
-          operands[1]);
+          operands[1], new_filter_shape);
     }
     NamedAttribute attrs[] = {rhs_dilations_attr, window_strides_attr,
                               dimension_numbers_attr, feature_group_count_attr,
@@ -1350,6 +1367,10 @@ class ConvertConvDynamic : public OpRewritePattern<OpT> {
 
 using ConvertConv2DDynamic =
     ConvertConvDynamic<TF::Conv2DOp, /*num_spatial_dims=*/2>;
+
+using ConvertDepthConv2DOpDynamic =
+    ConvertConvDynamic<TF::DepthwiseConv2dNativeOp, /*num_spatial_dims=*/2,
+                  /*depthwise_conv=*/true>;
 
 // Converts the TensorFlow conv op in template to the generic HLO conv op by
 // converting TensorFlow op attributes to HLO op attributes.
@@ -1520,10 +1541,6 @@ class ConvertPadOpDynamic : public OpRewritePattern<TF::PadV2Op> {
     auto paddings_type = paddings.getType().dyn_cast<RankedTensorType>();
     if (!input_type || !paddings_type || !paddings_type.hasStaticShape())
       return failure();
-
-    // TODO(disc): Remove this constraint once fold and canonicalization is
-    // implemented.
-    if (input_type.hasStaticShape()) return failure();
 
     int input_rank = input_type.getRank();
     // interior padding
@@ -2088,12 +2105,12 @@ class ConvertMatrixDiagPartV3Op
     // values will be undefined. So we mask them later. Set up the boolean
     // expression that tells us which entries, in the output shape, are out of
     // bounds and thus become the padding_value.
-    Value x_in_bounds = rewriter.create<AndOp>(
+    Value x_in_bounds = rewriter.create<arith::AndIOp>(
         loc,
         rewriter.create<TF::GreaterEqualOp>(loc, b_false.getType(), n_plus_x,
                                             b_zero),
         rewriter.create<TF::LessOp>(loc, b_false.getType(), n_plus_x, b_cols));
-    Value y_in_bounds = rewriter.create<AndOp>(
+    Value y_in_bounds = rewriter.create<arith::AndIOp>(
         loc,
         rewriter.create<TF::GreaterEqualOp>(loc, b_false.getType(), n_plus_y,
                                             b_zero),
@@ -2102,7 +2119,7 @@ class ConvertMatrixDiagPartV3Op
         loc,
         RankedTensorType::get(Shape({num_diags, max_diag_len}),
                               rewriter.getIntegerType(1)),
-        rewriter.create<AndOp>(loc, x_in_bounds, y_in_bounds));
+        rewriter.create<arith::AndIOp>(loc, x_in_bounds, y_in_bounds));
 
     // Now combine x and y into the index data structure needed for gather.
     Shape concat_shape({2, num_diags, max_diag_len});
@@ -3391,18 +3408,13 @@ class ConvertBatchMatMulOp : public OpRewritePattern<TF::BatchMatMulOp> {
     rhs_type = rhs.getType().cast<RankedTensorType>();
     assert(lhs_type.getRank() == rhs_type.getRank());
     int64_t rank = lhs_type.getRank();
-    auto batch_dimensions = GetI64ElementsAttr(
-        llvm::to_vector<4>(llvm::seq<int64_t>(0, rank - 2)), &rewriter);
-    auto lhs_contracting_dimensions = GetI64ElementsAttr(
-        llvm::makeArrayRef({op.adj_x() ? rank - 2 : rank - 1}), &rewriter);
-    auto rhs_contracting_dimensions = GetI64ElementsAttr(
-        llvm::makeArrayRef({op.adj_y() ? rank - 1 : rank - 2}), &rewriter);
-    auto dimension_numbers = DotDimensionNumbers::get(
+    auto batch_dimensions = llvm::to_vector<4>(llvm::seq<int64_t>(0, rank - 2));
+    auto dimension_numbers = DotDimensionNumbersAttr::get(
+        rewriter.getContext(),
         /*lhs_batching_dimensions=*/batch_dimensions,
         /*rhs_batching_dimensions=*/batch_dimensions,
-        /*lhs_contracting_dimensions=*/lhs_contracting_dimensions,
-        /*rhs_contracting_dimensions=*/rhs_contracting_dimensions,
-        rewriter.getContext());
+        /*lhs_contracting_dimensions=*/{op.adj_x() ? rank - 2 : rank - 1},
+        /*rhs_contracting_dimensions=*/{op.adj_y() ? rank - 1 : rank - 2});
     // TODO(silvasean): Emit shape checks for contracting dimensions.
     // (The batch dimensions are checked by the broadcasting logic)
     rewriter.replaceOpWithNewOp<DotGeneralOp>(op, op.getType(), lhs, rhs,
@@ -4072,7 +4084,7 @@ constexpr void CopyBit(const T& src, unsigned src_index, T& dst,
 Value MaybeCastTo(OpBuilder& b, Location loc, Value value, Type type) {
   if (type == value.getType()) return value;
   assert(type.isIndex() || value.getType().isIndex());
-  return b.create<IndexCastOp>(loc, value, type);
+  return b.create<arith::IndexCastOp>(loc, type, value);
 }
 
 struct SparseSliceSpec {
@@ -4094,10 +4106,10 @@ struct DenseSliceSpec {
 static SmallVector<int64_t, 4> BuildDenseSliceSpec(
     PatternRewriter* rewriter, Location loc, Type index_ty,
     const SparseSliceSpec& sparse, DenseSliceSpec* dense) {
-  Value one =
-      rewriter->create<ConstantOp>(loc, rewriter->getIntegerAttr(index_ty, 1));
-  Value zero =
-      rewriter->create<ConstantOp>(loc, rewriter->getIntegerAttr(index_ty, 0));
+  Value one = rewriter->create<arith::ConstantOp>(
+      loc, rewriter->getIntegerAttr(index_ty, 1));
+  Value zero = rewriter->create<arith::ConstantOp>(
+      loc, rewriter->getIntegerAttr(index_ty, 0));
 
   // Build expanded dense begin, end, strides, begin_mask, end_mask, and
   // shrink_axis_mask.
@@ -4167,39 +4179,40 @@ static void CalculateSlicedShapeFromDenseIndices(
   assert(input_shape.size() == end.size());
   assert(input_shape.size() == stride.size());
 
-  Value one =
-      rewriter->create<ConstantOp>(loc, rewriter->getIntegerAttr(index_ty, 1));
-  Value zero =
-      rewriter->create<ConstantOp>(loc, rewriter->getIntegerAttr(index_ty, 0));
-  Value neg_one =
-      rewriter->create<ConstantOp>(loc, rewriter->getIntegerAttr(index_ty, -1));
+  Value one = rewriter->create<arith::ConstantOp>(
+      loc, rewriter->getIntegerAttr(index_ty, 1));
+  Value zero = rewriter->create<arith::ConstantOp>(
+      loc, rewriter->getIntegerAttr(index_ty, 0));
+  Value neg_one = rewriter->create<arith::ConstantOp>(
+      loc, rewriter->getIntegerAttr(index_ty, -1));
   for (int i = 0, e = input_shape.size(); i < e; ++i) {
     Value dim_i = input_shape[i];
     Value begin_i = begin[i];
     Value end_i = end[i];
-    Value stride_i = rewriter->create<ConstantOp>(loc, rewriter->getIntegerAttr(index_ty, stride[i]));
+    Value stride_i = rewriter->create<arith::ConstantOp>(
+        loc, rewriter->getIntegerAttr(index_ty, stride[i]));
 
     // [0]: mask for begin, [1]: mask for end
     int64_t masks[] = {begin_mask & (1 << i), end_mask & (1 << i)};
     // [0]: bound for begin, [1]: bound for end
     // int64_t bounds[] = {stride_i > 0 ? 0 : -1,
     //                     stride_i > 0 ? dim_i : dim_i - 1};
-    auto stride_is_pos =
-        rewriter->create<CmpIOp>(loc, CmpIPredicate::sgt, stride_i, zero);
-    auto dim_i_minus_one = rewriter->create<SubIOp>(loc, dim_i, one);
+    auto stride_is_pos = rewriter->create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::sgt, stride_i, zero);
+    auto dim_i_minus_one = rewriter->create<arith::SubIOp>(loc, dim_i, one);
     SmallVector<Value, 2> bounds(2, nullptr);
     bounds[0] =
-        rewriter->create<mlir::SelectOp>(loc, stride_is_pos, zero, neg_one);
-    bounds[1] = rewriter->create<mlir::SelectOp>(loc, stride_is_pos, dim_i,
+        rewriter->create<mlir::arith::SelectOp>(loc, stride_is_pos, zero, neg_one);
+    bounds[1] = rewriter->create<mlir::arith::SelectOp>(loc, stride_is_pos, dim_i,
                                                  dim_i_minus_one);
 
     auto clamp = [&](Value val, Value low, Value high) {
-      auto val_lt_low =
-          rewriter->create<CmpIOp>(loc, CmpIPredicate::slt, val, low);
-      auto high_lt_val =
-          rewriter->create<CmpIOp>(loc, CmpIPredicate::slt, high, val);
-      auto t = rewriter->create<mlir::SelectOp>(loc, high_lt_val, high, val);
-      Value result = rewriter->create<mlir::SelectOp>(loc, val_lt_low, low, t);
+      auto val_lt_low = rewriter->create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::slt, val, low);
+      auto high_lt_val = rewriter->create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::slt, high, val);
+      auto t = rewriter->create<mlir::arith::SelectOp>(loc, high_lt_val, high, val);
+      Value result = rewriter->create<mlir::arith::SelectOp>(loc, val_lt_low, low, t);
       return result;
     };
 
@@ -4208,17 +4221,18 @@ static void CalculateSlicedShapeFromDenseIndices(
     auto canonicalize = [&](Value point, int c) {
       if (masks[c]) {
         // return stride_i > 0 ? bounds[c] : bounds[(c + 1) & 1];
-        Value r = rewriter->create<mlir::SelectOp>(
+        Value r = rewriter->create<mlir::arith::SelectOp>(
             loc, stride_is_pos, bounds[c], bounds[(c + 1) & 1]);
         return r;
       }
 
       // Add dim as offset to negative range point.
       // point = point < 0 ? dim_i + point : point;
-      auto point_is_neg =
-          rewriter->create<CmpIOp>(loc, CmpIPredicate::slt, point, zero);
-      auto dim_i_plus_point = rewriter->create<AddIOp>(loc, dim_i, point);
-      auto point_pos = rewriter->create<mlir::SelectOp>(
+      auto point_is_neg = rewriter->create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::slt, point, zero);
+      auto dim_i_plus_point =
+          rewriter->create<arith::AddIOp>(loc, dim_i, point);
+      auto point_pos = rewriter->create<mlir::arith::SelectOp>(
           loc, point_is_neg, dim_i_plus_point, point);
       return clamp(point_pos, bounds[0], bounds[1]);
     };
@@ -4227,40 +4241,42 @@ static void CalculateSlicedShapeFromDenseIndices(
     end_i = canonicalize(end_i, 1);
 
     // interval_len = end_i - begin_i;
-    auto interval_len = rewriter->create<SubIOp>(loc, end_i, begin_i);
+    auto interval_len = rewriter->create<arith::SubIOp>(loc, end_i, begin_i);
     // If internal length is zero or has different sign from stride, it's a
     // degenerated case: we are slicing nothing. Otherwise, calculate the sliced
     // size.
     // size_i = 0;
     // if (interval_len != 0 && (interval_len < 0) == (stride_i < 0))
     //   size_i = (interval_len / stride_i) + (interval_len % stride_i != 0);
-    auto not_degenerated = rewriter->create<mlir::AndOp>(
+    auto not_degenerated = rewriter->create<arith::AndIOp>(
         loc,
-        rewriter->create<CmpIOp>(loc, CmpIPredicate::ne, interval_len, zero),
-        rewriter->create<CmpIOp>(
-            loc, CmpIPredicate::eq,
-            rewriter->create<CmpIOp>(loc, CmpIPredicate::slt, interval_len,
-                                     zero),
-            rewriter->create<CmpIOp>(loc, CmpIPredicate::slt, stride_i, zero)));
+        rewriter->create<arith::CmpIOp>(loc, arith::CmpIPredicate::ne,
+                                        interval_len, zero),
+        rewriter->create<arith::CmpIOp>(
+            loc, arith::CmpIPredicate::eq,
+            rewriter->create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
+                                            interval_len, zero),
+            rewriter->create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
+                                            stride_i, zero)));
     auto interval_len_div_stride =
-        rewriter->create<SignedDivIOp>(loc, interval_len, stride_i);
+        rewriter->create<arith::DivSIOp>(loc, interval_len, stride_i);
     auto interval_len_rem_stride =
-        rewriter->create<SignedRemIOp>(loc, interval_len, stride_i);
-    auto interval_len_rem_stride_not_zero = rewriter->create<CmpIOp>(
-        loc, CmpIPredicate::ne, interval_len_rem_stride, zero);
+        rewriter->create<arith::RemSIOp>(loc, interval_len, stride_i);
+    auto interval_len_rem_stride_not_zero = rewriter->create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::ne, interval_len_rem_stride, zero);
     auto interval_len_div_stride_plus_1 =
-        rewriter->create<AddIOp>(loc, interval_len_div_stride, one);
-    auto size_i_val = rewriter->create<mlir::SelectOp>(
+        rewriter->create<arith::AddIOp>(loc, interval_len_div_stride, one);
+    auto size_i_val = rewriter->create<mlir::arith::SelectOp>(
         loc, interval_len_rem_stride_not_zero, interval_len_div_stride_plus_1,
         interval_len_div_stride);
-    auto size_i = rewriter->create<mlir::SelectOp>(loc, not_degenerated,
+    auto size_i = rewriter->create<mlir::arith::SelectOp>(loc, not_degenerated,
                                                    size_i_val, zero);
 
     begin[i] = begin_i;
     if (IsSet(shrink_axis_mask, i)) {
       // Shrink this dimension. It means we only take the element at begin_i.
       input_shape[i] = one;
-      end[i] = rewriter->create<AddIOp>(loc, begin_i, one);
+      end[i] = rewriter->create<arith::AddIOp>(loc, begin_i, one);
       stride[i] = 1;
     } else {
       input_shape[i] = size_i;
@@ -4280,7 +4296,7 @@ static void CalculateFinalShape(PatternRewriter* rewriter, Location loc,
   for (int64_t i = 0; i < dense_dims; ++i) {
     int64_t new_axis = new_axis_spec[i];
     for (int64_t m = 0; m < new_axis; ++m) {
-      final_shape->push_back(rewriter->create<ConstantOp>(
+      final_shape->push_back(rewriter->create<arith::ConstantOp>(
           loc, rewriter->getIntegerAttr(index_ty, 1)));
     }
     if (IsSet(shrink_axis_mask, i)) {
@@ -4291,7 +4307,7 @@ static void CalculateFinalShape(PatternRewriter* rewriter, Location loc,
   // potential new axis after the last dim
   int64_t new_axis = new_axis_spec[dense_dims];
   for (int64_t m = 0; m < new_axis; ++m) {
-    final_shape->push_back(rewriter->create<ConstantOp>(
+    final_shape->push_back(rewriter->create<arith::ConstantOp>(
         loc, rewriter->getIntegerAttr(index_ty, 1)));
   }
 }
@@ -4365,17 +4381,19 @@ bool GetSlicedBoundRanges(
   auto to_shape_scalar_type = [&](Value v) {
     return MaybeCastTo(rewriter, loc, v, shape_scalar_type);
   };
-  Value zero = to_shape_scalar_type(rewriter.create<ConstantIndexOp>(loc, 0));
-  auto plusIfNeg = [&] (Value val, Value to_plus) {
-    Value isNeg = rewriter.create<CmpIOp>(loc, CmpIPredicate::slt, val, zero);
-    Value refinedVal = rewriter.create<AddIOp>(loc, val, to_plus);
-    Value result = rewriter.create<mlir::SelectOp>(loc, isNeg, refinedVal, val);
+  Value zero =
+      to_shape_scalar_type(rewriter.create<arith::ConstantIndexOp>(loc, 0));
+  auto plusIfNeg = [&](Value val, Value to_plus) {
+    Value isNeg = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
+                                                 val, zero);
+    Value refinedVal = rewriter.create<arith::AddIOp>(loc, val, to_plus);
+    Value result = rewriter.create<mlir::arith::SelectOp>(loc, isNeg, refinedVal, val);
     return result;
   };
 
   SmallVector<Value, 4> sparse_begin, sparse_end;
   for (int64_t i = 0; i < rank; ++i) {
-    Value idx = rewriter.create<ConstantIndexOp>(loc, i);
+    Value idx = rewriter.create<arith::ConstantIndexOp>(loc, i);
     input_shape_vec.push_back(to_shape_scalar_type(
         rewriter.create<tensor::ExtractOp>(loc, in_shape, idx)));
   }
@@ -4419,12 +4437,14 @@ class ConvertStridedSliceOpDynamic : public OpRewritePattern<TF::StridedSliceOp>
     };
 
     int64_t indices_elements = begin_indices.size();
-    Value one = rewriter.create<ConstantOp>(loc, rewriter.getIntegerAttr(elem_ty, 1));
-    Value zero = rewriter.create<ConstantOp>(loc, rewriter.getIntegerAttr(elem_ty, 0));
+    Value one = rewriter.create<arith::ConstantIntOp>(
+        loc, 1, elem_ty.getIntOrFloatBitWidth());
+    Value zero = rewriter.create<arith::ConstantIntOp>(
+        loc, 0, elem_ty.getIntOrFloatBitWidth());
     auto in_shape = rewriter.create<shape::ShapeOfOp>(loc, op.input());
 
     for (int64_t i = 0; i < indices_elements; ++i) {
-      Value idx = rewriter.create<ConstantIndexOp>(loc, i);
+      Value idx = rewriter.create<arith::ConstantIndexOp>(loc, i);
       Value shape_val = to_shape_scalar_type(
         rewriter.create<tensor::ExtractOp>(loc, in_shape, idx));
       Value begin = begin_indices[i];
@@ -4437,10 +4457,10 @@ class ConvertStridedSliceOpDynamic : public OpRewritePattern<TF::StridedSliceOp>
         //
         // begin = (shape[i] - 1) - begin
         // end = (shape[i] - 1) - end
-        begin = rewriter.create<SubIOp>(loc,
-            rewriter.create<SubIOp>(loc, shape_val, one), begin);
-        end = rewriter.create<SubIOp>(loc,
-            rewriter.create<SubIOp>(loc, shape_val, one), end);
+        begin = rewriter.create<arith::SubIOp>(
+            loc, rewriter.create<arith::SubIOp>(loc, shape_val, one), begin);
+        end = rewriter.create<arith::SubIOp>(
+            loc, rewriter.create<arith::SubIOp>(loc, shape_val, one), end);
         stride = -stride;
         dims_to_reverse.push_back(i);
       }
@@ -4448,19 +4468,22 @@ class ConvertStridedSliceOpDynamic : public OpRewritePattern<TF::StridedSliceOp>
       //begin = std::max(int64_t(0), begin);
       //end = std::max(begin, end);
       //end = std::min(end, input_shape[i]);
-      auto cmp1 = rewriter.create<CmpIOp>(loc, CmpIPredicate::sgt, begin, zero);
-      begin = rewriter.create<mlir::SelectOp>(loc, cmp1, begin, zero);
+      auto cmp1 = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sgt,
+                                                 begin, zero);
+      begin = rewriter.create<mlir::arith::SelectOp>(loc, cmp1, begin, zero);
 
-      auto cmp2 = rewriter.create<CmpIOp>(loc, CmpIPredicate::sgt, begin, end);
-      end = rewriter.create<mlir::SelectOp>(loc, cmp2, begin, end);
+      auto cmp2 = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sgt,
+                                                 begin, end);
+      end = rewriter.create<mlir::arith::SelectOp>(loc, cmp2, begin, end);
 
-      auto cmp3 = rewriter.create<CmpIOp>(loc, CmpIPredicate::slt, end, shape_val);
-      end = rewriter.create<mlir::SelectOp>(loc, cmp3, end, shape_val);
+      auto cmp3 = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
+                                                 end, shape_val);
+      end = rewriter.create<mlir::arith::SelectOp>(loc, cmp3, end, shape_val);
 
       hlo_begin_indices.push_back(begin);
       hlo_end_indices.push_back(end);
-      hlo_strides.push_back(
-          rewriter.create<ConstantOp>(loc, rewriter.getIntegerAttr(elem_ty, stride)));
+      hlo_strides.push_back(rewriter.create<arith::ConstantIntOp>(
+          loc, stride, elem_ty.getIntOrFloatBitWidth()));
     }
     return true;
   }
@@ -4528,11 +4551,11 @@ class ConvertStridedSliceOpDynamic : public OpRewritePattern<TF::StridedSliceOp>
     }
 
     Value begin_vec =
-        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, hlo_begin_indices);
+        rewriter.create<tensor::FromElementsOp>(loc, hlo_begin_indices);
     Value end_vec =
-        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, hlo_end_indices);
+        rewriter.create<tensor::FromElementsOp>(loc, hlo_end_indices);
     Value strides_vec =
-        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, hlo_strides);
+        rewriter.create<tensor::FromElementsOp>(loc, hlo_strides);
     SmallVector<int64_t, 4> slice_result_shape(
         begin_indices.size(), ShapedType::kDynamicSize);
     RankedTensorType slice_result_type =
@@ -4547,7 +4570,7 @@ class ConvertStridedSliceOpDynamic : public OpRewritePattern<TF::StridedSliceOp>
       rewriter.replaceOpWithNewOp<mhlo::ReshapeOp>(op, op.getType(), sliced);
     } else {
       Value output_shape =
-        rewriter.create<tensor::FromElementsOp>(loc, elem_ty, output_shape_vec);
+          rewriter.create<tensor::FromElementsOp>(loc, output_shape_vec);
       rewriter.replaceOpWithNewOp<mhlo::DynamicReshapeOp>(
         op, op.getType(), sliced, output_shape);
     }
@@ -5798,33 +5821,35 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
     Location loc = op.getLoc();
     auto shape_scalar_type = rewriter.getIntegerType(32);
     auto get_const = [&](int64_t val) {
-      return rewriter.create<mlir::ConstantIntOp>(loc, val, shape_scalar_type);
+      return rewriter.create<arith::ConstantIntOp>(loc, val, shape_scalar_type);
     };
     auto get_dim_value = [&](Value val, int64_t dim) {
       Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
-      return rewriter.create<IndexCastOp>(loc, dim_value, shape_scalar_type);
+      return rewriter.create<arith::IndexCastOp>(loc, shape_scalar_type, dim_value);
     };
     auto sub_one = [&](Value val) {
-      auto one = rewriter.create<ConstantIntOp>(loc, 1, shape_scalar_type);
-      return rewriter.create<SubIOp>(loc, val, one);
+      auto one =
+          rewriter.create<arith::ConstantIntOp>(loc, 1, shape_scalar_type);
+      return rewriter.create<arith::SubIOp>(loc, val, one);
     };
     auto plus_one = [&](Value val) {
-      auto one = rewriter.create<ConstantIntOp>(loc, 1, shape_scalar_type);
-      return rewriter.create<AddIOp>(loc, val, one);
+      auto one =
+          rewriter.create<arith::ConstantIntOp>(loc, 1, shape_scalar_type);
+      return rewriter.create<arith::AddIOp>(loc, val, one);
     };
     auto mul_vals = [&](Value lhs, Value rhs) {
-      return rewriter.create<MulIOp>(loc, lhs, rhs);
+      return rewriter.create<arith::MulIOp>(loc, lhs, rhs);
     };
     auto add_vals = [&](Value lhs, Value rhs) {
-      return rewriter.create<AddIOp>(loc, lhs, rhs);
+      return rewriter.create<arith::AddIOp>(loc, lhs, rhs);
     };
     auto sub_vals = [&](Value lhs, Value rhs) {
-      return rewriter.create<SubIOp>(loc, lhs, rhs);
+      return rewriter.create<arith::SubIOp>(loc, lhs, rhs);
     };
     auto get_int = [](Attribute attr) {
       return attr.template cast<IntegerAttr>().getInt();
     };
-    Value idx = rewriter.create<ConstantIndexOp>(loc, spatial_dim);
+    Value idx = rewriter.create<arith::ConstantIndexOp>(loc, spatial_dim);
     dim->input_size =
         rewriter.create<tensor::ExtractOp>(loc, op.input_sizes(), idx);
     dim->filter_size = get_dim_value(op.filter(), filter_spatial_dim);
@@ -5863,13 +5888,13 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
     auto shape_scalar_type = rewriter.getIntegerType(32);
     auto get_dim_value = [&](Value val, int64_t dim) {
       Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
-      return rewriter.create<IndexCastOp>(loc, dim_value, shape_scalar_type);
+      return rewriter.create<arith::IndexCastOp>(loc, shape_scalar_type, dim_value);
     };
     auto get_int = [](Attribute attr) {
       return attr.template cast<IntegerAttr>().getInt();
     };
     auto get_const = [&](int64_t val) {
-      return rewriter.create<mlir::ConstantIntOp>(loc, val, shape_scalar_type);
+      return rewriter.create<arith::ConstantIntOp>(loc, val, shape_scalar_type);
     };
     // The + 2 in the following line is for the batch and feature dimensions.
     const int num_dims = num_spatial_dims + 2;
@@ -5918,53 +5943,57 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
     Location loc = op.getLoc();
     switch (padding_type) {
       case tensorflow::Padding::VALID: {
-        auto zero = rewriter.create<ConstantIntOp>(loc, 0, shape_scalar_type);
+        auto zero =
+            rewriter.create<arith::ConstantIntOp>(loc, 0, shape_scalar_type);
         *padding_low = *padding_high = zero;
         break;
       }
       case tensorflow::Padding::EXPLICIT:
         break;
       case tensorflow::Padding::SAME: {
-        auto zero = rewriter.create<ConstantIntOp>(loc, 0, shape_scalar_type);
-        auto one = rewriter.create<ConstantIntOp>(loc, 1, shape_scalar_type);
-        auto two = rewriter.create<ConstantIntOp>(loc, 2, shape_scalar_type);
+        auto zero =
+            rewriter.create<arith::ConstantIntOp>(loc, 0, shape_scalar_type);
+        auto one =
+            rewriter.create<arith::ConstantIntOp>(loc, 1, shape_scalar_type);
+        auto two =
+            rewriter.create<arith::ConstantIntOp>(loc, 2, shape_scalar_type);
         // See also the parallel implementation in
         // GetWindowedOutputSizeFromDimsV2. effective_filter_size = (filter_size
         // - 1) * dilation_rate + 1
-        Value stride_value =
-            rewriter.create<ConstantIntOp>(loc, stride, shape_scalar_type);
-        Value dilation_rate_value = rewriter.create<ConstantIntOp>(
+        Value stride_value = rewriter.create<arith::ConstantIntOp>(
+            loc, stride, shape_scalar_type);
+        Value dilation_rate_value = rewriter.create<arith::ConstantIntOp>(
             loc, dilation_rate, shape_scalar_type);
-        Value effective_filter_size_op = rewriter.create<AddIOp>(
+        Value effective_filter_size_op = rewriter.create<arith::AddIOp>(
             loc, one,
-            rewriter.create<MulIOp>(
+            rewriter.create<arith::MulIOp>(
                 loc, dilation_rate_value,
-                rewriter.create<SubIOp>(loc, filter_size, one)));
+                rewriter.create<arith::SubIOp>(loc, filter_size, one)));
         // output_size = (input_size + stride - 1) / stride;
-        Value output_size = rewriter.create<UnsignedDivIOp>(
+        Value output_size = rewriter.create<arith::DivUIOp>(
             loc,
-            rewriter.create<AddIOp>(
+            rewriter.create<arith::AddIOp>(
                 loc, input_size,
-                rewriter.create<SubIOp>(loc, stride_value, one)),
+                rewriter.create<arith::SubIOp>(loc, stride_value, one)),
             stride_value);
         // std::max(int64{0}, (output_size - 1) * stride +
         //     effective_filter_size - input_size);
-        Value padding_needed = rewriter.create<SubIOp>(
+        Value padding_needed = rewriter.create<arith::SubIOp>(
             loc,
-            rewriter.create<AddIOp>(
+            rewriter.create<arith::AddIOp>(
                 loc, effective_filter_size_op,
-                rewriter.create<MulIOp>(
+                rewriter.create<arith::MulIOp>(
                     loc, stride_value,
-                    rewriter.create<SubIOp>(loc, output_size, one))),
+                    rewriter.create<arith::SubIOp>(loc, output_size, one))),
             input_size);
-        Value cond = rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::sge,
-                                                   padding_needed, zero);
-        padding_needed = rewriter.create<mlir::SelectOp>(
+        Value cond = rewriter.create<arith::CmpIOp>(
+            loc, arith::CmpIPredicate::sge, padding_needed, zero);
+        padding_needed = rewriter.create<mlir::arith::SelectOp>(
             loc, padding_needed.getType(), cond, padding_needed, zero);
         *padding_low =
-            rewriter.create<UnsignedDivIOp>(loc, padding_needed, two);
+            rewriter.create<arith::DivUIOp>(loc, padding_needed, two);
         *padding_high =
-            rewriter.create<SubIOp>(loc, padding_needed, *padding_low);
+            rewriter.create<arith::SubIOp>(loc, padding_needed, *padding_low);
         break;
       }
     }
@@ -5976,11 +6005,11 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
     Location loc = op.getLoc();
     auto shape_scalar_type = rewriter.getIntegerType(32);
     auto get_const = [&](int64_t val) {
-      return rewriter.create<mlir::ConstantIntOp>(loc, val, shape_scalar_type);
+      return rewriter.create<arith::ConstantIntOp>(loc, val, shape_scalar_type);
     };
     auto get_dim_value = [&](Value val, int64_t dim) {
       Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
-      return rewriter.create<IndexCastOp>(loc, dim_value, shape_scalar_type);
+      return rewriter.create<arith::IndexCastOp>(loc, shape_scalar_type, dim_value);
     };
 
     // Unpack all of the attributes.
@@ -5995,10 +6024,10 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
     auto input_sizes_ty =
         op.input_sizes().getType().template dyn_cast<RankedTensorType>();
     constexpr int num_dims = num_spatial_dims + 2;
-    if (!input_sizes_ty || input_sizes_ty.getRank() != 1 
-        || input_sizes_ty.getShape()[0] != num_dims) 
+    if (!input_sizes_ty || input_sizes_ty.getRank() != 1
+        || input_sizes_ty.getShape()[0] != num_dims)
       return failure();
-    
+
     auto filter_ty =
         op.filter().getType().template dyn_cast<RankedTensorType>();
     auto out_backprop_ty =
@@ -6032,7 +6061,7 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
         explicit_paddings.push_back(
             explicit_padding.cast<IntegerAttr>().getInt());
     }
-    
+
     ArrayRef<int64_t> filter_shape = filter_ty.getShape();
 
     // Reuse dimension computation logic from conv_grad_shape_utils.cc.
@@ -6059,8 +6088,6 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
       paddings.push_back(spatial_dim_i.pad_after);
     }
 
-    auto spatial_dims_attr = GetI64ElementsAttr(spatial_dims, &rewriter);
-
     Value filter = op.filter();
 
     // TODO(feiwen): support group conv
@@ -6077,14 +6104,12 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
 
     const int batch_dim =
         tensorflow::GetTensorBatchDimIndex(num_dims, data_format);
-    auto batch_dim_attr = rewriter.getI64IntegerAttr(batch_dim);
-    auto feature_dim_attr = rewriter.getI64IntegerAttr(feature_dim);
 
     SmallVector<Value, 3> operands;
     operands.push_back(op.out_backprop());
     operands.push_back(filter);
-    Value paddings_op = rewriter.create<tensor::FromElementsOp>(
-        op.getLoc(), rewriter.getI32Type(), paddings);
+    Value paddings_op =
+        rewriter.create<tensor::FromElementsOp>(op.getLoc(), paddings);
     operands.push_back(paddings_op);
 
     auto rhs_dilations_attr = rewriter.getNamedAttr(
@@ -6100,24 +6125,25 @@ class ConvertConvBackpropInputDynamic : public OpRewritePattern<OpTy> {
     auto batch_group_count_attr = rewriter.getNamedAttr(
         "batch_group_count", rewriter.getI64IntegerAttr(1));
 
+    SmallVector<int64_t, 4> kernel_spatial_dims;
+    kernel_spatial_dims.resize(num_spatial_dims);
+    std::iota(kernel_spatial_dims.begin(), kernel_spatial_dims.end(), 0);
     auto dimension_numbers_attr = rewriter.getNamedAttr(
         "dimension_numbers",
-        ConvDimensionNumbers::get(
-            /*input_batch_dimension=*/batch_dim_attr,
-            /*input_feature_dimension=*/feature_dim_attr,
-            /*input_spatial_dimensions=*/spatial_dims_attr,
+        ConvDimensionNumbersAttr::get(
+            rewriter.getContext(),
+            /*input_batch_dimension=*/batch_dim,
+            /*input_feature_dimension=*/feature_dim,
+            /*input_spatial_dimensions=*/spatial_dims,
             // TF filter shape is [ H, W, ..., inC, outC ]
             // Transpose the input and output features for computing the
             // gradient.
-            /*kernel_input_feature_dimension=*/
-            rewriter.getI64IntegerAttr(num_spatial_dims + 1),
-            /*kernel_output_feature_dimension=*/
-            rewriter.getI64IntegerAttr(num_spatial_dims),
-            /*kernel_spatial_dimensions=*/kernel_spatial_dims_attr,
-            /*output_batch_dimension=*/batch_dim_attr,
-            /*output_feature_dimension=*/feature_dim_attr,
-            /*output_spatial_dimensions=*/spatial_dims_attr,
-            rewriter.getContext()));
+            /*kernel_input_feature_dimension=*/num_spatial_dims + 1,
+            /*kernel_output_feature_dimension=*/num_spatial_dims,
+            /*kernel_spatial_dimensions=*/kernel_spatial_dims,
+            /*output_batch_dimension=*/batch_dim,
+            /*output_feature_dimension=*/feature_dim,
+            /*output_spatial_dimensions=*/spatial_dims));
 
     NamedAttribute attrs[] = {rhs_dilations_attr,       lhs_dilations_attr,
                               window_strides_attr,      dimension_numbers_attr,
@@ -6358,53 +6384,57 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
     Location loc = op.getLoc();
     switch (padding_type) {
       case tensorflow::Padding::VALID: {
-        auto zero = rewriter.create<ConstantIntOp>(loc, 0, shape_scalar_type);
+        auto zero =
+            rewriter.create<arith::ConstantIntOp>(loc, 0, shape_scalar_type);
         *padding_low = *padding_high = zero;
         break;
       }
       case tensorflow::Padding::EXPLICIT:
         break;
       case tensorflow::Padding::SAME: {
-        auto zero = rewriter.create<ConstantIntOp>(loc, 0, shape_scalar_type);
-        auto one = rewriter.create<ConstantIntOp>(loc, 1, shape_scalar_type);
-        auto two = rewriter.create<ConstantIntOp>(loc, 2, shape_scalar_type);
+        auto zero =
+            rewriter.create<arith::ConstantIntOp>(loc, 0, shape_scalar_type);
+        auto one =
+            rewriter.create<arith::ConstantIntOp>(loc, 1, shape_scalar_type);
+        auto two =
+            rewriter.create<arith::ConstantIntOp>(loc, 2, shape_scalar_type);
         // See also the parallel implementation in
         // GetWindowedOutputSizeFromDimsV2. effective_filter_size = (filter_size
         // - 1) * dilation_rate + 1
-        Value stride_value =
-            rewriter.create<ConstantIntOp>(loc, stride, shape_scalar_type);
-        Value dilation_rate_value = rewriter.create<ConstantIntOp>(
+        Value stride_value = rewriter.create<arith::ConstantIntOp>(
+            loc, stride, shape_scalar_type);
+        Value dilation_rate_value = rewriter.create<arith::ConstantIntOp>(
             loc, dilation_rate, shape_scalar_type);
-        Value effective_filter_size_op = rewriter.create<AddIOp>(
+        Value effective_filter_size_op = rewriter.create<arith::AddIOp>(
             loc, one,
-            rewriter.create<MulIOp>(
+            rewriter.create<arith::MulIOp>(
                 loc, dilation_rate_value,
-                rewriter.create<SubIOp>(loc, filter_size, one)));
+                rewriter.create<arith::SubIOp>(loc, filter_size, one)));
         // output_size = (input_size + stride - 1) / stride;
-        Value output_size = rewriter.create<UnsignedDivIOp>(
+        Value output_size = rewriter.create<arith::DivUIOp>(
             loc,
-            rewriter.create<AddIOp>(
+            rewriter.create<arith::AddIOp>(
                 loc, input_size,
-                rewriter.create<SubIOp>(loc, stride_value, one)),
+                rewriter.create<arith::SubIOp>(loc, stride_value, one)),
             stride_value);
         // std::max(int64{0}, (output_size - 1) * stride +
         //     effective_filter_size - input_size);
-        Value padding_needed = rewriter.create<SubIOp>(
+        Value padding_needed = rewriter.create<arith::SubIOp>(
             loc,
-            rewriter.create<AddIOp>(
+            rewriter.create<arith::AddIOp>(
                 loc, effective_filter_size_op,
-                rewriter.create<MulIOp>(
+                rewriter.create<arith::MulIOp>(
                     loc, stride_value,
-                    rewriter.create<SubIOp>(loc, output_size, one))),
+                    rewriter.create<arith::SubIOp>(loc, output_size, one))),
             input_size);
-        Value cond = rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::sge,
-                                                   padding_needed, zero);
-        padding_needed = rewriter.create<mlir::SelectOp>(
+        Value cond = rewriter.create<arith::CmpIOp>(
+            loc, arith::CmpIPredicate::sge, padding_needed, zero);
+        padding_needed = rewriter.create<mlir::arith::SelectOp>(
             loc, padding_needed.getType(), cond, padding_needed, zero);
         *padding_low =
-            rewriter.create<UnsignedDivIOp>(loc, padding_needed, two);
+            rewriter.create<arith::DivUIOp>(loc, padding_needed, two);
         *padding_high =
-            rewriter.create<SubIOp>(loc, padding_needed, *padding_low);
+            rewriter.create<arith::SubIOp>(loc, padding_needed, *padding_low);
         break;
       }
     }
@@ -6419,34 +6449,37 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
     Location loc = op.getLoc();
     auto shape_scalar_type = rewriter.getIntegerType(32);
     auto get_const = [&](int64_t val) {
-      return rewriter.create<mlir::ConstantIntOp>(loc, val, shape_scalar_type);
+      return rewriter.create<arith::ConstantIntOp>(loc, val, shape_scalar_type);
     };
     auto get_dim_value = [&](Value val, int64_t dim) {
       Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
-      return rewriter.create<IndexCastOp>(loc, dim_value, shape_scalar_type);
+      return rewriter.create<arith::IndexCastOp>(loc, shape_scalar_type, dim_value);
     };
     auto sub_one = [&](Value val) {
-      auto one = rewriter.create<ConstantIntOp>(loc, 1, shape_scalar_type);
-      return rewriter.create<SubIOp>(loc, val, one);
+      auto one =
+          rewriter.create<arith::ConstantIntOp>(loc, 1, shape_scalar_type);
+      return rewriter.create<arith::SubIOp>(loc, val, one);
     };
     auto plus_one = [&](Value val) {
-      auto one = rewriter.create<ConstantIntOp>(loc, 1, shape_scalar_type);
-      return rewriter.create<AddIOp>(loc, val, one);
+      auto one =
+          rewriter.create<arith::ConstantIntOp>(loc, 1, shape_scalar_type);
+      return rewriter.create<arith::AddIOp>(loc, val, one);
     };
     auto mul_vals = [&](Value lhs, Value rhs) {
-      return rewriter.create<MulIOp>(loc, lhs, rhs);
+      return rewriter.create<arith::MulIOp>(loc, lhs, rhs);
     };
     auto add_vals = [&](Value lhs, Value rhs) {
-      return rewriter.create<AddIOp>(loc, lhs, rhs);
+      return rewriter.create<arith::AddIOp>(loc, lhs, rhs);
     };
     auto sub_vals = [&](Value lhs, Value rhs) {
-      return rewriter.create<SubIOp>(loc, lhs, rhs);
+      return rewriter.create<arith::SubIOp>(loc, lhs, rhs);
     };
     auto get_int = [](Attribute attr) {
       return attr.template cast<IntegerAttr>().getInt();
     };
     dim->input_size = get_dim_value(op.input(), spatial_dim);
-    Value idx = rewriter.create<ConstantIndexOp>(loc, filter_spatial_dim);
+    Value idx =
+        rewriter.create<arith::ConstantIndexOp>(loc, filter_spatial_dim);
     dim->filter_size =
         rewriter.create<tensor::ExtractOp>(loc, op.filter_sizes(), idx);
     dim->output_size = get_dim_value(op.out_backprop(), spatial_dim);
@@ -6483,10 +6516,10 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
     auto shape_scalar_type = rewriter.getIntegerType(32);
     auto get_dim_value = [&](Value val, int64_t dim) {
       Value dim_value = rewriter.create<tensor::DimOp>(loc, val, dim);
-      return rewriter.create<IndexCastOp>(loc, dim_value, shape_scalar_type);
+      return rewriter.create<arith::IndexCastOp>(loc, shape_scalar_type, dim_value);
     };
     auto get_const = [&](int64_t val) {
-      return rewriter.create<mlir::ConstantIntOp>(loc, val, shape_scalar_type);
+      return rewriter.create<arith::ConstantIntOp>(loc, val, shape_scalar_type);
     };
     // The + 2 in the following line is for the batch and feature dimensions.
     const int num_dims = num_spatial_dims + 2;
@@ -6529,27 +6562,29 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
     Location loc = op.getLoc();
     auto shape_scalar_type = rewriter.getIntegerType(32);
     auto get_const = [&](int64_t val) {
-      return rewriter.create<mlir::ConstantIntOp>(loc, val, shape_scalar_type);
+      return rewriter.create<arith::ConstantIntOp>(loc, val, shape_scalar_type);
     };
     auto sub_one = [&](Value val) {
-      auto one = rewriter.create<ConstantIntOp>(loc, 1, shape_scalar_type);
-      return rewriter.create<SubIOp>(loc, val, one);
+      auto one =
+          rewriter.create<arith::ConstantIntOp>(loc, 1, shape_scalar_type);
+      return rewriter.create<arith::SubIOp>(loc, val, one);
     };
     auto plus_one = [&](Value val) {
-      auto one = rewriter.create<ConstantIntOp>(loc, 1, shape_scalar_type);
-      return rewriter.create<AddIOp>(loc, val, one);
+      auto one =
+          rewriter.create<arith::ConstantIntOp>(loc, 1, shape_scalar_type);
+      return rewriter.create<arith::AddIOp>(loc, val, one);
     };
     auto mul_vals = [&](Value lhs, Value rhs) {
-      return rewriter.create<MulIOp>(loc, lhs, rhs);
+      return rewriter.create<arith::MulIOp>(loc, lhs, rhs);
     };
     auto add_vals = [&](Value lhs, Value rhs) {
-      return rewriter.create<AddIOp>(loc, lhs, rhs);
+      return rewriter.create<arith::AddIOp>(loc, lhs, rhs);
     };
     auto sub_vals = [&](Value lhs, Value rhs) {
-      return rewriter.create<SubIOp>(loc, lhs, rhs);
+      return rewriter.create<arith::SubIOp>(loc, lhs, rhs);
     };
     auto div_ivals = [&](Value lhs, Value rhs) {
-      return rewriter.create<SignedDivIOp>(loc, lhs, rhs);
+      return rewriter.create<arith::DivSIOp>(loc, lhs, rhs);
     };
     auto max_vals = [&](Value lhs, Value rhs) {
       return rewriter.create<MaxOp>(loc, lhs, rhs);
@@ -6699,19 +6734,14 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
     RankedTensorType paddings_ty = RankedTensorType::get(
         {num_spatial_dims, 2}, rewriter.getIntegerType(64));
 
-    auto kernel_spatial_dims_attr =
-        GetI64ElementsAttr(kernel_spatial_dims, &rewriter);
-
     const int batch_dim =
         tensorflow::GetTensorBatchDimIndex(num_dims, data_format);
-    auto batch_dim_attr = rewriter.getI64IntegerAttr(batch_dim);
-    auto feature_dim_attr = rewriter.getI64IntegerAttr(feature_dim);
 
     SmallVector<Value, 3> operands;
     operands.push_back(op.input());
     operands.push_back(op.out_backprop());
-    Value paddings_op = rewriter.create<tensor::FromElementsOp>(
-        op.getLoc(), rewriter.getI32Type(), paddings);
+    Value paddings_op =
+        rewriter.create<tensor::FromElementsOp>(op.getLoc(), paddings);
     operands.push_back(paddings_op);
 
     auto window_strides_attr = rewriter.getNamedAttr(
@@ -6721,27 +6751,27 @@ class ConvertConvBackpropFilterDynamic : public OpRewritePattern<OpTy> {
     auto lhs_dilations_attr = rewriter.getNamedAttr(
         "lhs_dilation", GetI64ElementsAttrForValue(/*size=*/num_spatial_dims,
                                                    /*val=*/1, &rewriter));
+    SmallVector<int64_t, 4> output_spatial_dims;
+    output_spatial_dims.resize(num_spatial_dims);
+    std::iota(output_spatial_dims.begin(), output_spatial_dims.end(), 0);
     auto dimension_numbers_attr = rewriter.getNamedAttr(
         "dimension_numbers",
-        ConvDimensionNumbers::get(
+        ConvDimensionNumbersAttr::get(
+            rewriter.getContext(),
             // Swap batch_dim and feature_dim in the activations.
-            /*input_batch_dimension=*/feature_dim_attr,
-            /*input_feature_dimension=*/batch_dim_attr,
-            /*input_spatial_dimensions=*/kernel_spatial_dims_attr,
+            /*input_batch_dimension=*/feature_dim,
+            /*input_feature_dimension=*/batch_dim,
+            /*input_spatial_dimensions=*/kernel_spatial_dims,
             // The gradients become the RHS of the convolution.
             // The gradients have shape [batch, out_rows, out_cols, ...,
             // out_depth] where the batch becomes the input feature for the
             // convolution.
-            /*kernel_input_feature_dimension=*/batch_dim_attr,
-            /*kernel_output_feature_dimension=*/feature_dim_attr,
-            /*kernel_spatial_dimensions=*/kernel_spatial_dims_attr,
-            /*output_batch_dimension=*/
-            rewriter.getI64IntegerAttr(num_spatial_dims),
-            /*output_feature_dimension=*/
-            rewriter.getI64IntegerAttr(num_spatial_dims + 1),
-            /*output_spatial_dimensions=*/
-            GetI64ElementsAttrForSeq(0, num_spatial_dims, &rewriter),
-            rewriter.getContext()));
+            /*kernel_input_feature_dimension=*/batch_dim,
+            /*kernel_output_feature_dimension=*/feature_dim,
+            /*kernel_spatial_dimensions=*/kernel_spatial_dims,
+            /*output_batch_dimension=*/num_spatial_dims,
+            /*output_feature_dimension=*/(num_spatial_dims + 1),
+            /*output_spatial_dimensions=*/output_spatial_dims));
     auto feature_group_count_attr = rewriter.getNamedAttr(
         "feature_group_count", rewriter.getI64IntegerAttr(1));
     auto batch_group_count_attr = rewriter.getNamedAttr(
@@ -6978,7 +7008,7 @@ class ConvertUnpackOp : public OpRewritePattern<TF::UnpackOp> {
   LogicalResult matchAndRewrite(TF::UnpackOp op,
                                 PatternRewriter &rewriter) const override {
     auto value_type = op.value().getType().dyn_cast<RankedTensorType>();
-    if (!value_type) return failure();
+    if (!value_type || !value_type.hasStaticShape()) return failure();
 
     int64_t value_rank = value_type.getRank();
     int64_t axis = op.axis();
@@ -7973,6 +8003,93 @@ class ConvertDynamicSqueezeOp : public OpRewritePattern<TF::SqueezeOp> {
   }
 };
 
+class ConvertDynamicStitchOpDynamic : public OpRewritePattern<TF::DynamicStitchOp> {
+ public:
+  using OpRewritePattern::OpRewritePattern;
+
+  Type deriveRankedTensorTypes(Type ty, int64_t rank) const {
+    auto tensor_ty = ty.dyn_cast<TensorType>();
+    if (!tensor_ty) return ty;
+    SmallVector<int64_t, 8> shape(rank, ShapedType::kDynamicSize);
+    return RankedTensorType::get(shape, tensor_ty.getElementType());
+  }
+
+  LogicalResult matchAndRewrite(TF::DynamicStitchOp op,
+                                PatternRewriter &rewriter) const override {
+    // Static output type is used to compute intermediate values. Note that the
+    // output type doesn't have to be static but if input types and indices are
+    // constant, then the output type can be statically determined.
+    RankedTensorType out_ty =
+        op.getType().template dyn_cast<RankedTensorType>();
+    if (!out_ty) return failure();
+
+    // Extract out all the constant indices' attributes and verify that data
+    // types are static.
+    SmallVector<DenseIntElementsAttr, 4> indices;
+    indices.reserve(op.N());
+    for (auto it : llvm::zip(op.indices(), op.data())) {
+      Value index = std::get<0>(it);
+      Value data = std::get<1>(it);
+
+      DenseIntElementsAttr index_attr;
+      if (!matchPattern(index, m_Constant(&index_attr))) return failure();
+      indices.push_back(index_attr);
+
+      RankedTensorType data_ty =
+          data.getType().template dyn_cast<RankedTensorType>();
+      if (!data_ty) return failure();
+    }
+    Location loc = op.getLoc();
+
+    int64_t output_rank = out_ty.getRank();
+    SmallVector<Value, 8> values(out_ty.getDimSize(0));
+
+    for (auto it : llvm::zip(indices, op.data())) {
+      DenseIntElementsAttr index_attr = std::get<0>(it);
+      SmallVector<Value, 4> shapes;
+      Value data = std::get<1>(it);
+      Value first_dim =
+          rewriter.create<arith::ConstantIndexOp>(loc, index_attr.size());
+
+      auto data_ty = data.getType().template dyn_cast<RankedTensorType>();
+      if (!data_ty) return failure();
+
+      int64_t rank = data_ty.getRank();
+      shapes.push_back(first_dim);
+      int64_t extracted_ranks = output_rank - 1;
+      for (size_t i = 0; i < extracted_ranks; ++i) {
+        size_t idx = rank - extracted_ranks - i;
+        Value dim_idx = rewriter.create<arith::ConstantIndexOp>(loc, idx);
+        shapes.push_back(
+            rewriter.create<tensor::DimOp>(loc, data, dim_idx));
+      }
+
+      Value new_shape =
+          rewriter.create<tensor::FromElementsOp>(loc, shapes);
+      auto reshaped_data =
+          rewriter.create<mhlo::DynamicReshapeOp>(loc,
+              deriveRankedTensorTypes(data.getType(), output_rank), data, new_shape);
+
+      // the number of UnpackOp output and indices are the same.
+      auto reshaped_data_ty = reshaped_data.getType().cast<RankedTensorType>().getElementType();
+      auto unpacked_ty = SmallVector<Type, 4>(
+          index_attr.size(), RankedTensorType::get(
+              SmallVector<int64_t, 8>(extracted_ranks, ShapedType::kDynamicSize), reshaped_data_ty));
+
+      auto items = rewriter.create<TF::UnpackOp>(
+          loc, unpacked_ty, reshaped_data, /*axis*/0);
+
+      for (auto index_item : llvm::zip(index_attr, items.getResults())) {
+        int64_t output_index = std::get<0>(index_item).getSExtValue();
+        Value item = std::get<1>(index_item);
+        values[output_index] = item;
+      }
+    }
+    rewriter.replaceOpWithNewOp<TF::PackOp>(op, op.getType(), values);
+    return success();
+  }
+};
+
 // Converts a TF QR op to HLO.
 class ConvertQrOp : public OpRewritePattern<TF::QrOp> {
  public:
@@ -8725,9 +8842,11 @@ void PopulateLegalizeTfPatterns(MLIRContext *context,
     ConvertConv3DBackpropInputOp,
     ConvertCumprodOp,
     ConvertCumsumOp,
+    ConvertDepthConv2DOpDynamic,
     ConvertDiagPartOp,
     ConvertDynamicExpandDimsOp,
     ConvertDynamicSqueezeOp,
+    ConvertDynamicStitchOpDynamic,
     ConvertEinsumOp,
     ConvertRFFTOp,
     ConvertIRFFTOp,
@@ -8797,6 +8916,7 @@ void PopulateLegalizeTfPatterns(MLIRContext *context,
     ConvertTileOpDynamic,
     ConvertUnpackOpDynamic,
     ConvertSigmoidGradOpDynamic,
+    ConvertGatherV2OpDynamic,
     ConvertConv2DDynamic,
     ConvertPadOpDynamic,
     ConvertGatherNdOpDynamic,

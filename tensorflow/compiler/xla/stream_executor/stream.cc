@@ -260,8 +260,7 @@ Stream::Stream(StreamExecutor* parent,
       allocated_(allocated),
       status_(allocated ? port::Status::OK()
                         : port::InternalError("Uninitialized stream")),
-      temporary_memory_manager_(this),
-      managed_externally_(true) {
+      temporary_memory_manager_(this) {
   VLOG_CALL(PARAM(parent), PARAM(implementation.get()));
 }
 
