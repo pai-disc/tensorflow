@@ -32,6 +32,7 @@ limitations under the License.
 #include "mlir/Transforms/DialectConversion.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_types.h"
 #include "tensorflow/compiler/mlir/xla/transforms/xla_legalize_tf_passes_detail.h"
+#include "tensorflow/compiler/mlir/tensorflow/utils/convert_tensor.h"
 
 #define DEBUG_TYPE "xla-legalize-tf-types"
 
@@ -149,7 +150,7 @@ class TfTypePattern : public ConversionPattern {
       }
     }
     OperationState state(op->getLoc(), op->getName().getStringRef(), operands,
-                         new_results, op->getAttrs(), op->getSuccessors());
+                         new_results, attrs, op->getSuccessors());
     for (Region &region : op->getRegions()) {
       Region &new_region = *state.addRegion();
       rewriter.inlineRegionBefore(region, new_region, new_region.begin());
