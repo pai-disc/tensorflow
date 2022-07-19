@@ -722,22 +722,30 @@ def : Pat<(TF_BitcastOp:$res HLO_Tensor:$arg),
 //===----------------------------------------------------------------------===//
 // Random ops.
 //===----------------------------------------------------------------------===//
-
-// TODO(disc): temporarily disable TF_RandomUniformOp since there's an unrecoverable
-// todo in this pattern.
-// foreach srcDstOpPair = [[TF_RandomUniformOp, HLO_RngUniformOp],
-//                         [TF_RandomStandardNormalOp, HLO_RngNormalOp]] in {
-foreach srcDstOpPair = [[TF_RandomStandardNormalOp, HLO_RngNormalOp]] in {
 // TODO(b/148269299): handle random number generator seeds/states correctly.
-def : Pat<(srcDstOpPair[0]:$old $shape, $seed, $seed2),
-          (srcDstOpPair[1]
-            (HLO_ConstOp
+
+class HLO_RngDistributionValue<string enumStr> :
+  ConstantAttr<HLO_RngDistributionAttr, "::mlir::mhlo::RngDistribution::" # enumStr>;
+
+def : Pat<(TF_RandomUniformOp:$old $shape, $seed, $seed2),
+          (HLO_RngOp
+            (HLO_ConstantOp
               (NativeCodeCall<"$_builder.getFloatAttr(old.dtype(), 0.0)">)),
-            (HLO_ConstOp
+            (HLO_ConstantOp
               (NativeCodeCall<"$_builder.getFloatAttr(old.dtype(), 1.0)">)),
-            (CastValueToI64 $old, $shape)),
+            (CastValueToI64 $old, $shape),
+            HLO_RngDistributionValue<"UNIFORM">),
           [(IsShapedTensor $shape)]>;
-}
+
+def : Pat<(TF_RandomStandardNormalOp:$old $shape, $seed, $seed2),
+          (HLO_RngOp
+            (HLO_ConstantOp
+              (NativeCodeCall<"$_builder.getFloatAttr(old.dtype(), 0.0)">)),
+            (HLO_ConstantOp
+              (NativeCodeCall<"$_builder.getFloatAttr(old.dtype(), 1.0)">)),
+            (CastValueToI64 $old, $shape),
+            HLO_RngDistributionValue<"NORMAL">),
+          [(IsShapedTensor $shape)]>;
 
 
 //===----------------------------------------------------------------------===//

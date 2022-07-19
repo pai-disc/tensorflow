@@ -925,7 +925,7 @@ LogicalResult DotOp::reifyReturnTypeShapes(
 
   Type shape_scalar_type = builder.getIndexType();
   auto to_shape_scalar_type = [&](Value v) {
-    return MaybeCastTo(builder, loc, v, shape_scalar_type);
+    return maybeCastTo(builder, loc, v, shape_scalar_type);
   };
 
   if (lhs_type.getRank() == 2) {
@@ -1452,8 +1452,8 @@ Type GetSliceSizeValuesAndType(DynamicGatherOp* d_gather, OpBuilder& builder,
   auto slice_sizes_ty = slice_sizes.getType().cast<ShapedType>();
   for (int64_t i = 0; i < slice_sizes_ty.getDimSize(0); ++i) {
     Value idx = builder.create<arith::ConstantIndexOp>(loc, i);
-    sliceSizeValues.push_back(
-        builder.create<tensor::ExtractOp>(loc, sliceSizes, idx));
+    slice_size_values.push_back(
+        builder.create<tensor::ExtractOp>(loc, slice_sizes, idx));
   }
   return slice_sizes.getType().cast<ShapedType>().getElementType();
 }
@@ -2193,7 +2193,7 @@ LogicalResult ConvReifyReturnTypeImpl(
   Location loc = op->getLoc();
 
   auto to_shape_scalar_type = [&](Value v) {
-    return MaybeCastTo(builder, loc, v, shape_scalar_type);
+    return maybeCastTo(builder, loc, v, shape_scalar_type);
   };
 
   auto dimension_numbers = op->dimension_numbers();
@@ -2648,7 +2648,7 @@ LogicalResult ConvolutionOp::verify() {
 LogicalResult ConvolutionOp::reifyReturnTypeShapes(
     OpBuilder& builder, ValueRange operands,
     SmallVectorImpl<Value>& reifiedReturnShapes) {
-  ConvOp::Adaptor adaptor(operands);
+  ConvolutionOp::Adaptor adaptor(operands);
   Location loc = this->getLoc();
 
   DenseIntElementsAttr padding_attr = this->padding().getValue();
@@ -2658,7 +2658,7 @@ LogicalResult ConvolutionOp::reifyReturnTypeShapes(
   if (padding_attr) {
     for (int64_t pad : padding_attr.getValues<int64_t>()) {
       Value pad_value = builder.create<arith::ConstantIndexOp>(loc, pad);
-      pad_value = MaybeCastTo(builder, loc, pad_value, shape_scalar_type);
+      pad_value = maybeCastTo(builder, loc, pad_value, shape_scalar_type);
       spatial_padding_values.push_back(pad_value);
     }
   }
@@ -2681,7 +2681,7 @@ LogicalResult DynamicConvOp::reifyReturnTypeShapes(
   Location loc = this->getLoc();
   Type shape_scalar_type = padding_type.getElementType();
   auto to_shape_scalar_type = [&](Value v) {
-    return MaybeCastTo(builder, loc, v, shape_scalar_type);
+    return maybeCastTo(builder, loc, v, shape_scalar_type);
   };
 
   SmallVector<Value> spatial_padding_values;

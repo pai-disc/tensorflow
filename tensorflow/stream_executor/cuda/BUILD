@@ -324,13 +324,11 @@ cc_library(
         "//tensorflow/stream_executor/gpu:gpu_types_header",
         "//tensorflow/stream_executor/lib",
         "//tensorflow/stream_executor/platform",
-    ]) + if_static(["//tensorflow/core/platform:tensor_float_32_utils"]),
+    ]) + if_static([
+        "//tensorflow/core/platform:tensor_float_32_utils"
     ]) + if_cuda11_is_configured([
         ":cublas_lt_lib",
-    ]) + [
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/synchronization",
-    ],
+    ]),
     alwayslink = True,
 )
 
