@@ -603,7 +603,6 @@ inline Value mapConvertOpToStdScalarOp(Location loc, ArrayRef<Type> targetTypes,
 
   // A boolean value is considered to be unsigned when converting to
   // floating-point. Otherwise, it will become `-1`.
-<<<<<<< HEAD
   if (sourceType.isSignlessInteger(1) &&
       mlir::arith::UIToFPOp::areCastCompatible(convertedSourceType,
                                                targetType)) {
@@ -619,7 +618,7 @@ inline Value mapConvertOpToStdScalarOp(Location loc, ArrayRef<Type> targetTypes,
     auto converted_arg = b->create<UnrealizedConversionCastOp>(
                               loc, llvm::makeArrayRef(int_types), args)
                              .getResults();
-    return b->create<mlir::arith::UIToFPOp>(loc, result_types, converted_arg,
+    return b->create<mlir::arith::UIToFPOp>(loc, resultTypes, converted_arg,
                                             mlir::None);
     // End of Added by DISC
   }

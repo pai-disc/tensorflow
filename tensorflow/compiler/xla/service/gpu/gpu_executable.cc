@@ -334,9 +334,8 @@ GpuExecutable::GpuExecutable(GpuExecutable::Params params)
       buffer_assignment_(
           std::move(params.buffer_assignment_)) /*ADDED_FOR_TAO*/ {
   if (has_module()) {
-      XlaDebugInfoManager::Get()->RegisterModule(
-              ModuleUniqueName(module_name_, shared_module().get()), shared_module(),
-              debug_buffer_assignment_);
+    XlaDebugInfoManager::Get()->RegisterModule(
+      module().unique_id(), shared_module(), debug_buffer_assignment_);
   }
 }
 
