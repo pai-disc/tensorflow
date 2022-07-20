@@ -1,0 +1,132 @@
+From 36a0933feb7daa7a47fc2d62c8ebf227202d60e3 Mon Sep 17 00:00:00 2001
+From: Tanyo Kwok <tianyou.gty@alibaba-inc.com>
+Date: Tue, 19 Jul 2022 08:51:20 +0000
+Subject: [PATCH] [MLIR] Add function to create Float16 array attribute
+
+This patch adds a new function mlirDenseElementsAttrFloat16Get(),
+which accepts the shaped type, the number of Float16 values, and a
+pointer to an array of Float16 values, each of which is a uint16_t
+value.
+
+This commit is repeating https://reviews.llvm.org/D123981 + #761
+but for float16.
+
+Differential Revision: https://reviews.llvm.org/D130069
+---
+ mlir/include/mlir-c/BuiltinAttributes.h |  2 ++
+ mlir/lib/CAPI/IR/BuiltinAttributes.cpp  |  7 +++++++
+ mlir/test/CAPI/ir.c                     | 16 ++++++++++++++--
+ 3 files changed, 23 insertions(+), 2 deletions(-)
+
+diff --git a/mlir/include/mlir-c/BuiltinAttributes.h b/mlir/include/mlir-c/BuiltinAttributes.h
+index ce4514094ecb..050408d1f87a 100644
+--- a/mlir/include/mlir-c/BuiltinAttributes.h
++++ b/mlir/include/mlir-c/BuiltinAttributes.h
+@@ -381,6 +381,8 @@ MLIR_CAPI_EXPORTED MlirAttribute mlirDenseElementsAttrDoubleGet(
+     MlirType shapedType, intptr_t numElements, const double *elements);
+ MLIR_CAPI_EXPORTED MlirAttribute mlirDenseElementsAttrBFloat16Get(
+     MlirType shapedType, intptr_t numElements, const uint16_t *elements);
++MLIR_CAPI_EXPORTED MlirAttribute mlirDenseElementsAttrFloat16Get(
++    MlirType shapedType, intptr_t numElements, const uint16_t *elements);
+ 
+ /// Creates a dense elements attribute with the given shaped type from string
+ /// elements.
+diff --git a/mlir/lib/CAPI/IR/BuiltinAttributes.cpp b/mlir/lib/CAPI/IR/BuiltinAttributes.cpp
+index aa498b2c1e18..ee56cfc6618c 100644
+--- a/mlir/lib/CAPI/IR/BuiltinAttributes.cpp
++++ b/mlir/lib/CAPI/IR/BuiltinAttributes.cpp
+@@ -481,6 +481,13 @@ MlirAttribute mlirDenseElementsAttrBFloat16Get(MlirType shapedType,
+   const void *buffer = static_cast<const void *>(elements);
+   return mlirDenseElementsAttrRawBufferGet(shapedType, bufferSize, buffer);
+ }
++MlirAttribute mlirDenseElementsAttrFloat16Get(MlirType shapedType,
++                                              intptr_t numElements,
++                                              const uint16_t *elements) {
++  size_t bufferSize = numElements * 2;
++  const void *buffer = static_cast<const void *>(elements);
++  return mlirDenseElementsAttrRawBufferGet(shapedType, bufferSize, buffer);
++}
+ 
+ MlirAttribute mlirDenseElementsAttrStringGet(MlirType shapedType,
+                                              intptr_t numElements,
+diff --git a/mlir/test/CAPI/ir.c b/mlir/test/CAPI/ir.c
+index 6d9e9056ebd0..0e9b328ea288 100644
+--- a/mlir/test/CAPI/ir.c
++++ b/mlir/test/CAPI/ir.c
+@@ -937,6 +937,7 @@ int printBuiltinAttributes(MlirContext ctx) {
+   float floats[] = {0.0f, 1.0f};
+   double doubles[] = {0.0, 1.0};
+   uint16_t bf16s[] = {0x0, 0x3f80};
++  uint16_t f16s[] = {0x0, 0x3c00};
+   MlirAttribute encoding = mlirAttributeGetNull();
+   MlirAttribute boolElements = mlirDenseElementsAttrBoolGet(
+       mlirRankedTensorTypeGet(2, shape, mlirIntegerTypeGet(ctx, 1), encoding),
+@@ -978,6 +979,9 @@ int printBuiltinAttributes(MlirContext ctx) {
+   MlirAttribute bf16Elements = mlirDenseElementsAttrBFloat16Get(
+       mlirRankedTensorTypeGet(2, shape, mlirBF16TypeGet(ctx), encoding), 2,
+       bf16s);
++  MlirAttribute f16Elements = mlirDenseElementsAttrFloat16Get(
++      mlirRankedTensorTypeGet(2, shape, mlirF16TypeGet(ctx), encoding), 2,
++      f16s);
+ 
+   if (!mlirAttributeIsADenseElements(boolElements) ||
+       !mlirAttributeIsADenseElements(uint8Elements) ||
+@@ -988,7 +992,8 @@ int printBuiltinAttributes(MlirContext ctx) {
+       !mlirAttributeIsADenseElements(int64Elements) ||
+       !mlirAttributeIsADenseElements(floatElements) ||
+       !mlirAttributeIsADenseElements(doubleElements) ||
+-      !mlirAttributeIsADenseElements(bf16Elements))
++      !mlirAttributeIsADenseElements(bf16Elements) ||
++      !mlirAttributeIsADenseElements(f16Elements))
+     return 14;
+ 
+   if (mlirDenseElementsAttrGetBoolValue(boolElements, 1) != 1 ||
+@@ -1015,6 +1020,7 @@ int printBuiltinAttributes(MlirContext ctx) {
+   mlirAttributeDump(floatElements);
+   mlirAttributeDump(doubleElements);
+   mlirAttributeDump(bf16Elements);
++  mlirAttributeDump(f16Elements);
+   // CHECK: dense<{{\[}}[false, true]]> : tensor<1x2xi1>
+   // CHECK: dense<{{\[}}[0, 1]]> : tensor<1x2xui8>
+   // CHECK: dense<{{\[}}[0, 1]]> : tensor<1x2xi8>
+@@ -1025,6 +1031,7 @@ int printBuiltinAttributes(MlirContext ctx) {
+   // CHECK: dense<{{\[}}[0.000000e+00, 1.000000e+00]]> : tensor<1x2xf32>
+   // CHECK: dense<{{\[}}[0.000000e+00, 1.000000e+00]]> : tensor<1x2xf64>
+   // CHECK: dense<{{\[}}[0.000000e+00, 1.000000e+00]]> : tensor<1x2xbf16>
++  // CHECK: dense<{{\[}}[0.000000e+00, 1.000000e+00]]> : tensor<1x2xf16>
+ 
+   MlirAttribute splatBool = mlirDenseElementsAttrBoolSplatGet(
+       mlirRankedTensorTypeGet(2, shape, mlirIntegerTypeGet(ctx, 1), encoding),
+@@ -1103,13 +1110,16 @@ int printBuiltinAttributes(MlirContext ctx) {
+       (double *)mlirDenseElementsAttrGetRawData(doubleElements);
+   uint16_t *bf16RawData =
+       (uint16_t *)mlirDenseElementsAttrGetRawData(bf16Elements);
++  uint16_t *f16RawData =
++      (uint16_t *)mlirDenseElementsAttrGetRawData(f16Elements);
+   if (uint8RawData[0] != 0u || uint8RawData[1] != 1u || int8RawData[0] != 0 ||
+       int8RawData[1] != 1 || uint32RawData[0] != 0u || uint32RawData[1] != 1u ||
+       int32RawData[0] != 0 || int32RawData[1] != 1 || uint64RawData[0] != 0u ||
+       uint64RawData[1] != 1u || int64RawData[0] != 0 || int64RawData[1] != 1 ||
+       floatRawData[0] != 0.0f || floatRawData[1] != 1.0f ||
+       doubleRawData[0] != 0.0 || doubleRawData[1] != 1.0 ||
+-      bf16RawData[0] != 0 || bf16RawData[1] != 0x3f80)
++      bf16RawData[0] != 0 || bf16RawData[1] != 0x3f80 || f16RawData[0] != 0 ||
++      f16RawData[1] != 0x3c00)
+     return 18;
+ 
+   mlirAttributeDump(splatBool);
+@@ -1134,9 +1144,11 @@ int printBuiltinAttributes(MlirContext ctx) {
+   mlirAttributeDump(mlirElementsAttrGetValue(floatElements, 2, uints64));
+   mlirAttributeDump(mlirElementsAttrGetValue(doubleElements, 2, uints64));
+   mlirAttributeDump(mlirElementsAttrGetValue(bf16Elements, 2, uints64));
++  mlirAttributeDump(mlirElementsAttrGetValue(f16Elements, 2, uints64));
+   // CHECK: 1.000000e+00 : f32
+   // CHECK: 1.000000e+00 : f64
+   // CHECK: 1.000000e+00 : bf16
++  // CHECK: 1.000000e+00 : f16
+ 
+   int64_t indices[] = {0, 1};
+   int64_t one = 1;
+-- 
+2.25.1
+
