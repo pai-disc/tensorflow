@@ -68,7 +68,9 @@ class GpuStream : public internal::StreamInterface {
   // Precond: this GpuStream has been allocated (otherwise passing a nullptr
   // into the NVIDIA library causes difficult-to-understand faults).
   GpuStreamHandle gpu_stream() const {
-    DCHECK(gpu_stream_ != nullptr);
+    // NB(xiafei.qiuxf): Comment out the DCHECK below, since it may be nullptr in
+    //                   case of pytorch.
+    // DCHECK(gpu_stream_ != nullptr);
     return const_cast<GpuStreamHandle>(gpu_stream_);
   }
 

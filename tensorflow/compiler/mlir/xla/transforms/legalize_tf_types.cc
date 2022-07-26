@@ -145,7 +145,7 @@ class TfTypePattern : public ConversionPattern {
         if (tensorflow::ConvertToTensor(elemsAttr, &out) != tensorflow::Status::OK())
           return failure();
         ArrayRef<char> data(static_cast<char*>(out.data()), out.TotalBytes());
-        auto newAttr = DenseElementsAttr::getFromRawBuffer(newType, data, false);
+        auto newAttr = DenseElementsAttr::getFromRawBuffer(newType, data);
         attr.setValue(newAttr);
       }
     }
