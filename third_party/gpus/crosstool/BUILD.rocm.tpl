@@ -94,7 +94,7 @@ cc_toolchain_config(
     link_libs = [],
     opt_link_flags = [],
     unfiltered_compile_flags = [
-        "-fno-canonical-system-headers",
+        # "-fno-canonical-system-headers",
         "-Wno-builtin-macro-redefined",
         "-D__DATE__=\"redacted\"",
         "-D__TIMESTAMP__=\"redacted\"",
