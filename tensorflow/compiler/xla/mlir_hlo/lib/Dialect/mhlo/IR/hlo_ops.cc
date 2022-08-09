@@ -2058,16 +2058,19 @@ struct DynamicIotaBroadcast : public OpRewritePattern<DynamicIotaOp> {
 
     auto iotaDimension = iota.iota_dimension();
     auto iotaDimensionInt = iotaDimension;
-
-    auto convertedShape = rewriter.create<arith::IndexCastOp>(
+    auto outputShapeType = iota.output_shape().getType().cast<ShapedType>();
+    Value sliceInput = iota.output_shape();
+    if (outputShapeType.getElementType().isa<mlir::IndexType>()) {
+      sliceInput = rewriter.create<arith::IndexCastOp>(
         iota.getLoc(),
         RankedTensorType::get(
-            iota.output_shape().getType().cast<ShapedType>().getShape(),
-            rewriter.getI64Type()),
+          iota.output_shape().getType().cast<ShapedType>().getShape(),
+          rewriter.getI64Type()),
         iota.output_shape());
-
+    }
+     
     auto slicedShape = rewriter.create<SliceOp>(
-        iota.getLoc(), convertedShape,
+        iota.getLoc(), sliceInput,
         rewriter.getI64TensorAttr(iotaDimensionInt),
         rewriter.getI64TensorAttr(iotaDimensionInt + 1),
         rewriter.getI64TensorAttr(1));
