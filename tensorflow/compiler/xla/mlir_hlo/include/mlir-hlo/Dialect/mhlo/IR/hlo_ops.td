@@ -1498,9 +1498,9 @@ def HLO_CholeskyOp : HLO_Op<"cholesky",
   let results = (outs HLO_FpOrComplexTensor);
 }
 
-def HLO_ClampOp : HLO_ShapedInterfaceOp<"clamp",
-    [NoSideEffect,
-     SameOperandsAndResultElementType, HLO_BroadcastingElementwise]> {
+def HLO_ClampOp : HLO_ShapedInterfaceOp<"clamp", [NoSideEffect,
+  SameOperandsAndResultElementType, HLO_BroadcastingElementwise,
+  InferTensorType]> {
   let summary = "Clamp operator";
   let description = [{
     Clamps an operand to within the range between a minimum and maximum value.
@@ -1529,12 +1529,6 @@ def HLO_ClampOp : HLO_ShapedInterfaceOp<"clamp",
         if (!isCompatibleForMhloTypeInference(std::get<0>(it), std::get<1>(it)))
           return false;
       return true;
-    }
-    static  LogicalResult inferReturnTypeComponents(
-        MLIRContext* context, Optional<Location> location,
-        ValueRange operands, DictionaryAttr attributes, RegionRange regions,
-        SmallVectorImpl<ShapedTypeComponents>& inferedReturnShapes) {
-      return failure();
     }
     llvm::Optional<SmallVector<int64_t, 3>> getInputRanks() {
       auto min_ty = min().getType().dyn_cast<ShapedType>();

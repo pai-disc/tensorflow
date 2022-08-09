@@ -180,8 +180,6 @@ cc_library(
         ":xla_legalize_tf_passes_inc_gen",
         "xla_passes_inc_gen",
         "//tensorflow/compiler/mlir/disc:mhlo_disc",
-        "//tensorflow/compiler/mlir/hlo",
-        "//tensorflow/compiler/mlir/hlo:convert_op_folder",
         "//tensorflow/compiler/mlir/tensorflow",
         "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/client:padding",

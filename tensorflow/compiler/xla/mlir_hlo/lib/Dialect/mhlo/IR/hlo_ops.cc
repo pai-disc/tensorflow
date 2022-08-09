@@ -1209,7 +1209,8 @@ struct DotGeneralToDot : public OpRewritePattern<DotGeneralOp> {
 
 void DotGeneralOp::getCanonicalizationPatterns(RewritePatternSet& results,
                                                MLIRContext* context) {
-  results.add<DotGeneralToDot>(context);
+  // Disc perfer to convert DotOp to DotGeneralOp
+  // results.add<DotGeneralToDot>(context);
 }
 
 LogicalResult DotGeneralOp::reifyReturnTypeShapes(
@@ -6193,7 +6194,10 @@ struct DynamicPadEmptyTensor : public OpRewritePattern<DynamicPadOp> {
 
 void DynamicPadOp::getCanonicalizationPatterns(RewritePatternSet& results,
                                                MLIRContext* context) {
-  results.add<DPadToPad, DynamicPadEmptyTensor>(context);
+  // Disc doesn't lowering mhlo::PadOp currently,
+  // see https://github.com/alibaba/BladeDISC/issues/541
+  // results.add<DPadToPad, DynamicPadEmptyTensor>(context);
+  results.add<DynamicPadEmptyTensor>(context);
 }
 
 LogicalResult DynamicPadOp::verify() {
