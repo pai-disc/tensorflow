@@ -457,8 +457,9 @@ struct HloLegalizeToLhlo
     target.addIllegalDialect<mhlo::MhloDialect>();
     // bufferization.to_memref is illegal if it has uses.
     // TODO(b/175670649) Make bufferization.to_memref illegal.
-    target.addDynamicallyLegalOp<mlir::bufferization::ToMemrefOp>(
-        [](auto op) { return op->use_empty(); });
+    // DISC will do this later
+    // target.addDynamicallyLegalOp<mlir::bufferization::ToMemrefOp>(
+    //     [](auto op) { return op->use_empty(); });
 
     bufferization::BufferizeTypeConverter converter;
     auto isMemRefType = [](Type type) { return type.isa<BaseMemRefType>(); };
@@ -484,7 +485,8 @@ struct HloLegalizeToLhlo
     populateCallOpTypeConversionPattern(patterns, converter);
     populateBranchOpInterfaceTypeConversionPattern(patterns, converter);
     populateReturnOpTypeConversionPattern(patterns, converter);
-    populateEliminateBufferizeMaterializationsPatterns(converter, patterns);
+    // DISC will do this later
+    // populateEliminateBufferizeMaterializationsPatterns(converter, patterns);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
@@ -516,7 +518,7 @@ void populateHloToLhloConversionPattern(
   // clang-format off
   patterns->add<
       HloToLhloCustomCallOpConverter,
-      HloToLhloDotGeneralOpConverter,
+      // HloToLhloDotGeneralOpConverter,
       HloToLhloOpConverter<mhlo::AbsOp>,
       HloToLhloOpConverter<mhlo::AddOp>,
       HloToLhloOpConverter<mhlo::AndOp>,
@@ -536,6 +538,8 @@ void populateHloToLhloConversionPattern(
       HloToLhloOpConverter<mhlo::CosineOp>,
       HloToLhloOpConverter<mhlo::DivOp>,
       HloToLhloOpConverter<mhlo::DotOp>,
+      HloToLhloOpConverter<mhlo::DotGeneralOp>,
+      HloToLhloOpConverter<mhlo::DynamicConvOp>,
       HloToLhloOpConverter<mhlo::ExpOp>,
       HloToLhloOpConverter<mhlo::Expm1Op>,
       HloToLhloOpConverter<mhlo::FloorOp>,
@@ -544,6 +548,7 @@ void populateHloToLhloConversionPattern(
       HloToLhloOpConverter<mhlo::IotaOp>,
       HloToLhloOpConverter<mhlo::IsFiniteOp>,
       HloToLhloOpConverter<mhlo::LogOp>,
+      HloToLhloOpConverter<mhlo::Log1pOp>,
       HloToLhloOpConverter<mhlo::LogisticOp>,
       HloToLhloOpConverter<mhlo::MaxOp>,
       HloToLhloOpConverter<mhlo::MinOp>,
@@ -554,8 +559,11 @@ void populateHloToLhloConversionPattern(
       HloToLhloOpConverter<mhlo::PowOp>,
       HloToLhloOpConverter<mhlo::RealOp>,
       HloToLhloOpConverter<mhlo::RemOp>,
+      HloToLhloOpConverter<mhlo::ReverseOp>,
       HloToLhloOpConverter<mhlo::RsqrtOp>,
       HloToLhloOpConverter<mhlo::ReshapeOp>,
+      HloToLhloOpConverter<mhlo::RoundNearestEvenOp>,
+      HloToLhloOpConverter<mhlo::RoundOp>,
       HloToLhloOpConverter<mhlo::SelectOp>,
       HloToLhloOpConverter<mhlo::ShiftLeftOp>,
       HloToLhloOpConverter<mhlo::ShiftRightArithmeticOp>,

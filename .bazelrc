@@ -124,7 +124,7 @@ build --define=grpc_no_ares=true
 #
 # TODO: Remove this line once TF doesn't depend on Bazel wrapping all library
 # archives in -whole_archive -no_whole_archive.
-build --noincompatible_remove_legacy_whole_archive
+# build --noincompatible_remove_legacy_whole_archive
 
 # TODO(mihaimaruseac): Document this option or remove if no longer needed
 build --enable_platform_specific_config
@@ -277,7 +277,14 @@ build:tensorrt --repo_env TF_NEED_TENSORRT=1
 build:rocm --crosstool_top=@local_config_rocm//crosstool:toolchain
 build:rocm --define=using_rocm_hipcc=true
 build:rocm --define=tensorflow_mkldnn_contraction_kernel=0
-build:rocm --repo_env TF_NEED_ROCM=1
+build:rocm --repo_env TF_NEED_ROCM=1 --repo_env TF_NEED_DCU=0
+build:rocm --repo_env TF_ROCM_AMDGPU_TARGETS=gfx90a
+# Disable unused-result on rocm builds.
+build:rocm --copt="-Wno-error=unused-result"
+
+build:dcu --crosstool_top=@local_config_rocm//crosstool:toolchain
+build:dcu --define=using_rocm=true --define=using_rocm_hipcc=true --define=using_dcu=true
+build:dcu --repo_env TF_NEED_ROCM=1 --repo_env TF_NEED_DCU=1
 
 # Options extracted from configure script
 build:numa --define=with_numa_support=true
@@ -313,11 +320,14 @@ build:linux --copt="-Wno-extra"
 build:linux --copt="-Wno-deprecated"
 build:linux --copt="-Wno-deprecated-declarations"
 build:linux --copt="-Wno-ignored-attributes"
+# build:linux --copt="-Wno-unknown-warning"
+# build:linux --copt="-Wno-array-parameter"
+build:linux --copt="-Wno-stringop-overflow"
 build:linux --copt="-Wno-array-bounds"
 
 # Add unused-result as an error on Linux.
 build:linux --copt="-Wunused-result"
-build:linux --copt="-Werror=unused-result"
+# build:linux --copt="-Werror=unused-result"
 # Add switch as an error on Linux.
 build:linux --copt="-Wswitch"
 build:linux --copt="-Werror=switch"
@@ -633,7 +643,9 @@ test:release_base --test_size_filters=small,medium
 
 build:release_cpu_linux --config=release_base
 build:release_cpu_linux --config=avx_linux
-build:release_cpu_linux --crosstool_top="@ubuntu20.04-gcc9_manylinux2014-cuda11.2-cudnn8.1-tensorrt7.2_config_cuda//crosstool:toolchain"
+# BladeDISC modify starts: Just use local tool chain to build.
+# build:release_cpu_linux --crosstool_top="@ubuntu20.04-gcc9_manylinux2014-cuda11.2-cudnn8.1-tensorrt7.2_config_cuda//crosstool:toolchain"
+# BladeDISC modify ends
 test:release_cpu_linux --test_env=LD_LIBRARY_PATH
 
 build:release_cpu_macos --config=release_base

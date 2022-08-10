@@ -205,7 +205,12 @@ class XlaHloToLhloPass
       TF_RETURN_WITH_CONTEXT_IF_ERROR(
           ConvertMlirHloToHlo(module, &hlo_proto,
                               /*use_tuple_args=*/false,
-                              /*return_tuple=*/false),
+                              // BladeDISC Change starts: to work around
+                              // compilation error on GCC 7.3.1, add the
+                              // options argument.
+                              /*return_tuple=*/false,
+                              /*options=*/{}),
+                              // BladeDISC Change ends.
           "conversion to XLA HLO proto failed");
 
       auto statusOrHloModule = HloModuleFromProto(hlo_proto);

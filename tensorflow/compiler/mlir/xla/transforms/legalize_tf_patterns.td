@@ -344,15 +344,18 @@ def : Pat<(TF_IFFTOp:$res $input),
 // GatherV2 op patterns.
 //===----------------------------------------------------------------------===//
 
-// Here, $params and $indices needs to be ranked so that $axis and $batch_dims
-// attributes can be converted from TensorFlow axis format supporting negative
-// indexing to the HLO format.
-def LegalizeGatherV2 :
-  Pat<(TF_GatherV2Op AnyRankedTensor:$params, AnyRankedTensor:$indices,
-        (ConstantLikeMatcher ElementsAttr:$axis), $batch_dims),
-      (MHLO_TorchIndexSelectOp $params, $indices,
-        (GetHLOAxisFromTFAxis $axis, $params),
-        (GetHLOAxisFromTFAxis $batch_dims, $indices))>;
+// TODO(disc): temporarily disable this pattern since it lower gather to
+// torch_index_select op which is not supported by DISC a.t.m.
+
+// // Here, $params and $indices needs to be ranked so that $axis and $batch_dims
+// // attributes can be converted from TensorFlow axis format supporting negative
+// // indexing to the HLO format.
+// def LegalizeGatherV2 :
+//   Pat<(TF_GatherV2Op AnyRankedTensor:$params, AnyRankedTensor:$indices,
+//         (ConstantLikeMatcher ElementsAttr:$axis), $batch_dims),
+//       (MHLO_TorchIndexSelectOp $params, $indices,
+//         (GetHLOAxisFromTFAxis $axis, $params),
+//         (GetHLOAxisFromTFAxis $batch_dims, $indices))>;
 
 //===----------------------------------------------------------------------===//
 // Pad op patterns.
@@ -368,11 +371,13 @@ class SliceDenseIntElementsAttr<string index, string axis> : NativeCodeCall<
 def GetInteriorPadding : NativeCodeCall <
   "GetInteriorPadding($0.cast<ElementsAttr>())">;
 
-def : Pat<(TF_PadV2Op $input, (ConstantLikeMatcher ElementsAttr:$padding), $c),
-          (MHLO_PadOp $input, $c,
-           (SliceDenseIntElementsAttrColumn2D<"0"> $padding),
-           (SliceDenseIntElementsAttrColumn2D<"1"> $padding),
-           (GetInteriorPadding $padding))>;
+// TODO: commented by DISC due to mhlo.pad is not supported in bufferization
+//       and all the consequent passes.
+// def : Pat<(TF_PadV2Op $input, (ConstantLikeMatcher ElementsAttr:$padding), $c),
+//           (MHLO_PadOp $input, $c,
+//            (SliceDenseIntElementsAttrColumn2D<"0"> $padding),
+//            (SliceDenseIntElementsAttrColumn2D<"1"> $padding),
+//            (GetInteriorPadding $padding))>;
 
 //===----------------------------------------------------------------------===//
 // Identity op patterns.

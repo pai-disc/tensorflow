@@ -15,6 +15,7 @@ load("//tensorflow/tsl:tsl.bzl", "if_google", "if_nccl", "tsl_copts", "tsl_gpu_l
 load(
     "@local_config_rocm//rocm:build_defs.bzl",
     "if_rocm_is_configured",
+    "if_dcu",
 )
 load("//tensorflow/compiler/xla:xla.bzl", "xla_cc_test")
 load(
@@ -28,8 +29,7 @@ load(
 load("//tensorflow/tsl:tsl.default.bzl", "filegroup", "get_compatible_with_cloud")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = [":friends"],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
@@ -279,7 +279,9 @@ cc_library(
         "ir_emitter_unnested.h",
         "kernel_mapping_scheme.h",
     ],
-    copts = if_cuda_is_configured(["-DGOOGLE_CUDA=1"]),
+    copts = if_cuda_is_configured(["-DGOOGLE_CUDA=1"
+    ]) + if_dcu(["-DTENSORFLOW_USE_DCU=1"
+    ]),
     deps = [
         ":backend_configs_cc",
         ":buffer_allocations",
@@ -600,7 +602,11 @@ cc_library(
         "replica_id_thunk.h",
         "sequential_thunk.h",
         "while_thunk.h",
-    ],
+    ] + if_gpu_is_configured([
+        "cholesky_thunk.h",
+        "triangular_solve_thunk.h",
+    ]),
+    copts = if_dcu(["-DTENSORFLOW_USE_DCU=1"]),
     deps = [
         ":backend_configs_cc",
         ":buffer_allocations",
@@ -1196,6 +1202,7 @@ cc_library(
     name = "cusolver_context",
     srcs = if_gpu_is_configured(["cusolver_context.cc"]),
     hdrs = if_gpu_is_configured(["cusolver_context.h"]),
+    copts = if_dcu(["-DTENSORFLOW_USE_DCU=1"]),
     deps = [
         "//tensorflow/compiler/xla:comparison_util",
         "//tensorflow/compiler/xla:statusor",
@@ -1214,6 +1221,7 @@ cc_library(
         "@local_config_rocm//rocm:rocm_headers",
         "//tensorflow/compiler/xla/stream_executor/rocm:rocblas_wrapper",
         "//tensorflow/compiler/xla/stream_executor/rocm:rocsolver_wrapper",
+    ]) + if_dcu([], if_false=[
         "//tensorflow/compiler/xla/stream_executor/rocm:hipsolver_wrapper",
     ]),
 )
@@ -1222,6 +1230,7 @@ cc_library(
     name = "cusolver_rewriter",
     srcs = if_gpu_is_configured(["cusolver_rewriter.cc"]),
     hdrs = if_gpu_is_configured(["cusolver_rewriter.h"]),
+    copts = if_dcu(["-DTENSORFLOW_USE_DCU=1"]),
     deps = if_gpu_is_configured([
         ":cusolver_context",
         ":ir_emission_utils",
@@ -2032,6 +2041,7 @@ cc_library(
     hdrs = if_rocm_is_configured([
         "amdgpu_compiler.h",
     ]),
+    copts = if_dcu(["-DTENSORFLOW_USE_DCU=1"]),
     deps = if_rocm_is_configured([
         ":cusolver_rewriter",
         ":gemm_rewriter",

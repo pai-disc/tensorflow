@@ -30,12 +30,13 @@ limitations under the License.
 namespace tsl {
 
 std::vector<std::string> CandidateCudaRoots() {
-#if !defined(PLATFORM_GOOGLE)
-  VLOG(3) << "CUDA root = " << TF_CUDA_TOOLKIT_PATH;
-  return {TF_CUDA_TOOLKIT_PATH, std::string("/usr/local/cuda")};
-#else
-  return {std::string("/usr/local/cuda")};
-#endif
+  std::vector<string> candidates = {
+    TF_CUDA_TOOLKIT_PATH, string("/usr/local/cuda")
+  };
+  if (char* pstr = getenv("TAO_CUDA_PATH")) {
+    candidates.push_back(pstr);
+  }
+  return candidates;
 }
 
 bool PreferPtxasFromPath() { return true; }

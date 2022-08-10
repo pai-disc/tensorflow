@@ -90,7 +90,7 @@ class LHLO_UnaryElementwiseOp<string mnemonic,
 }
 
 // Abs supports complex to real, so element type is not guaranteed to match.
-def LHLO_AbsOp: LHLO_UnaryElementwiseOp<"abs", LHLO_Buffer, [SameOperandsShape]> {
+def LHLO_AbsOp: LHLO_UnaryElementwiseOp<"abs", LHLO_Buffer, [SameOperandsShape, Elementwise]> {
   let summary = "Absolute value operator";
   let description = [{
     Returns `abs(operand)` element-wise.
@@ -143,7 +143,7 @@ def LHLO_ClzOp: LHLO_UnaryElementwiseOp<"count_leading_zeros", LHLO_IntBuffer> {
   }];
 }
 // TODO(timshen): add a custom verifier.
-def LHLO_ConvertOp : LHLO_UnaryElementwiseOp<"convert", LHLO_Buffer, [SameOperandsShape]> {
+def LHLO_ConvertOp : LHLO_UnaryElementwiseOp<"convert", LHLO_Buffer, [SameOperandsShape, Elementwise]> {
   let summary = "Convert operator";
   let description = [{
     Performs element-wise conversion of values from one type to another, e.g.
@@ -656,7 +656,7 @@ def LHLO_CustomCallOp : LHLO_Op<"custom_call", [AttrSizedOperandSegments]> {
 // LMHLO tuple op definitions.
 //===----------------------------------------------------------------------===//
 
-def LHLO_CompareOp: LHLO_Op<"compare", []> {
+def LHLO_CompareOp: LHLO_Op<"compare", [Elementwise]> {
   let summary = "Comparison operator";
   let description = [{
     Compares `lhs` and `rhs` elementwise according to `comparison_direction`

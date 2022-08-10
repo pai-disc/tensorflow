@@ -1,12 +1,15 @@
 load("//tensorflow/compiler/xla:xla.bzl", "xla_cc_test")
+load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
+load("//tensorflow:tensorflow.bzl",
+     "tf_copts",
+)
 load(
     "@local_config_rocm//rocm:build_defs.bzl",
     "if_rocm_is_configured",
 )
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = [":friends"],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
@@ -27,6 +30,7 @@ cc_library(
         "gpu_backend_lib.h",
         "utils.h",
     ],
+    copts = tf_copts(),
     deps = [
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/memory",

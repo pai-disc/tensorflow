@@ -322,12 +322,7 @@ cc_library(
     srcs = if_gpu_is_configured(["asm_compiler.cc"]),
     hdrs = if_gpu_is_configured(["asm_compiler.h"]),
     copts = tsl_copts(),
-    visibility = [
-        "//tensorflow/compiler/mlir/tools/kernel_gen:__subpackages__",
-        "//tensorflow/compiler/xla/service/gpu:__subpackages__",
-        "//tensorflow/compiler/xla/stream_executor:__subpackages__",
-        "//tensorflow/core/kernels:__subpackages__",
-    ],
+    visibility = ["//visibility:public"],
     deps = if_gpu_is_configured([
         ":gpu_asm_opts",
         ":gpu_driver_header",

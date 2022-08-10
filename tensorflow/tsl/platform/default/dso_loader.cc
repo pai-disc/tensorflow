@@ -144,7 +144,13 @@ StatusOr<void*> GetRocblasDsoHandle() { return GetDsoHandle("rocblas", ""); }
 
 StatusOr<void*> GetMiopenDsoHandle() { return GetDsoHandle("MIOpen", ""); }
 
-StatusOr<void*> GetHipfftDsoHandle() { return GetDsoHandle("hipfft", ""); }
+StatusOr<void*> GetHipfftDsoHandle() {
+#if TF_ROCM_VERSION < 40100 || TENSORFLOW_USE_DCU
+  return GetDsoHandle("rocfft", "");
+#else
+  return GetDsoHandle("hipfft", "");
+#endif
+}
 
 StatusOr<void*> GetRocrandDsoHandle() { return GetDsoHandle("rocrand", ""); }
 

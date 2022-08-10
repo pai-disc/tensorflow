@@ -8,6 +8,11 @@ load(
 )
 load("//tensorflow/tsl:tsl.bzl", "tsl_copts")
 load("@local_config_rocm//rocm:build_defs.bzl", "if_rocm_is_configured", "rocm_copts")
+load(
+    "@local_config_rocm//rocm:build_defs.bzl",
+    "if_rocm_is_configured",
+    "if_dcu",
+)
 load("//tensorflow/tsl/platform:build_config_root.bzl", "if_static")
 
 package(
@@ -214,6 +219,7 @@ cc_library(
     srcs = if_rocm_is_configured(["rocm_fft.cc"]),
     hdrs = if_rocm_is_configured(["rocm_fft.h"]),
     visibility = ["//visibility:public"],
+    copts = if_dcu(["-DTENSORFLOW_USING_DCU"]),
     deps = if_rocm_is_configured([
         ":hipfft_if_static",
         ":rocm_platform_id",
@@ -230,6 +236,39 @@ cc_library(
         "//tensorflow/compiler/xla/stream_executor/platform:dso_loader",
         "@local_config_rocm//rocm:rocm_headers",
         "//tensorflow/tsl/platform:env",
+    ]),
+    alwayslink = True,
+)
+
+cc_library(
+    name = "rocfft_if_static",
+    deps = if_static([
+        "@local_config_rocm//rocm:rocfft",
+    ]),
+)
+
+cc_library(
+    name = "rocfft_plugin",
+    srcs = if_rocm_is_configured(["rocm_fft.cc"]),
+    hdrs = if_rocm_is_configured(["rocm_fft.h"]),
+    visibility = ["//visibility:public"],
+    copts = if_dcu(["-DTENSORFLOW_USING_DCU"]),
+    deps = if_rocm_is_configured([
+        ":rocfft_if_static",
+        ":rocm_platform_id",
+        "//tensorflow/stream_executor:event",
+        "//tensorflow/stream_executor:fft",
+        "//tensorflow/stream_executor:plugin_registry",
+        "//tensorflow/stream_executor:scratch_allocator",
+        "//tensorflow/stream_executor/gpu:gpu_activation",
+        "//tensorflow/stream_executor/gpu:gpu_helpers_header",
+        "//tensorflow/stream_executor/gpu:gpu_executor_header",
+        "//tensorflow/stream_executor/gpu:gpu_stream_header",
+        "//tensorflow/stream_executor/gpu:gpu_kernel_header",
+        "//tensorflow/stream_executor/lib",
+        "//tensorflow/stream_executor/platform",
+        "//tensorflow/stream_executor/platform:dso_loader",
+        "@local_config_rocm//rocm:rocm_headers",
     ]),
     alwayslink = True,
 )
@@ -419,12 +458,15 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = if_rocm_is_configured([
         ":miopen_plugin",
-        ":hipfft_plugin",
         ":rocblas_plugin",
         ":rocrand_plugin",
         ":rocm_driver",
         ":rocm_platform",
         ":rocm_helpers",
+    ]) + if_dcu([
+        ":rocfft_plugin",
+    ], [
+        ":hipfft_plugin",
     ]),
     alwayslink = 1,
 )
