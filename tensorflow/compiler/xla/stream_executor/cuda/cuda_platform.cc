@@ -140,6 +140,16 @@ CudaPlatform::DescriptionForDevice(int ordinal) const {
   return GpuExecutor::CreateDeviceDescription(ordinal);
 }
 
+port::StatusOr<StreamExecutor*> CudaPlatform::ExecutorForDevice(int ordinal,
+                                                                void* hash) {
+  StreamExecutorConfig config;
+  config.ordinal = ordinal;
+  config.hash = hash;
+  config.plugin_config = PluginConfig();
+  config.device_options = GetDeviceOptionsFromEnv();
+  return GetExecutor(config);
+}
+
 port::StatusOr<StreamExecutor*> CudaPlatform::ExecutorForDevice(int ordinal) {
   StreamExecutorConfig config;
   config.ordinal = ordinal;

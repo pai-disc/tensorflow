@@ -248,8 +248,13 @@ def InvokeNvcc(argv, log=False):
   nvccopts += std_options
   nvccopts += m_options
   nvccopts += warning_options
-  # Force C++17 dialect (note, everything in just one string!)
-  nvccopts += ' --std c++17 '
+  # BladeDISC change starts: Since this cuda crosstool is widely used in other
+  # components in BladeDISC, we're NOT going to force C++17 here, we specify c++
+  # standard explicitly in each component. Comment out the following lines also
+  # eleminate warning like: `incompatible redefinition for option 'std'`.
+  # # Force C++17 dialect (note, everything in just one string!)
+  # nvccopts += ' --std c++17 '
+  # BladeDISC change ends
   nvccopts += fatbin_options
 
   if depfiles:

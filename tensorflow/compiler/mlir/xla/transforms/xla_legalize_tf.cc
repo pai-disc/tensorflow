@@ -37,6 +37,7 @@ limitations under the License.
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
 #include "mlir/Transforms/DialectConversion.h"  // from @llvm-project
 #include "stablehlo/dialect/ChloOps.h"  // from @stablehlo
+#include "tensorflow/compiler/mlir/disc/IR/hlo_disc_ops.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
 #include "tensorflow/compiler/mlir/tensorflow/transforms/lower_tf.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/mangling_util.h"
@@ -444,7 +445,36 @@ LogicalResult legalizeTF(Operation *op, bool allow_partial_conversion,
   // canonicalization pattern to pattern list to enable multi-hop lowering.
   chlo::ConstantLikeOp::getCanonicalizationPatterns(patterns, context);
 
-  return ApplyPatterns(op, patterns, legalize_chlo, allow_partial_conversion);
+  ConversionTarget target(*context);
+  if (legalize_chlo) {
+    target.addIllegalDialect<chlo::ChloDialect>();
+  } else {
+    target.addLegalDialect<chlo::ChloDialect>();
+  }
+  target.addLegalDialect<MhloDialect>();
+  target.addLegalDialect<arith::ArithDialect>();
+  target.addLegalDialect<func::FuncDialect>();
+  target.addLegalDialect<mhlo_disc::MhloDiscDialect>();
+  target.addLegalDialect<tensor::TensorDialect>();
+  target.addLegalDialect<shape::ShapeDialect>();
+  target.addLegalOp<func::CallOp>();
+
+  if (!allow_partial_conversion) {
+    // Fully qualify ReturnOp here as mhlo dialect also defines a ReturnOp.
+    target.addLegalOp<ModuleOp, ::mlir::func::FuncOp, ::mlir::func::ReturnOp>();
+    DenseSet<Operation *> nonlegalized_ops;
+    LogicalResult result = applyPartialConversion(
+        op, target, std::move(patterns), &nonlegalized_ops);
+    // In order to enforce that the conversion result is fully converted,
+    // fail if there are any nonlegalized ops in the set.
+    if (failed(result) || !nonlegalized_ops.empty()) {
+      EmitLegalizationErrors(op, nonlegalized_ops);
+      return failure();
+    }
+    return result;
+  }
+
+  return applyPartialConversion(op, target, std::move(patterns));
 }
 
 // Performs the lowering to XLA dialect.

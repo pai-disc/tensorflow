@@ -176,6 +176,8 @@ cc_library(
         ":legalize_utils",
         ":tf_xla_passes_inc_gen",
         ":xla_legalize_tf_passes_inc_gen",
+        ":xla_passes_inc_gen",
+        "//tensorflow/compiler/mlir/disc:mhlo_disc",
         "//tensorflow/compiler/mlir/tensorflow",
         "//tensorflow/compiler/mlir/tensorflow:dynamic_shape_utils",
         "//tensorflow/compiler/xla:xla_data_proto_cc",
@@ -201,6 +203,7 @@ cc_library(
         "@llvm-project//mlir:TensorDialect",
         "@stablehlo//:chlo_ops",
     ],
+    alwayslink = 1,
 )
 
 cc_library(

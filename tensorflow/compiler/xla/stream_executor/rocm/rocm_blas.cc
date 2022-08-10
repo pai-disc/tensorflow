@@ -116,7 +116,8 @@ ROCMBlas::~ROCMBlas() {
 
 bool ROCMBlas::SetStream(Stream *stream) {
   CHECK(stream != nullptr);
-  CHECK(AsGpuStreamValue(stream) != nullptr);
+  // gty: to enable PyTorch default stream
+  // CHECK(AsGpuStreamValue(stream) != nullptr);
   CHECK(blas_ != nullptr);
   gpu::ScopedActivateExecutorContext sac{parent_};
   rocblas_status ret =

@@ -31,6 +31,7 @@ limitations under the License.
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
 #include "mlir/Transforms/DialectConversion.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_types.h"
+#include "tensorflow/compiler/mlir/tensorflow/utils/convert_tensor.h"
 
 #define DEBUG_TYPE "xla-legalize-tf-types"
 
@@ -132,8 +133,23 @@ class TfTypePattern : public ConversionPattern {
     // Update the regions. The dialect conversion framework wants new regions to
     // be created and updated, rather than updating the old op. Thus we use an
     // OperationState so we can add regions to the new up.
+    auto attrs = llvm::to_vector(op->getAttrs());
+    for (auto& attr : attrs) {
+      if (auto elemsAttr = attr.getValue().dyn_cast<ElementsAttr>()) {
+        auto type = elemsAttr.getType();
+        auto newType = ToLegalType(type);
+        if (newType == type) continue;
+
+        tensorflow::Tensor out;
+        if (tensorflow::ConvertToTensor(elemsAttr, &out) != tensorflow::Status::OK())
+          return failure();
+        ArrayRef<char> data(static_cast<char*>(out.data()), out.TotalBytes());
+        auto newAttr = DenseElementsAttr::getFromRawBuffer(newType, data);
+        attr.setValue(newAttr);
+      }
+    }
     OperationState state(op->getLoc(), op->getName().getStringRef(), operands,
-                         new_results, op->getAttrs(), op->getSuccessors());
+                         new_results, attrs, op->getSuccessors());
     for (Region &region : op->getRegions()) {
       Region &new_region = *state.addRegion();
       rewriter.inlineRegionBefore(region, new_region, new_region.begin());

@@ -2047,7 +2047,7 @@ def HLO_CollectivePermuteOp: HLO_Op<"collective_permute",
       "::mlir::DenseIntElementsAttr":$source_target_pairs)>];
 }
 
-def HLO_ConvolutionOp : HLO_Op<"convolution", [Pure]> {
+def HLO_ConvolutionOp : HLO_ShapedInterfaceOp<"convolution", [Pure]> {
   let summary = "Convolution operator";
   let description = [{
     Computes a convolution of the kind used in neural networks.
@@ -2207,7 +2207,9 @@ def HLO_CustomCallOp: HLO_Op<"custom_call",
 }
 
 def HLO_DotOp: HLO_Op<"dot",
-    [Pure, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+    [Pure, DeclareOpInterfaceMethods<InferTypeOpInterface>,
+     DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+                              ["reifyReturnTypeShapes"]>]> {
   let summary = "Dot operator";
   let description = [{
     Performs dot products between vectors, vector/matrix and matrix/matrix
@@ -2584,8 +2586,8 @@ def HLO_SortOp : HLO_Op<"sort",
   let hasVerifier = 1;
 }
 
-def HLO_ReverseOp: HLO_Op<"reverse",
-      [Pure, HLO_CompatibleOperandsAndResultType]> {
+def HLO_ReverseOp: HLO_ShapedInterfaceOp<"reverse",
+      [Pure, SameOperandsAndResultType, HLO_CompatibleOperandsAndResultType]> {
   let summary = "Reverse operator";
   let description = [{
     Reverses the specified dimensions of `operand` according to the given
@@ -3178,7 +3180,7 @@ def HLO_DynamicGatherOp: HLO_Op<"dynamic_gather",
   let hasCanonicalizer = 1;
 }
 
-def HLO_DynamicConvOp : HLO_Op<"dynamic_conv", [Pure]> {
+def HLO_DynamicConvOp : HLO_ShapedInterfaceOp<"dynamic_conv", [Pure]> {
   let summary = "Dynamic Convolution operator";
   let description = [{
     The dynamic shape version of ConvOp. Computes a convolution with dynamic padding.
