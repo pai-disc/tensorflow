@@ -19,6 +19,7 @@ limitations under the License.
 #include <optional>
 
 #include "tensorflow/compiler/xla/service/buffer_assignment.h"
+#include "tensorflow/compiler/xla/service/gpu/backend_configs.pb.h"
 #include "tensorflow/compiler/xla/service/gpu/matmul_utils.h"
 #include "tensorflow/compiler/xla/service/gpu/thunk.h"
 #include "tensorflow/compiler/xla/status.h"
@@ -47,18 +48,30 @@ class GemmThunk : public Thunk {
 
   // TODO(xiafei.qiuxf): Temperally comment out, need to re-implement these
   //                     method to work with internal standalone xla.
-  // // ADDED_FOR_TAO
-  // const BufferAllocation::Slice& lhs_buffer() const { return lhs_buffer_; }
-  // const BufferAllocation::Slice& rhs_buffer() const { return rhs_buffer_; }
-  // const BufferAllocation::Slice& output_buffer() const {
-  //   return output_buffer_;
-  // }
-  // const Shape& lhs_shape() const { return config_.lhs_shape; }
-  // const Shape& rhs_shape() const { return config_.rhs_shape; }
-  // const Shape& output_shape() const { return config_.output_shape; }
-  // const GemmBackendConfig& backend_config() const {
-  //   return config_.backend_config;
-  // }
+  // ADDED_FOR_TAO
+  const BufferAllocation::Slice& lhs_buffer() const { return lhs_buffer_; }
+  const BufferAllocation::Slice& rhs_buffer() const { return rhs_buffer_; }
+  const BufferAllocation::Slice& output_buffer() const {
+    return output_buffer_;
+  }
+  const Shape& lhs_shape() const { return config_.lhs_shape; }
+  const Shape& rhs_shape() const { return config_.rhs_shape; }
+  const Shape& output_shape() const { return config_.output_shape; }
+  const absl::InlinedVector<int64_t, 4>& lhs_contracting_dimensions() const {
+    return config_.lhs_contracting_dims;
+  }
+  const absl::InlinedVector<int64_t, 4>& rhs_contracting_dimensions() const {
+    return config_.rhs_contracting_dims;
+  }
+  const absl::InlinedVector<int64_t, 4>& lhs_batch_dimensions() const {
+    return config_.lhs_batch_dims;
+  }
+  const absl::InlinedVector<int64_t, 4>& rhs_batch_dimensions() const {
+    return config_.rhs_batch_dims;
+  }
+  double alpha_real() const { return config_.alpha.real(); }
+  double alpha_imag() const { return config_.alpha.imag(); }
+  double beta() const { return config_.beta; }
   // // END_OF_ADD
 
  private:
