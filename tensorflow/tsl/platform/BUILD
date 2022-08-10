@@ -1320,6 +1320,7 @@ cc_library(
         "@com_google_absl//absl/strings",
     ],
     alwayslink = 1,
+    visibility = ["//visibility:public"],
 )
 
 tsl_cc_test(

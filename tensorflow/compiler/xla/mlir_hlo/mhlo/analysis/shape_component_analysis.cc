@@ -583,9 +583,12 @@ struct ShapeVisitor {
   }
   void forwardTensorExtract(tensor::ExtractOp op) {
     auto &dims = insert(ShapeOrValueInfo::getValueInfoOf(op));
-    assert(op.getIndices().size() == 1);
-    if (auto index =
-            op.getIndices().front().getDefiningOp<arith::ConstantOp>()) {
+    if (op.getIndices().empty()) {
+      // Extract from a single-element tensor.
+      auto in = lookup(ShapeOrValueInfo::getValueInfoOf(op.getTensor()));
+      dims.push_back({in[0].symbols, in[0].expr});
+    } else if (auto index =
+                   op.getIndices().front().getDefiningOp<arith::ConstantOp>()) {
       int64_t i = index.getValue().cast<IntegerAttr>().getInt();
       // We asssume this is in bounds.
       auto in = lookup(ShapeOrValueInfo::getValueInfoOf(op.getTensor()));

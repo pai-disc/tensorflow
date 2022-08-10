@@ -1,0 +1,71 @@
+diff --git a/llvm/lib/Transforms/Scalar/GVN.cpp b/llvm/lib/Transforms/Scalar/GVN.cpp
+index ddfaf9c2c9fb..5cd78f480175 100644
+--- a/llvm/lib/Transforms/Scalar/GVN.cpp
++++ b/llvm/lib/Transforms/Scalar/GVN.cpp
+@@ -1108,6 +1108,40 @@ tryToConvertLoadOfPtrSelect(BasicBlock *DepBB, BasicBlock::iterator End,
+   return AvailableValue::getSelect(Sel);
+ }
+
++/// Get instructions between two given instructions.
++static void collectInstructionsInBetween(
++    Instruction *StartInst, const Instruction *EndInst,
++    llvm::SmallPtrSetImpl<Instruction *> &InBetweenInsts) {
++  assert(InBetweenInsts.empty() && "Expecting InBetweenInsts to be empty");
++
++  /// Get the next instructions of \p I, and push them to \p WorkList.
++  auto getNextInsts = [](Instruction *I,
++                         llvm::SmallPtrSetImpl<Instruction *> &WorkList) {
++    if (Instruction *NextInst = I->getNextNode())
++      WorkList.insert(NextInst);
++    else {
++      assert(I->isTerminator() && "Expecting a terminator instruction");
++      for (BasicBlock *Succ : successors(I))
++        WorkList.insert(&Succ->front());
++    }
++  };
++
++  llvm::SmallPtrSet<Instruction *, 10> WorkList;
++  getNextInsts(StartInst, WorkList);
++  while (!WorkList.empty()) {
++    Instruction *CurInst = *WorkList.begin();
++    WorkList.erase(CurInst);
++
++    if (CurInst == EndInst)
++      continue;
++
++    if (!InBetweenInsts.insert(CurInst).second)
++      continue;
++
++    getNextInsts(CurInst, WorkList);
++  }
++}
++
+ bool GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
+                                       Value *Address, AvailableValue &Res) {
+   if (!DepInfo.isDef() && !DepInfo.isClobber()) {
+@@ -1128,6 +1162,25 @@ bool GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
+   const DataLayout &DL = Load->getModule()->getDataLayout();
+
+   Instruction *DepInst = DepInfo.getInst();
++  // Deal with shared memory load of nvptx. Cannot forward if there is a call
++  // between the two instructions.
++  const std::string &TT = Load->getModule()->getTargetTriple();
++  if ((TT.find("nvptx") != std::string::npos) &&
++      (Load->getPointerAddressSpace() == 3)) {
++    if (dyn_cast<StoreInst>(DepInst) || dyn_cast<LoadInst>(DepInst)) {
++      SmallPtrSet<Instruction *, 10> InBetweenInsts;
++      collectInstructionsInBetween(DepInst, Load, InBetweenInsts);
++      for (auto Inst : InBetweenInsts) {
++        if (CallInst *CallI = dyn_cast<CallInst>(Inst)) {
++          // Thread-block level barrier may be called directly or indirectly.
++          // e.g. direct call:
++          //     call void @llvm.nvvm.barrier0()
++          return false;
++        }
++      }
++    }
++  }
++
+   if (DepInfo.isClobber()) {
+     // If the dependence is to a store that writes to a superset of the bits
+     // read by the load, we can extract the bits we need for the load from the

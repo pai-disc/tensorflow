@@ -226,6 +226,8 @@ bool CouldNeedDeviceBitcode(const llvm::Module& module) {
   return false;
 }
 
+}  // namespace
+
 // Links the module with a vector of path to bitcode modules.
 // The caller must guarantee that the paths exist.
 Status LinkWithBitcodeVector(
@@ -258,6 +260,8 @@ Status LinkWithBitcodeVector(
   }
   return OkStatus();
 }
+
+namespace {
 
 // Links libdevice into the given module if the module needs libdevice.
 Status LinkLibdeviceIfNecessary(llvm::Module* module,
@@ -619,18 +623,27 @@ StatusOr<std::string> CompileToPtx(
 
 }  // namespace nvptx
 
-namespace {
-
 // Gets the ROCm-Device-Libs filenames for a particular AMDGPU version.
 std::vector<std::string> GetROCDLPaths(std::string gcn_arch_name,
                                        const std::string& rocdl_dir_path) {
   // AMDGPU version-neutral bitcodes.
-  static std::vector<std::string>* rocdl_filenames =
-      new std::vector<std::string>(
-          {"opencl.bc", "ocml.bc", "ockl.bc", "oclc_finite_only_off.bc",
-           "oclc_daz_opt_off.bc", "oclc_correctly_rounded_sqrt_on.bc",
-           "oclc_unsafe_math_off.bc", "oclc_wavefrontsize64_on.bc"});
-
+#if TF_ROCM_VERSION >= 50000
+  static std::vector<std::string>* rocdl_filenames = new std::vector<std::string>(
+      {"opencl.bc", "ocml.bc", "ockl.bc", "oclc_finite_only_off.bc",
+       "oclc_daz_opt_off.bc", "oclc_correctly_rounded_sqrt_on.bc",
+       "oclc_unsafe_math_off.bc", "oclc_wavefrontsize64_on.bc"});
+#elif TF_ROCM_VERSION >= 30900 || TENSORFLOW_USE_DCU
+  static std::vector<std::string>* rocdl_filenames = new std::vector<std::string>(
+      {"hc.bc", "opencl.bc", "ocml.bc", "ockl.bc", "oclc_finite_only_off.bc",
+       "oclc_daz_opt_off.bc", "oclc_correctly_rounded_sqrt_on.bc",
+       "oclc_unsafe_math_off.bc", "oclc_wavefrontsize64_on.bc"});
+#else
+  static std::vector<std::string>* rocdl_filenames = new std::vector<std::string>(
+      {"hc.amdgcn.bc", "opencl.amdgcn.bc", "ocml.amdgcn.bc", "ockl.amdgcn.bc",
+       "oclc_finite_only_off.amdgcn.bc", "oclc_daz_opt_off.amdgcn.bc",
+       "oclc_correctly_rounded_sqrt_on.amdgcn.bc",
+       "oclc_unsafe_math_off.amdgcn.bc", "oclc_wavefrontsize64_on.amdgcn.bc"});
+#endif
   // Construct full path to ROCDL bitcode libraries.
   std::vector<std::string> result;
   result.reserve(rocdl_filenames->size() + 1);
@@ -646,9 +659,16 @@ std::vector<std::string> GetROCDLPaths(std::string gcn_arch_name,
   }
   result.push_back(tsl::io::JoinPath(
       rocdl_dir_path,
+#if TF_ROCM_VERSION >= 30900 || TENSORFLOW_USE_DCU
       absl::StrCat("oclc_isa_version_", amdgpu_version, ".bc")));
+#else
+      absl::StrCat("oclc_isa_version_", amdgpu_version, ".amdgcn.bc")));
+#endif
+
   return result;
 }
+
+namespace {
 
 struct HsacoCacheEntry {
   uint64_t hash;
@@ -874,6 +894,14 @@ std::pair<std::string, std::string> GetFeatureStrFromGCNArchName(
   std::string feature_str;
 
   std::string gfx = gcn_arch_name;
+#if TF_ROCM_VERSION < 30900
+  // For ROCm versions older than 3.9, hardcode it to "+code-object-v3"
+  // This is simply to preserve how things were...nohing else
+  feature_str = "+code-object-v3";
+#elif TF_ROCM_VERSION < 40000
+  // For ROCM versions 3.9 and 3.10, hardcode it to empty string
+  feature_str = "";
+#else
   // For ROCm versions 4.0 and greater, we need to specify the correct
   // feature str, based on the underlying GPU HW to get max performance.
   std::vector<std::string> tokens = absl::StrSplit(gcn_arch_name, ':');
@@ -889,6 +917,7 @@ std::pair<std::string, std::string> GetFeatureStrFromGCNArchName(
     }
   }
   feature_str = absl::StrJoin(mapped_tokens, ",");
+#endif
 
   return std::make_pair(gfx, feature_str);
 }
@@ -917,6 +946,13 @@ void AMDGPUBackendInit(const HloModuleConfig& hlo_module_config) {
   LLVMInitializeAMDGPUTargetInfo();
   LLVMInitializeAMDGPUTargetMC();
   LLVMInitializeAMDGPUAsmPrinter();
+
+#if TF_ROCM_VERSION < 40100 || TENSORFLOW_USE_DCU
+  // Use code-object-v3 for ROCm versions 4.0.1 and lower, since the
+  // HIP runtime for those ROCm versions expects the v3 HSACO objects
+  // Default is now v4 for newer LLVM versions (starting around 210326)
+  FeedLLVMWithFlags({"--amdhsa-code-object-version=3"});
+#endif
 
 #endif
 

@@ -51,10 +51,7 @@ filegroup(
 # Target that bundles up the XLA CPU and GPU JIT devices.
 cc_library(
     name = "jit",
-    visibility = [
-        ":friends",
-        "//learning/tfx:__subpackages__",
-    ],
+    visibility = ["//visibility:public"],
     deps = [
         ":xla_cpu_device",
         ":xla_cpu_jit",

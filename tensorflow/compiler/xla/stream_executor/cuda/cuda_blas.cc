@@ -253,7 +253,8 @@ CUDABlas::~CUDABlas() {
 
 bool CUDABlas::SetStream(Stream *stream) {
   CHECK(stream != nullptr);
-  CHECK(AsGpuStreamValue(stream) != nullptr);
+  // gty: to enable PyTorch default stream
+  // CHECK(AsGpuStreamValue(stream) != nullptr);
   CHECK(blas_ != nullptr);
   gpu::ScopedActivateExecutorContext sac{parent_};
   cublasStatus_t ret = cublasSetStream(blas_, AsGpuStreamValue(stream));

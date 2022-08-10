@@ -113,12 +113,7 @@ load(
 )
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = [
-        ":dependency_allowlist",
-        "//tensorflow:internal",
-        "//tensorflow_models:__subpackages__",
-    ],
+    default_visibility = ["//visibility:public"],
     features = if_google([
         "-layering_check",
         "-parse_headers",
@@ -1473,6 +1468,7 @@ cc_library(
         "//tensorflow/compiler/xla:xla_data_proto_cc_impl",
         "//tensorflow/compiler/xla/service:hlo_proto_cc_impl",
         "//tensorflow/compiler/xla/service/gpu:backend_configs_cc_impl",
+        "//tensorflow/compiler/xla/stream_executor:dnn_proto_cc_impl",
     ] + tf_protos_grappler_impl() + tf_monitoring_framework_deps(),
     # Alwayslink causes a cc_binary to "always link" in the
     # srcs for a given cc_library, even if they are unreferenced, see:
@@ -1846,7 +1842,7 @@ cc_library(
 alias(
     name = "test_main",
     actual = "//tensorflow/tsl/platform:test_main",
-    visibility = ["//tensorflow:internal"],
+    visibility = ["//visibility:public"],
 )
 
 tf_cc_tests(

@@ -83,8 +83,14 @@ struct StreamExecutorConfig {
   // If this field is specified for the search, others will be ignored.
   void* gpu_stream = nullptr;
 
+  bool operator<(const StreamExecutorConfig& other) const noexcept {
+    return ordinal == other.ordinal ? hash < other.hash
+                                    : ordinal < other.ordinal;
+  }
+
   // The ordinal of the device to be managed by the returned StreamExecutor.
   int ordinal;
+  void* hash = nullptr;
 
   // The PluginConfig for the returned StreamExecutor.
   PluginConfig plugin_config;

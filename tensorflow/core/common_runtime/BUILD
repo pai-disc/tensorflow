@@ -43,8 +43,7 @@ default_package_visibility = [
 ]
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = default_package_visibility,
+    default_visibility = ["//visibility:public"],
     features = if_google(
         [
             "-layering_check",

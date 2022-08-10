@@ -2009,6 +2009,7 @@ def MHLO_ClampOp : MHLO_ShapedInterfaceOp<"clamp", [Pure,
   );
   let results = (outs MHLO_Tensor:$result);
 
+  let hasVerifier = 1;
   let hasFolder = 1;
 
   let assemblyFormat = [{

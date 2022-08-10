@@ -25,7 +25,7 @@ limitations under the License.
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
-include "tensorflow/compiler/mlir/tensorflow/ir/tf_op_interfaces.td"
+include "external/org_tensorflow/tensorflow/compiler/mlir/tensorflow/ir/tf_op_interfaces.td"
 
 //===----------------------------------------------------------------------===//
 // TensorFlow dialect definitions
