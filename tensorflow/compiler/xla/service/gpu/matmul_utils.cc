@@ -312,10 +312,31 @@ StatusOr<bool> CanFoldTransposeOperandIntoDot(const HloInstruction& dot,
                                output_shape.element_type()));
   }
 
-  return GemmConfig{
-      lhs_layout, rhs_layout, output_layout,     {alpha_real, alpha_imag},
-      beta,       algorithm,  compute_precision,
-  };
+  // BladeDISC change starts: Add more arguments to ctor of GemmConfig.
+  absl::InlinedVector<int64_t, 4> lhs_contracting_dims_tmp(
+      lhs_contracting_dims.begin(), lhs_contracting_dims.end());
+  absl::InlinedVector<int64_t, 4> rhs_contracting_dims_tmp(
+      rhs_contracting_dims.begin(), rhs_contracting_dims.end());
+  absl::InlinedVector<int64_t, 4> lhs_batch_dims_tmp(lhs_batch_dims.begin(),
+                                                     lhs_batch_dims.end());
+  absl::InlinedVector<int64_t, 4> rhs_batch_dims_tmp(rhs_batch_dims.begin(),
+                                                     rhs_batch_dims.end());
+
+  return GemmConfig{lhs_layout,
+                    rhs_layout,
+                    output_layout,
+                    {alpha_real, alpha_imag},
+                    beta,
+                    algorithm,
+                    compute_precision,
+                    lhs_contracting_dims_tmp,
+                    rhs_contracting_dims_tmp,
+                    lhs_batch_dims_tmp,
+                    rhs_batch_dims_tmp,
+                    lhs_shape,
+                    rhs_shape,
+                    output_shape};
+  // BladeDISC change ends.
 }
 
 /*static*/ StatusOr<GemmConfig> GemmConfig::For(const HloInstruction* gemm) {
