@@ -105,6 +105,15 @@ struct GemmConfig {
   double beta;
   std::optional<int64_t> algorithm;
   int64_t compute_precision;
+  // BladeDISC change starts: Carry more info needed by tao XLA compiler
+  absl::InlinedVector<int64_t, 4> lhs_contracting_dims;
+  absl::InlinedVector<int64_t, 4> rhs_contracting_dims;
+  absl::InlinedVector<int64_t, 4> lhs_batch_dims;
+  absl::InlinedVector<int64_t, 4> rhs_batch_dims;
+  Shape lhs_shape;
+  Shape rhs_shape;
+  Shape output_shape;
+  // BladeDISC change ends.
 };
 
 // Run the given GEMM instruction `gemm` subject to the configuration
