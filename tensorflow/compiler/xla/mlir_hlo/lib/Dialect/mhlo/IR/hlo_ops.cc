@@ -1151,24 +1151,30 @@ LogicalResult DotGeneralOp::verify() {
     }
   }
 
-  if (lhsType && rhsType) {
-    // Dimension sizes must be compatible for lhs/rhs.
-    auto lhsShape = lhsType.getShape();
-    auto rhsShape = rhsType.getShape();
+  // =================== BEGIN Added for DISC ======================
+  // tf.BatchMatmul(tensor<?x?x?xf32>, tensor<4x?x?xf32>) is valid, while the
+  // tf.BatchMatmul tf2mhlo converter does not handle shape propagation between
+  // the lhs & rhs, leading to following check fail. Just disable the check
+  // as a workaround.
+  // if (lhsType && rhsType) {
+  //   // Dimension sizes must be compatible for lhs/rhs.
+  //   auto lhsShape = lhsType.getShape();
+  //   auto rhsShape = rhsType.getShape();
 
-    for (auto [lhs, rhs] : llvm::zip(lhsBatchingDims, rhsBatchingDims)) {
-      if (lhsShape[lhs] != rhsShape[rhs]) {
-        return emitOpError() << "batching dimension sizes must match for "
-                                "lhs/rhs";
-      }
-    }
-    for (auto [lhs, rhs] : llvm::zip(lhsContractingDims, rhsContractingDims)) {
-      if (lhsShape[lhs] != rhsShape[rhs]) {
-        return emitOpError() << "contracting dimension sizes must match for "
-                                "lhs/rhs";
-      }
-    }
-  }
+  //   for (auto [lhs, rhs] : llvm::zip(lhsBatchingDims, rhsBatchingDims)) {
+  //     if (lhsShape[lhs] != rhsShape[rhs]) {
+  //       return emitOpError() << "batching dimension sizes must match for "
+  //                               "lhs/rhs";
+  //     }
+  //   }
+  //   for (auto [lhs, rhs] : llvm::zip(lhsContractingDims, rhsContractingDims)) {
+  //     if (lhsShape[lhs] != rhsShape[rhs]) {
+  //       return emitOpError() << "contracting dimension sizes must match for "
+  //                               "lhs/rhs";
+  //     }
+  //   }
+  // }
+  // ===================   END Added for DISC ======================
   return success();
 }
 
@@ -2031,7 +2037,7 @@ struct DynamicIotaBroadcast : public OpRewritePattern<DynamicIotaOp> {
           rewriter.getI64Type()),
         iota.output_shape());
     }
-     
+
     auto slicedShape = rewriter.create<SliceOp>(
         iota.getLoc(), sliceInput,
         rewriter.getI64TensorAttr(iotaDimensionInt),
