@@ -187,20 +187,22 @@ def _find_rocrand_config(rocm_install_path):
 
   def rocrand_version_number(path):
     possible_version_files = [
+        "include/rocrand/rocrand_version.h",  # ROCm 5.1+
         "rocrand/include/rocrand_version.h",  # ROCm 5.0 and prior
-        "include/rocrand/rocrand_version.h",  # ROCm 5.1
     ]
     version_file = None
     for f in possible_version_files:
       version_file_path = os.path.join(path, f)
       if os.path.exists(version_file_path):
         version_file = version_file_path
-        break
+        try:
+          version_number = _get_header_version(version_file, "ROCRAND_VERSION")
+        except ConfigError as e:
+          continue
+        return version_number
     if not version_file:
       raise ConfigError(
           "rocrand version file not found in {}".format(possible_version_files))
-    version_number = _get_header_version(version_file, "ROCRAND_VERSION")
-    return version_number
 
   rocrand_config = {
       "rocrand_version_number": rocrand_version_number(rocm_install_path)
