@@ -102,6 +102,7 @@ MAP_HLO_TO_LHLO(TanhOp);
 MAP_HLO_TO_LHLO(TransposeOp);
 MAP_HLO_TO_LHLO(XorOp);
 MAP_HLO_TO_LHLO(ReverseOp);
+MAP_HLO_TO_LHLO(RoundNearestEvenOp);
 
 #undef MAP_HLO_TO_LHLO
 
