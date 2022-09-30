@@ -558,6 +558,7 @@ void populateHloToLhloConversionPattern(
       HloToLhloOpConverter<mhlo::ReshapeOp>,
       HloToLhloOpConverter<mhlo::ReverseOp>,
       HloToLhloOpConverter<mhlo::RsqrtOp>,
+      HloToLhloOpConverter<mhlo::RoundOp>,
       HloToLhloOpConverter<mhlo::RoundNearestEvenOp>,
       HloToLhloOpConverter<mhlo::SelectOp>,
       HloToLhloOpConverter<mhlo::ShiftLeftOp>,
