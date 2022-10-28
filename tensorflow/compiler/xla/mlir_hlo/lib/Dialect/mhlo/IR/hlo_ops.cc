@@ -3553,6 +3553,54 @@ LogicalResult ClampOp::reifyReturnTypeShapes(
                                 &reifiedReturnShapes);
 }
 
+
+OpFoldResult ClampOp::fold(ArrayRef<Attribute> operands) {
+  auto val = operands[0].dyn_cast_or_null<DenseElementsAttr>();
+  if (!val) return {};
+  DenseElementsAttr min_val = operands[1].dyn_cast_or_null<DenseElementsAttr>();
+  if (!min_val) return {};
+  DenseElementsAttr max_val = operands[2].dyn_cast_or_null<DenseElementsAttr>();
+  if (!max_val) return {};
+
+  auto type = getElementTypeOrSelf(getType());
+  if (!type.isF32() && !type.isF64()) return {};
+
+  auto shapedType = getType().cast<ShapedType>();
+  if (!shapedType.hasStaticShape()) return {};
+
+  // Prevent folding if the result is too large.
+  if (val.getNumElements() > kFoldOpEltLimit) return {};
+
+  // min/max/val should have the same shape
+  int64_t val_num = val.getNumElements();
+  int64_t min_num = min_val.getNumElements();
+  int64_t max_num = max_val.getNumElements();
+  if (val_num != min_num || val_num != max_num) return {};
+
+  int bitWidth = type.getIntOrFloatBitWidth();
+  llvm::SmallVector<APFloat, 4> values;
+  values.reserve(val.getNumElements());
+  for (auto group_val :
+       llvm::zip(val.getValues<APFloat>(), min_val.getValues<APFloat>(),
+                 max_val.getValues<APFloat>())) {
+    auto val_it = std::get<0>(group_val);
+    auto min_it = std::get<1>(group_val);
+    auto max_it = std::get<2>(group_val);
+    double value = bitWidth == 32 ? val_it.convertToFloat()
+                                  : val_it.convertToDouble();
+    double min_value = bitWidth == 32 ? min_it.convertToFloat()
+                                      : min_it.convertToDouble();
+    double max_value = bitWidth == 32 ? max_it.convertToFloat()
+                                      : max_it.convertToDouble();
+    value = std::clamp(value, min_value, max_value);
+    if (bitWidth == 32)
+      values.emplace_back(static_cast<float>(value));
+    else
+      values.emplace_back(value);
+  }
+  return DenseFPElementsAttr::get(shapedType, values);
+}
+
 //===----------------------------------------------------------------------===//
 // ComplexOp
 //===----------------------------------------------------------------------===//
