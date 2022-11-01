@@ -1598,6 +1598,7 @@ def HLO_ClampOp : HLO_ShapedInterfaceOp<"clamp", [NoSideEffect,
   let results = (outs HLO_Tensor);
 
   let hasVerifier = 1;
+  let hasFolder = 1;
 
   let extraClassDeclaration = [{
     // Method from InferTypeOpInterface interface.
