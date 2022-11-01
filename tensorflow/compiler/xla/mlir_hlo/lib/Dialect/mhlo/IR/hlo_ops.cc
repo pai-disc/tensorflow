@@ -3569,7 +3569,7 @@ OpFoldResult ClampOp::fold(ArrayRef<Attribute> operands) {
    if (!min_val || !max_val) return {};
 
    // min/max/val should be the same shape.
-   // Or min/max can be a scalar of the same type of val.
+   // Or min/max must be a scalar of the same type of val.
    int64_t val_num = val.getNumElements();
    int64_t min_num = min_val.getNumElements();
    int64_t max_num = max_val.getNumElements();
