@@ -1987,6 +1987,7 @@ def HLO_ClampOp : HLO_ShapedInterfaceOp<"clamp", [Pure,
   let results = (outs HLO_Tensor:$result);
 
   let hasVerifier = 1;
+  let hasFolder = 1;
 
   let assemblyFormat = [{
     $min `,` $operand `,` $max attr-dict
