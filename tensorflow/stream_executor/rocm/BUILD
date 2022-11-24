@@ -6,7 +6,12 @@ load(
     "//tensorflow/compiler/xla/stream_executor:build_defs.bzl",
     "stream_executor_friends",
 )
-load("@local_config_rocm//rocm:build_defs.bzl", "if_rocm_is_configured")
+load(
+    "@local_config_rocm//rocm:build_defs.bzl",
+    "if_rocm_is_configured",
+    "if_dcu",
+)
+load("//tensorflow/tsl/platform:build_config_root.bzl", "if_static")
 
 package(
     default_visibility = [":friends"],

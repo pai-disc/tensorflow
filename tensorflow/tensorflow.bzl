@@ -61,7 +61,6 @@ load(
 )
 load("@bazel_skylib//lib:new_sets.bzl", "sets")
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-
 def register_extension_info(**kwargs):
     pass
 
@@ -1707,7 +1706,6 @@ def tf_gpu_kernel_library(
         **kwargs):
     copts = copts + tf_copts() + _cuda_copts(opts = cuda_copts) + rocm_copts(opts = cuda_copts)
     kwargs["features"] = kwargs.get("features", []) + ["-use_header_modules"]
-
     cuda_library(
         srcs = srcs,
         hdrs = hdrs,

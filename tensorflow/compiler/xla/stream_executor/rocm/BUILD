@@ -459,9 +459,6 @@ cc_library(
         ":rocm_driver",
         ":rocm_platform",
         ":rocm_helpers",
-    ]) + if_dcu([
-        ":rocfft_plugin",
-    ], [
         ":hipfft_plugin",
     ]),
     alwayslink = 1,

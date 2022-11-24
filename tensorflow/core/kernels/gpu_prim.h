@@ -87,7 +87,7 @@ namespace gpuprim = ::hipcub;
 namespace rocprim {
 namespace detail {
 
-#if (TF_ROCM_VERSION >= 50200)
+#if (TF_ROCM_VERSION >= 50200) && (!TENSORFLOW_USE_DCU)
 template <>
 struct float_bit_mask<Eigen::half> {
   static constexpr uint16_t sign_bit = 0x8000;
