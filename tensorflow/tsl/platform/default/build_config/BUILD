@@ -3,6 +3,11 @@
 
 load("//tensorflow/tsl/platform:rules_cc.bzl", "cc_library")
 load("//tensorflow/tsl:tsl.bzl", "tsl_copts")
+## add support for dcu
+load(
+    "@local_config_cuda//cuda:build_defs.bzl",
+    "if_cuda",
+)
 
 package(default_visibility = ["//tensorflow/tsl:internal"])
 
@@ -112,7 +117,7 @@ cc_library(
     linkstatic = 1,
     deps = [],
 )
-
+# add support for dcu (add if_cuda)
 cc_library(
     name = "cuda",
     data = [
@@ -128,7 +133,7 @@ cc_library(
             "-Wl,-rpath,../local_config_cuda/cuda/extras/CUPTI/lib64",
         ],
     }),
-    deps = [
+    deps = if_cuda([
         "@local_config_cuda//cuda:cudart",
-    ],
+    ]),
 )

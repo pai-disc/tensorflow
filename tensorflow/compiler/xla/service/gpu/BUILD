@@ -777,6 +777,8 @@ cc_library(
         "//tensorflow/compiler/xla/stream_executor:device_memory",
         "//tensorflow/compiler/xla/stream_executor:stream_executor_headers",
         "//tensorflow/compiler/xla/stream_executor/gpu:gpu_asm_opts",
+#add support for dcu
+        "//tensorflow/stream_executor/rocm:hipsolver_wrapper",
     ]) + ["//tensorflow/tsl/platform:status"],
 )
 
