@@ -9,7 +9,7 @@ load(
 load("//third_party/compute_library:build_defs.bzl", "if_enable_acl")
 
 package(
-    default_visibility = ["//tensorflow:internal"],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
