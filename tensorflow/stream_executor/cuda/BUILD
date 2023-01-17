@@ -125,7 +125,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//tensorflow/compiler/xla/stream_executor/cuda:cublas_lt_header",
-    ],
+    ]
 )
 
 cc_library(

@@ -14,7 +14,7 @@ load("//tensorflow/tsl:tsl.default.bzl", "filegroup")
 
 package(
     default_visibility = [
-        ":friends",
+        "//visibility:public",
     ],
     licenses = ["notice"],
 )

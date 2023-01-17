@@ -30,7 +30,7 @@ load(
 )
 
 package(
-    default_visibility = [":friends"],
+    default_visibility = ["//visibility:public"],
     features = ["-layering_check"],
     licenses = ["notice"],
 )
@@ -123,7 +123,7 @@ cc_library(
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
-    ],
+    ]
 )
 
 tsl_gpu_cc_test(

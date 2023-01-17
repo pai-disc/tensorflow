@@ -1,5 +1,10 @@
 workspace(name = "org_tensorflow")
 
+local_repository(
+    name = "org_disc",
+    path = "../disc",
+)
+
 # Initialize the TensorFlow repository and all dependencies.
 #
 # The cascade of load() statements and tf_workspace?() calls works around the
