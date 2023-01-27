@@ -30,7 +30,7 @@ load(
 )
 
 package(
-    default_visibility = [":friends"],
+    default_visibility = ["//visibility:public"],
     features = ["-layering_check"],
     licenses = ["notice"],
 )

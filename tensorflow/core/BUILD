@@ -113,11 +113,7 @@ load(
 )
 
 package(
-    default_visibility = [
-        ":dependency_whitelist",
-        "//tensorflow:internal",
-        "//tensorflow_models:__subpackages__",
-    ],
+    default_visibility = ["//visibility:public"],
     features = if_google([
         "-layering_check",
         "-parse_headers",
@@ -1838,7 +1834,7 @@ cc_library(
 alias(
     name = "test_main",
     actual = "//tensorflow/tsl/platform:test_main",
-    visibility = ["//tensorflow:internal"],
+    visibility = ["//visibility:public"],
 )
 
 tf_cc_tests(

@@ -23,7 +23,7 @@ load("//tensorflow/compiler/xla/stream_executor:build_defs.bzl", "if_gpu_is_conf
 load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
 
 package(
-    default_visibility = [":friends"],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
