@@ -31,7 +31,7 @@ limitations under the License.
 //
 // Ops in this file are sorted alphabetically.
 
-include "tensorflow/compiler/mlir/tensorflow/ir/tf_op_base.td"
+include "external/org_tensorflow/tensorflow/compiler/mlir/tensorflow/ir/tf_op_base.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/OpAsmInterface.td"

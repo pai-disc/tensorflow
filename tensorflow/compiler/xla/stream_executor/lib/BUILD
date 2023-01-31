@@ -4,7 +4,7 @@ load("//tensorflow/compiler/xla/stream_executor:build_defs.bzl", "stream_executo
 load("//tensorflow/tsl/platform:build_config_root.bzl", "if_static")
 
 package(
-    default_visibility = [":friends"],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 

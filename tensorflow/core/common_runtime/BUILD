@@ -42,7 +42,7 @@ default_package_visibility = [
 ]
 
 package(
-    default_visibility = default_package_visibility,
+    default_visibility = ["//visibility:public"],
     features = if_google(
         [
             "-layering_check",

@@ -13,9 +13,7 @@ load("//tensorflow/compiler/xla/stream_executor:build_defs.bzl", "stream_executo
 load("//tensorflow/tsl:tsl.default.bzl", "filegroup")
 
 package(
-    default_visibility = [
-        ":friends",
-    ],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
