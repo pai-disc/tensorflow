@@ -9,7 +9,7 @@ load(
 load("//third_party/compute_library:build_defs.bzl", "if_enable_acl")
 
 package(
-    default_visibility = ["//tensorflow:internal"],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
@@ -579,14 +579,14 @@ cc_library(
 cc_library(
     name = "error_spec",
     hdrs = ["error_spec.h"],
-    visibility = [":friends"],
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "literal_comparison",
     srcs = ["literal_comparison.cc"],
     hdrs = ["literal_comparison.h"],
-    visibility = [":friends"],
+    visibility = ["//visibility:public"],
     deps = [
         ":error_spec",
         ":literal",
@@ -995,7 +995,7 @@ cc_library(
     ],
     hdrs = ["debug_options_flags.h"],
     copts = if_enable_acl(["-DXLA_CPU_USE_ACL=1"]),
-    visibility = [":friends"],
+    visibility = ["//visibility:public"],
     deps =
         [
             ":parse_flags_from_env",
