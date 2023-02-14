@@ -2650,6 +2650,21 @@ def MHLO_ReverseOp: MHLO_Op<"reverse",
     I64ElementsAttr:$dimensions
   );
 
+  // DISC-Begin
+  let extraClassDeclaration = [{
+    LogicalResult reifyReturnTypeShapes(
+        OpBuilder& builder, ValueRange operands,
+        SmallVectorImpl<Value>& reifiedReturnShapes) {
+      return ::mlir::hlo::deriveShapeFromOperand(&builder, getOperation(),
+                                                 operands.front(),
+                                                 &reifiedReturnShapes);
+    }
+    static bool isCompatibleReturnTypes(TypeRange l, TypeRange r) {
+      return mlir::hlo::isCompatibleForHloTypeInference(l, r);
+    }
+  }];
+  // DISC-end
+
   let hasVerifier = 1;
 
   let results = (outs MHLO_Tensor);
@@ -3287,7 +3302,8 @@ def MHLO_DynamicGatherOp: MHLO_Op<"dynamic_gather",
   let hasCanonicalizer = 1;
 }
 
-def MHLO_DynamicConvOp : MHLO_Op<"dynamic_conv", [Pure]> {
+def MHLO_DynamicConvOp : MHLO_Op<"dynamic_conv", [Pure, DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+                              ["reifyReturnTypeShapes"]>]> {
   let summary = "Dynamic Convolution operator";
   let description = [{
     The dynamic shape version of ConvOp. Computes a convolution with dynamic padding.

@@ -2291,6 +2291,43 @@ void DynamicConvOp::getCanonicalizationPatterns(RewritePatternSet& results,
   results.add<DynamicConvIsConv>(context);
 }
 
+// DISC-Begin
+LogicalResult DynamicConvOp::reifyReturnTypeShapes(
+    OpBuilder &builder, ValueRange operands,
+    SmallVectorImpl<Value> &reifiedReturnShapes) {
+  DynamicConvOp::Adaptor adaptor(operands);
+  Value d_padding = adaptor.getDPadding();
+
+  RankedTensorType padding_type =
+      d_padding.getType().dyn_cast<RankedTensorType>();
+  // Not support unranked type a.t.m.
+  if (!padding_type)
+    return failure();
+
+  Location loc = this->getLoc();
+  Type shape_scalar_type = padding_type.getElementType();
+  auto to_shape_scalar_type = [&](Value v) {
+    return maybeCastTo(builder, loc, v, shape_scalar_type);
+  };
+
+  SmallVector<Value> spatial_padding_values;
+  auto dimension_numbers = this->getDimensionNumbers();
+  auto input_spatial_dimensions_attr =
+      dimension_numbers.getInputSpatialDimensions();
+  int64_t padding_num = input_spatial_dimensions_attr.size() * 2;
+  for (int64_t i = 0; i < padding_num; i++) {
+    Value offset = builder.create<arith::ConstantIndexOp>(loc, i);
+    Value pad_value = to_shape_scalar_type(
+        builder.create<tensor::ExtractOp>(loc, d_padding, offset));
+    spatial_padding_values.push_back(pad_value);
+  }
+
+  return ConvReifyReturnTypeImpl<DynamicConvOp>(
+      this, builder, operands, reifiedReturnShapes, spatial_padding_values,
+      shape_scalar_type);
+}
+// DISC-End
+
 //===----------------------------------------------------------------------===//
 // ConvertOp
 //===----------------------------------------------------------------------===//
