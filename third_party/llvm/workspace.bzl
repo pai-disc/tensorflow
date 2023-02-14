@@ -21,7 +21,6 @@ def repo(name):
             "//third_party/llvm:build.patch",
             "//third_party/llvm:mathextras.patch",
             "//third_party/llvm:toolchains.patch",
-            "//third_party/llvm:temporary.patch",  # Cherry-picks and temporary reverts. Do not remove even if temporary.patch is empty.
             "//third_party/llvm:0001-mlir-ROCm-Add-shfl.sync.bfly-lowering.patch",
             "//third_party/llvm:0001-llvm-nvptx-Fix-error-GVN-on-shared-memory-load.patch",
             "//third_party/llvm:0001-mlir-not-fold-UnrealizedConversionCastOp-with-ui-si.patch",
