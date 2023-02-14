@@ -132,6 +132,7 @@ tsl::StatusOr<OwnedCudaGraph> CaptureCudaGraph(
         VLOG(100) << "Print CUDA graph " << graph
                   << " debug dot file to: " << file;
 
+	/* tanyo(disc): fixme
         int flags = cudaGraphDebugDotFlagsVerbose;
         if (auto err = cudaGraphDebugDotPrint(graph, file.c_str(), flags);
             err != cudaSuccess) {
@@ -145,7 +146,7 @@ tsl::StatusOr<OwnedCudaGraph> CaptureCudaGraph(
           } else {
             LOG(WARNING) << "failed to read CUDA graph debug file";
           }
-        }
+        }*/
 
       } else {
         LOG(WARNING) << "cannot create unique filename, won't enable CUDA "
