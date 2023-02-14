@@ -274,8 +274,8 @@ Stream::Stream(StreamExecutor *parent,
     : parent_(parent),
       implementation_(std::move(implementation)),
       allocated_(allocated),
-      status_(allocated ? tsl::Status::OK()
-                        : tsl::InternalError("Uninitialized stream")),
+      status_(allocated ? tsl::OkStatus()
+                        : tsl::errors::Internal("Uninitialized stream")),
       temporary_memory_manager_(this) {
   VLOG_CALL(PARAM(parent), PARAM(implementation.get()));
 }

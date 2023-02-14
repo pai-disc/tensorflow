@@ -275,11 +275,13 @@ static LogicalResult rngInferReturnTypeComponents(
 // an integer or index type.
 Value maybeCastTo(OpBuilder& b, Location loc, Value value, Type type) {
   if (type == value.getType()) return value;
+  // DISC-Begin
   if (!type.isIndex() && !value.getType().isIndex()) {
     // in case of i32 -> i64 or vice versa
     Value casted = b.create<arith::IndexCastOp>(loc, b.getIndexType(), value);
     return b.create<arith::IndexCastOp>(loc, type, casted);
   }
+  // DISC-End
   return b.create<arith::IndexCastOp>(loc, type, value);
 }
 
@@ -965,6 +967,7 @@ LogicalResult DotOp::verify() {
                           getResult());
 }
 
+// DISC-Begin
 LogicalResult DotOp::reifyReturnTypeShapes(
     OpBuilder& builder, ValueRange operands,
     SmallVectorImpl<Value>& reifiedReturnShapes) {
@@ -1006,7 +1009,7 @@ LogicalResult DotOp::reifyReturnTypeShapes(
 
   return success();
 }
-
+// DISC-End
 
 //===----------------------------------------------------------------------===//
 // DotGeneralOp
@@ -1348,6 +1351,7 @@ LogicalResult simplifyDynamicGatherToGather(DynamicGatherOp op,
 
 void DynamicGatherOp::getCanonicalizationPatterns(RewritePatternSet& result,
                                                   MLIRContext* context) {
+  // Disc disable
   // result.add(simplifyDynamicGatherToGather);
 }
 
@@ -1663,6 +1667,8 @@ LogicalResult CollectivePermuteOp::verify() {
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+// DISC-Begin
 template <typename Op>
 LogicalResult ConvReifyReturnTypeImpl(
     Op* op, OpBuilder& builder, ValueRange operands,
@@ -1729,7 +1735,7 @@ LogicalResult ConvReifyReturnTypeImpl(
     if (lhs_dilation_attr) {
       Value input_dilation =
           to_shape_scalar_type(builder.create<arith::ConstantIndexOp>(
-              loc, lhs_dilation_attr.getValue().getValues<int64_t>()[i]));
+              loc, lhs_dilation_attr.value().getValues<int64_t>()[i]));
       effective_input_value = builder.create<arith::AddIOp>(
           loc,
           builder.create<arith::MulIOp>(
@@ -1755,7 +1761,7 @@ LogicalResult ConvReifyReturnTypeImpl(
     if (rhs_dilation_attr) {
       Value kernel_dilation =
           to_shape_scalar_type(builder.create<arith::ConstantIndexOp>(
-              loc, rhs_dilation_attr.getValue().getValues<int64_t>()[i]));
+              loc, rhs_dilation_attr.value().getValues<int64_t>()[i]));
       effective_kernel_size_value = builder.create<arith::AddIOp>(
           loc, one,
           builder.create<arith::MulIOp>(
@@ -1771,7 +1777,7 @@ LogicalResult ConvReifyReturnTypeImpl(
     if (window_strides_attr) {
       Value stride_value =
           to_shape_scalar_type(builder.create<arith::ConstantIndexOp>(
-              loc, window_strides_attr.getValue().getValues<int64_t>()[i]));
+              loc, window_strides_attr.value().getValues<int64_t>()[i]));
       output_dim_value =
           builder.create<arith::DivSIOp>(loc, output_dim_value, stride_value);
     }
@@ -1784,179 +1790,7 @@ LogicalResult ConvReifyReturnTypeImpl(
   reifiedReturnShapes.push_back(output_shape);
   return success();
 }
-
-// Checks:
-//  P1. Same sizes for input, kernel and output spatial_dims.
-//  P2. Spatial and non-spatial dimentions (for input,kernel, &output) should
-//      be unique and in range [0, num_dims), where num_dims = rank of input
-//      (lhs/rhs) tensors.
-//
-//  Note that the spatial + non-spatial dimensions may not cover all the
-//  dimensions in the range [0,num) because of the presence of 'unknown'
-//  dimensions (ref. cl/415132294).
-LogicalResult isSpatialDimensionsValid(ConvolutionOp op) {
-  auto inputSpatialDimensions =
-      op.getDimensionNumbers().getInputSpatialDimensions();
-  auto kernelSpatialDimensions =
-      op.getDimensionNumbers().getKernelSpatialDimensions();
-  auto outputSpatialDimensions =
-      op.getDimensionNumbers().getOutputSpatialDimensions();
-
-  // P1.
-  if ((inputSpatialDimensions.size() != kernelSpatialDimensions.size()) ||
-      (inputSpatialDimensions.size() != outputSpatialDimensions.size()))
-    return op.emitOpError() << "expects the same size for input, kernel and "
-                               "output spatial-dimensions, but got "
-                            << inputSpatialDimensions.size() << ", "
-                            << kernelSpatialDimensions.size() << ", and "
-                            << outputSpatialDimensions.size() << " resp.";
-
-  // P2.
-  SmallVector<int64_t> inputDnums(inputSpatialDimensions.size() + 2);
-  inputDnums[0] = op.getDimensionNumbers().getInputBatchDimension();
-  inputDnums[1] = op.getDimensionNumbers().getInputFeatureDimension();
-  std::copy(inputSpatialDimensions.begin(), inputSpatialDimensions.end(),
-            inputDnums.begin() + 2);
-
-  SmallVector<int64_t> windowDnums(kernelSpatialDimensions.size() + 2);
-  windowDnums[0] = op.getDimensionNumbers().getKernelInputFeatureDimension();
-  windowDnums[1] = op.getDimensionNumbers().getKernelOutputFeatureDimension();
-  std::copy(kernelSpatialDimensions.begin(), kernelSpatialDimensions.end(),
-            windowDnums.begin() + 2);
-
-  SmallVector<int64_t> outputDnums(outputSpatialDimensions.size() + 2);
-  outputDnums[0] = op.getDimensionNumbers().getOutputBatchDimension();
-  outputDnums[1] = op.getDimensionNumbers().getOutputFeatureDimension();
-  std::copy(outputSpatialDimensions.begin(), outputSpatialDimensions.end(),
-            outputDnums.begin() + 2);
-
-  auto numDims = op.getLhs().getType().cast<RankedTensorType>().getRank();
-  const auto inRange = [numDims](int64_t i) { return 0 <= i && i < numDims; };
-
-  if (!llvm::all_of(inputDnums, inRange) ||
-      !llvm::all_of(windowDnums, inRange) ||
-      !llvm::all_of(outputDnums, inRange))
-    return op.emitOpError() << "expects input, kernel, and output "
-                               "dimension-numbers to be in-range [0, "
-                            << numDims << ").";
-
-  if (hasDuplicates(inputDnums))
-    return op.emitOpError()
-           << "expects input dimension-numbers to be unique, got {"
-           << inputDnums << "}.";
-
-  if (hasDuplicates(windowDnums))
-    return op.emitOpError()
-           << "expects kernel dimension-numbers to be unique, got {"
-           << windowDnums << "}.";
-
-  if (hasDuplicates(outputDnums))
-    return op.emitOpError()
-           << "expects output dimension-numbers to be unique, got {"
-           << outputDnums << "}.";
-
-  return success();
-}
-
-// Verifies the following properties:
-//  P1. The input, kernel, and output spatial-dimentions are valid.
-//  P2. Given,
-//          input-dimensions: b * input-spatial-dims * f
-//          kernel-dimensions: kernel-spatial-dims * i * o
-//          output-dimensions: b' * out-spatial-dims * f'
-//            where b = input-batch-dims
-//            where f = input-feature-dims
-//            where i = kernel-input-feature-dims
-//            where o = kernel-output-feature-dims
-//            where b' = output-batch-dims
-//            where f' = output-feature-dims
-//      Check the following properties w.r.t feature_group_count (fgc) and
-//      batch_group_count (bgc).
-//        fgc > 0, bgc > 1 and !(fgc > 1 && bgc > 1)
-//        b % bgc == 0
-//        f % fgc == 0 and i = f / fgc
-//        o (or f') % bgc == 0 and o (or f') % fgc == 0
-LogicalResult verifyConvolutionAttributes(ConvolutionOp op) {
-  // P1.
-  if (failed(isSpatialDimensionsValid(op))) return failure();
-
-  // P2.
-  const int64_t featureGroupCount = op.getFeatureGroupCount();
-  const int64_t batchGroupCount = op.getBatchGroupCount();
-
-  if (featureGroupCount <= 0)
-    return op.emitOpError()
-           << "expects feature_group_count to be a positive number, got "
-           << featureGroupCount << ".";
-
-  if (batchGroupCount <= 0)
-    return op.emitOpError()
-           << "expects batch_group_count to be a positive number, got "
-           << batchGroupCount << ".";
-
-  if (batchGroupCount > 1 && featureGroupCount > 1)
-    return op.emitOpError()
-           << "expects batch_group_count and feature_group_count not to be "
-              "both greater than 1. Got "
-           << batchGroupCount << " and " << featureGroupCount << " resp.";
-
-  auto lhsType = op.getLhs().getType().cast<RankedTensorType>();
-  const int64_t inputFeatures =
-      lhsType.getShape()[op.getDimensionNumbers().getInputFeatureDimension()];
-  const int64_t inputBatch =
-      lhsType.getShape()[op.getDimensionNumbers().getInputBatchDimension()];
-
-  auto rhsType = op.getRhs().getType().cast<RankedTensorType>();
-  const int64_t kernelInputFeatures =
-      rhsType.getShape()[op.getDimensionNumbers()
-                             .getKernelInputFeatureDimension()];
-  const int64_t kernelOutputFeatures =
-      rhsType.getShape()[op.getDimensionNumbers()
-                             .getKernelOutputFeatureDimension()];
-
-  if (!hlo::isDynamicDimSize(kernelOutputFeatures)) {
-    if (kernelOutputFeatures % batchGroupCount != 0)
-      return op.emitOpError() << "expects output feature dimension size ("
-                              << kernelOutputFeatures
-                              << ") to be a multiple of "
-                                 "batch_group_count. Got batch_group_count = "
-                              << batchGroupCount << ".";
-
-    if (kernelOutputFeatures % featureGroupCount != 0)
-      return op.emitOpError()
-             << "expects kernel output feature dimension ("
-             << kernelOutputFeatures
-             << ") to be divisible by "
-                "feature_group_count. For feature_group_count = "
-             << featureGroupCount << ".";
-  }
-
-  if (!hlo::isDynamicDimSize(inputFeatures)) {
-    if (inputFeatures % featureGroupCount != 0)
-      return op.emitOpError()
-             << "expects input feature dimension (" << inputFeatures
-             << ") to be a multiple of "
-                "feature_group_count. Got feature_group_count = "
-             << featureGroupCount << ".";
-
-    if (!hlo::isDynamicDimSize(kernelInputFeatures) &&
-        inputFeatures / featureGroupCount != kernelInputFeatures)
-      return op.emitOpError()
-             << "expects input feature dimension (" << inputFeatures
-             << ") / "
-                "feature_group_count = kernel input feature dimension ("
-             << kernelInputFeatures
-             << "). Got feature_group_count = " << featureGroupCount << ".";
-  }
-
-  if (!hlo::isDynamicDimSize(inputBatch) && inputBatch % batchGroupCount != 0)
-    return op.emitOpError() << "expects input batch dimension (" << inputBatch
-                            << ") to be divisible by "
-                               "batch_group_count. Got batch_group_count = "
-                            << batchGroupCount << ".";
-
-  return success();
-}
+// DISC-End
 
 // Infer the return-shape of ConvolutionOp.
 // Precondition:
@@ -2194,61 +2028,6 @@ LogicalResult ConvolutionOp::verify() {
   return success();
 }
 
-LogicalResult ConvolutionOp::reifyReturnTypeShapes(
-    OpBuilder& builder, ValueRange operands,
-    SmallVectorImpl<Value>& reifiedReturnShapes) {
-  ConvolutionOp::Adaptor adaptor(operands);
-  Location loc = this->getLoc();
-
-  DenseIntElementsAttr padding_attr = this->getPadding().getValue();
-  Type shape_scalar_type = builder.getIndexType();
-
-  SmallVector<Value> spatial_padding_values;
-  if (padding_attr) {
-    for (int64_t pad : padding_attr.getValues<int64_t>()) {
-      Value pad_value = builder.create<arith::ConstantIndexOp>(loc, pad);
-      pad_value = maybeCastTo(builder, loc, pad_value, shape_scalar_type);
-      spatial_padding_values.push_back(pad_value);
-    }
-  }
-
-  return ConvReifyReturnTypeImpl(this, builder, operands, reifiedReturnShapes,
-                                 spatial_padding_values, shape_scalar_type);
-}
-
-LogicalResult DynamicConvOp::reifyReturnTypeShapes(
-    OpBuilder& builder, ValueRange operands,
-    SmallVectorImpl<Value>& reifiedReturnShapes) {
-  DynamicConvOp::Adaptor adaptor(operands);
-  Value d_padding = adaptor.getDPadding();
-
-  RankedTensorType padding_type =
-      d_padding.getType().dyn_cast<RankedTensorType>();
-  // Not support unranked type a.t.m.
-  if (!padding_type) return failure();
-
-  Location loc = this->getLoc();
-  Type shape_scalar_type = padding_type.getElementType();
-  auto to_shape_scalar_type = [&](Value v) {
-    return maybeCastTo(builder, loc, v, shape_scalar_type);
-  };
-
-  SmallVector<Value> spatial_padding_values;
-  auto dimension_numbers = this->getDimensionNumbers();
-  auto input_spatial_dimensions_attr =
-      dimension_numbers.getInputSpatialDimensions();
-  int64_t padding_num = input_spatial_dimensions_attr.size() * 2;
-  for (int64_t i = 0; i < padding_num; i++) {
-    Value offset = builder.create<arith::ConstantIndexOp>(loc, i);
-    Value pad_value = to_shape_scalar_type(
-        builder.create<tensor::ExtractOp>(loc, d_padding, offset));
-    spatial_padding_values.push_back(pad_value);
-  }
-
-  return ConvReifyReturnTypeImpl(this, builder, operands, reifiedReturnShapes,
-                                 spatial_padding_values, shape_scalar_type);
-}
-
 //===----------------------------------------------------------------------===//
 // DynamicConvOp
 //===----------------------------------------------------------------------===//
@@ -2288,7 +2067,8 @@ struct DynamicConvIsConv : public OpRewritePattern<mhlo::DynamicConvOp> {
 
 void DynamicConvOp::getCanonicalizationPatterns(RewritePatternSet& results,
                                                 MLIRContext* context) {
-  results.add<DynamicConvIsConv>(context);
+  // DISC disable
+  // results.add<DynamicConvIsConv>(context);
 }
 
 // DISC-Begin
@@ -2999,89 +2779,6 @@ LogicalResult ClampOp::verify() {
   return success();
 }
 
-LogicalResult ClampOp::inferReturnTypeComponents(
-    MLIRContext*, Optional<Location> /*location*/, ValueShapeRange operands,
-    DictionaryAttr attributes, RegionRange regions,
-    SmallVectorImpl<ShapedTypeComponents>& inferredReturnShapes) {
-  ClampOp::Adaptor adaptor(operands, attributes, regions);
-  RankedTensorType operandType =
-      adaptor.getOperand().getType().cast<RankedTensorType>();
-  inferredReturnShapes.emplace_back(operandType.getShape(),
-                                    operandType.getElementType());
-  return success();
-}
-
-LogicalResult ClampOp::reifyReturnTypeShapes(
-    OpBuilder& builder, ValueRange operands,
-    SmallVectorImpl<Value>& reifiedReturnShapes) {
-  // For `mhlo.clamp`, the first operand may be a scalar.
-  return hlo::deriveShapeFromOperand(&builder, getOperation(), operands[1],
-                                     &reifiedReturnShapes);
-}
-
-OpFoldResult ClampOp::fold(ArrayRef<Attribute> operands) {
-
-  auto val = operands[0].dyn_cast_or_null<DenseElementsAttr>();
-  if (!val) return {};
-
-  auto type = getElementTypeOrSelf(getType());
-  if (!type.isF32() && !type.isF64()) return {};
-
-  auto shapedType = getType().cast<ShapedType>();
-  if (!shapedType.hasStaticShape()) return {};
-
-  DenseElementsAttr min_val = operands[1].dyn_cast_or_null<DenseElementsAttr>();
-  DenseElementsAttr max_val = operands[2].dyn_cast_or_null<DenseElementsAttr>();
-  if (!min_val || !max_val) return {};
-
-  // min/max/val should be the same shape.
-  // Or min/max must be a scalar of the same type of val
-  int64_t val_num = val.getNumElements();
-  int64_t min_num = min_val.getNumElements();
-  int64_t max_num = max_val.getNumElements();
-  if (!((val_num == min_num && val_num == max_num) ||
-        (val_num == max_num && min_num == 1) ||
-        (val_num == min_num && max_num == 1) || (min_num == max_num == 1)))
-    return {};
-
-  int bitWidth = type.getIntOrFloatBitWidth();
-  auto convertValue = [](APFloat value, int bitWidth) {
-    double converted_value = bitWidth == 32 ? value.convertToFloat()
-                                            : value.convertToDouble();
-    return converted_value;
-  };
-  double first_min_value = convertValue(*min_val.getValues<APFloat>().begin(), bitWidth);
-  double first_max_value = convertValue(*max_val.getValues<APFloat>().begin(), bitWidth);
-  auto val_start = val.getValues<APFloat>().begin();
-  auto min_start = min_val.getValues<APFloat>().begin();
-  auto max_start = max_val.getValues<APFloat>().begin();
-  llvm::SmallVector<APFloat, 4> values;
-  values.reserve(val.getNumElements());
-  for (int64_t i=0; i<val_num; i++) {
-    double cur_value = convertValue(val_start[i], bitWidth);
-    double min_value;
-    double max_value;
-    if (val_num == min_num) {
-      min_value = convertValue(min_start[i], bitWidth);
-    } else {
-      min_value = first_min_value;
-    }
-    if (val_num == max_num) {
-      max_value = convertValue(max_start[i], bitWidth);
-    } else {
-      max_value = first_max_value;
-    }
-    cur_value = std::clamp(cur_value, min_value, max_value);
-    if (bitWidth == 32)
-      values.emplace_back(static_cast<float>(cur_value));
-    else
-      values.emplace_back(cur_value);
-  }
-
-  return DenseFPElementsAttr::get(shapedType, values);
-
-}
-
 //===----------------------------------------------------------------------===//
 // ComplexOp
 //===----------------------------------------------------------------------===//
@@ -3635,7 +3332,8 @@ struct RealDSliceToDSlice : public OpRewritePattern<RealDynamicSliceOp> {
 
 void RealDynamicSliceOp::getCanonicalizationPatterns(RewritePatternSet& results,
                                                      MLIRContext* context) {
-  results.add<RealDSliceToSlice, RealDSliceToDSlice>(context);
+  // DISC disable
+  // results.add<RealDSliceToSlice, RealDSliceToDSlice>(context);
 }
 
 LogicalResult RealDynamicSliceOp::reifyReturnTypeShapes(
@@ -4024,13 +3722,6 @@ OpFoldResult ReverseOp::fold(FoldAdaptor adaptor) {
   }
 
   return {};
-}
-
-LogicalResult ReverseOp::reifyReturnTypeShapes(
-    OpBuilder& builder, ValueRange operands,
-    SmallVectorImpl<Value>& reifiedReturnShapes) {
-  return mlir::hlo::deriveShapeFromOperand(&builder, getOperation(), operands.front(),
-                                &reifiedReturnShapes);
 }
 
 //===----------------------------------------------------------------------===//
@@ -6016,8 +5707,8 @@ void SortOp::getCanonicalizationPatterns(RewritePatternSet& results,
 // TransposeOp
 //===----------------------------------------------------------------------===//
 
+// DISC-Begin
 namespace {
-
 // Transpose the given elements attr according to the specified permutation.
 mlir::ElementsAttr TransposeElementsAttr(
     const mlir::ElementsAttr& elements, const DenseIntElementsAttr& perm_attr) {
@@ -6064,22 +5755,28 @@ mlir::ElementsAttr TransposeElementsAttr(
 }
 
 } // namespace
+// DISC-End
 
 OpFoldResult TransposeOp::fold(FoldAdaptor adaptor) {
   auto operands = adaptor.getOperands();
+
+  // DISC-BEGIN
   // If the result has non-static shape, a transpsed op is necessary to go from
   // static shape to non-static shape.
   auto resultTy = getResult().getType().dyn_cast<RankedTensorType>();
   if (!resultTy || !resultTy.hasStaticShape()) return {};
+  // DISC-END
 
   if (auto elements = operands.front().dyn_cast_or_null<SplatElementsAttr>()) {
     return reshape(elements, getResult().getType().cast<ShapedType>());
   }
 
+  // DISC-BEGIN
   // operand is const, thus fold it directly.
   if (auto elementsAttr = operands.front().dyn_cast_or_null<ElementsAttr>()) {
     return TransposeElementsAttr(elementsAttr, getPermutation());
   }
+  // DISC-END
 
   for (const auto& it : llvm::enumerate(getPermutation().getValues<APInt>())) {
     if (it.index() != it.value()) {

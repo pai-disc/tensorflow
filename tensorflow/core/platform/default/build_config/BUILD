@@ -16,7 +16,7 @@ cc_library(
     deps = [
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/tsl/platform/default/build_config:gif",
-        "//tensorflow/tsl/platform/default/build_config:jpeg",
+        # "//tensorflow/tsl/platform/default/build_config:jpeg",
         "@com_googlesource_code_re2//:re2",
         "@farmhash_archive//:farmhash",
         "@fft2d",

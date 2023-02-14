@@ -57,6 +57,7 @@ tf_proto_library(
     protodeps = [
         "//tensorflow/compiler/xla:xla_data_proto",
         "//tensorflow/compiler/xla/stream_executor:dnn_proto",
+	"//tensorflow/tsl/protobuf:dnn_proto",
     ],
 )
 

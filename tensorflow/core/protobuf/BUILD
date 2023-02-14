@@ -65,6 +65,9 @@ tf_proto_library(
     make_default_target_header_only = True,
     protodeps = ["//tensorflow/tsl/protobuf:autotuning_proto"],
     exports = ["//tensorflow/tsl/protobuf:autotuning_proto"],
+    cc_libs = [
+        "//tensorflow/tsl/protobuf:dnn_proto_cc",
+    ]
 )
 
 tf_proto_library(
@@ -75,6 +78,9 @@ tf_proto_library(
     protodeps = [
         "//tensorflow/compiler/xla/stream_executor:dnn_proto",
     ],
+    cc_libs = [
+        "//tensorflow/tsl/protobuf:dnn_proto_cc",
+    ]
 )
 
 tf_proto_library(

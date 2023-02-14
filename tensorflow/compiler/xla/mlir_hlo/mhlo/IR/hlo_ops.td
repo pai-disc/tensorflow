@@ -2263,7 +2263,8 @@ def MHLO_CustomCallOp: MHLO_Op<"custom_call",
   }];
 }
 
-def MHLO_DotOp: MHLO_Op<"dot", [Pure]> {
+def MHLO_DotOp: MHLO_Op<"dot", [Pure, DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+                              ["reifyReturnTypeShapes"]>]> {
   let summary = "Dot operator";
   let description = [{
     Performs dot products between vectors, vector/matrix and matrix/matrix

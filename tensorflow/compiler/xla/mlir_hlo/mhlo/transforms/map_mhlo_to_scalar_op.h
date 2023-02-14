@@ -632,7 +632,7 @@ inline Value mapConvertOpToStdScalarOp(Location loc, ArrayRef<Type> targetTypes,
                               loc, llvm::makeArrayRef(int_types), args)
                              .getResults();
     return b->create<mlir::arith::UIToFPOp>(loc, resultTypes, converted_arg,
-                                            mlir::None);
+                                            std::nullopt);
     // End of Added by DISC
   }
   if (mlir::arith::SIToFPOp::areCastCompatible(sourceType, targetType)) {
