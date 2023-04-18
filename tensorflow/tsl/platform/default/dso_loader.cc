@@ -144,7 +144,7 @@ StatusOr<void*> GetRocblasDsoHandle() { return GetDsoHandle("rocblas", ""); }
 StatusOr<void*> GetMiopenDsoHandle() { return GetDsoHandle("MIOpen", ""); }
 
 StatusOr<void*> GetHipfftDsoHandle() {
-#if TF_ROCM_VERSION < 40100 || TENSORFLOW_USE_DCU
+#if TF_ROCM_VERSION < 40100
   return GetDsoHandle("rocfft", "");
 #else
   return GetDsoHandle("hipfft", "");
@@ -157,7 +157,7 @@ StatusOr<void*> GetRocsolverDsoHandle() {
   return GetDsoHandle("rocsolver", "");
 }
 
-#if TF_ROCM_VERSION >= 40500
+#if TF_ROCM_VERSION >= 40500 || TENSORFLOW_USE_DCU
 StatusOr<void*> GetHipsolverDsoHandle() {
   return GetDsoHandle("hipsolver", "");
 }
@@ -256,7 +256,7 @@ StatusOr<void*> GetRocsolverDsoHandle() {
   return *result;
 }
 
-#if TF_ROCM_VERSION >= 40500
+#if TF_ROCM_VERSION >= 40500 || TENSORFLOW_USE_DCU
 StatusOr<void*> GetHipsolverDsoHandle() {
   static auto result = new auto(DsoLoader::GetHipsolverDsoHandle());
   return *result;

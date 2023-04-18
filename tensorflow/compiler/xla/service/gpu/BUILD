@@ -776,8 +776,10 @@ cc_library(
         "//tensorflow/compiler/xla/stream_executor",
         "//tensorflow/compiler/xla/stream_executor:device_memory",
         "//tensorflow/compiler/xla/stream_executor:stream_executor_headers",
-        "//tensorflow/compiler/xla/stream_executor/gpu:gpu_asm_opts",
-    ]) + ["//tensorflow/tsl/platform:status"],
+        "//tensorflow/compiler/xla/stream_executor/gpu:gpu_asm_opts"
+    ]) + ["//tensorflow/tsl/platform:status"] + if_dcu([
+        "//tensorflow/stream_executor/rocm:hipsolver_wrapper",
+    ]),
 )
 
 # TODO(ezhulenev): Extract `RunTriangularSolve` into a separate library.

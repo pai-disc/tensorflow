@@ -752,7 +752,11 @@ StatusOr<std::vector<uint8_t>> EmitModuleToHsaco(
   // Locate lld.
   // TODO(whchung@gmail.com): change to tensorflow::ROCmRoot() after
   // ROCm-Device-Libs PR.
+#if TENSORFLOW_USE_DCU
+  std::string lld_path = tsl::io::JoinPath("/opt/dtk", "llvm/bin");
+#else
   std::string lld_path = tsl::io::JoinPath("/opt/rocm", "llvm/bin");
+#endif 
   auto lld_program = llvm::sys::findProgramByName("ld.lld", {lld_path});
   if (!lld_program) {
     return xla::InternalError("unable to find ld.lld in PATH: %s",
@@ -811,8 +815,11 @@ Status AMDGPUTargetModuleLinker(llvm::Module* module, GpuVersion gpu_version,
   if (!compute_capability) {
     return xla::InternalError("Incompatible compute capability was specified.");
   }
-
+#if TENSORFLOW_USE_DCU
+  std::string gcn_arch_name = "gfx906";
+#else
   std::string gcn_arch_name = compute_capability->gcn_arch_name();
+#endif
   TF_RETURN_IF_ERROR(
       LinkROCDLIfNecessary(module, gcn_arch_name, device_bitcode_dir_path));
 
@@ -887,8 +894,11 @@ std::unique_ptr<llvm::TargetMachine> AMDGPUGetTargetMachine(
     const HloModuleConfig& hlo_module_config) {
   auto compute_capability =
       std::get_if<se::RocmComputeCapability>(&gpu_version);
-
+#if TENSORFLOW_USE_DCU 
+  std::string gcn_arch_name = "gfx906"; 
+#else
   std::string gcn_arch_name = compute_capability->gcn_arch_name();
+#endif
   auto arch = GetFeatureStrFromGCNArchName(gcn_arch_name);
   return GetTargetMachine(std::move(target_triple), arch.first,
                           hlo_module_config, arch.second);
@@ -958,9 +968,11 @@ StatusOr<std::vector<uint8_t>> CompileToHsaco(
       return xla::InternalError(
           "Incompatible compute capability was specified.");
     }
-
+#if TENSORFLOW_USE_DCU 
+    std::string gcn_arch_name = "gfx906";
+#else     
     std::string gcn_arch_name = compute_capability->gcn_arch_name();
-
+#endif
     uint64_t hash;
     if (HsacoCache::Find(str, hash, gcn_arch_name, hsaco)) {
       VLOG(1) << "HSACO cache hit";

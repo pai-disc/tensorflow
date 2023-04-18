@@ -330,7 +330,7 @@ def _select_rocm_lib_paths(repository_ctx, libs_paths, bash_bin):
 
     return libs
 
-def _find_libs(repository_ctx, rocm_config, hipfft_or_rocfft, miopen_path, rccl_path, bash_bin):
+def _find_libs(repository_ctx, rocm_config, hipfft_or_rocfft, miopen_path, rccl_path, bash_bin, enable_dcu):
     """Returns the ROCm libraries on the system.
 
     Args:
@@ -561,6 +561,7 @@ def _create_local_rocm_repository(repository_ctx):
 
     bash_bin = get_bash_bin(repository_ctx)
     rocm_config = _get_rocm_config(repository_ctx, bash_bin, find_rocm_config_script)
+    enable_dcu = get_host_environ(repository_ctx, "TF_NEED_DCU") == '1'
 
     # For ROCm 4.1 and above use hipfft, older ROCm versions use rocfft
     rocm_version_number = int(rocm_config.rocm_version_number)
@@ -620,7 +621,7 @@ def _create_local_rocm_repository(repository_ctx):
             ),
         )
 
-    rocm_libs = _find_libs(repository_ctx, rocm_config, hipfft_or_rocfft, miopen_path, rccl_path, bash_bin)
+    rocm_libs = _find_libs(repository_ctx, rocm_config, hipfft_or_rocfft, miopen_path, rccl_path, bash_bin, enable_dcu)
     rocm_lib_srcs = []
     rocm_lib_outs = []
     for lib in rocm_libs.values():
@@ -753,6 +754,7 @@ def _create_local_rocm_repository(repository_ctx):
             "%{hip_runtime_library}": "amdhip64",
             "%{crosstool_verbose}": _crosstool_verbose(repository_ctx),
             "%{gcc_host_compiler_path}": str(cc),
+            "%{using_dcu}": str(enable_dcu),
         },
     )
 
