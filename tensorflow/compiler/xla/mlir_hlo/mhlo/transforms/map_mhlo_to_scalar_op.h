@@ -615,11 +615,25 @@ inline Value mapConvertOpToStdScalarOp(Location loc, ArrayRef<Type> targetTypes,
 
   // A boolean value is considered to be unsigned when converting to
   // floating-point. Otherwise, it will become `-1`.
-  if (IsUnsignedIntegerType{}(sourceType) &&
+  if (sourceType.isSignlessInteger(1) &&
       mlir::arith::UIToFPOp::areCastCompatible(convertedSourceType,
                                                targetType)) {
     return b->create<mlir::arith::UIToFPOp>(loc, resultTypes, args,
                                             std::nullopt);
+  }
+  if (sourceType.isUnsignedInteger() &&
+      mlir::arith::UIToFPOp::areCastCompatible(convertedSourceType,
+                                               targetType)) {
+    // Added by DISC
+    auto int_type = IntegerType::get(sourceType.getContext(),
+                                     sourceType.getIntOrFloatBitWidth());
+    SmallVector<Type> int_types(args.size(), int_type);
+    auto converted_arg = b->create<UnrealizedConversionCastOp>(
+                              loc, llvm::makeArrayRef(int_types), args)
+                             .getResults();
+    return b->create<mlir::arith::UIToFPOp>(loc, resultTypes, converted_arg,
+                                            mlir::None);
+    // End of Added by DISC
   }
   if (mlir::arith::SIToFPOp::areCastCompatible(sourceType, targetType)) {
     return b->create<mlir::arith::SIToFPOp>(loc, resultTypes, args,
@@ -752,6 +766,15 @@ inline Value mapMhloOpToStdScalarOp<mhlo::BitcastConvertOp>(
 
   return b->create<mlir::arith::BitcastOp>(loc, resultTypes,
                                            adaptor.getOperands());
+}
+
+template <>
+inline Value mapMhloOpToStdScalarOp<mhlo::ConvertOp>(Location loc,
+                                                     ArrayRef<Type> resultTypes,
+                                                     ArrayRef<Type> argTypes,
+                                                     mhlo::ConvertOp::Adaptor adaptor,
+                                                     OpBuilder* b) {
+  return mapConvertOpToStdScalarOp(loc, resultTypes, resultTypes, argTypes, adaptor.getOperands(), b);
 }
 
 template <>
