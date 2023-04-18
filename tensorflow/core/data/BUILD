@@ -10,6 +10,7 @@ load(
 )
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//tensorflow:internal",
     ],
@@ -20,6 +21,8 @@ package(
 exports_files([
     "captured_function.cc",
     "captured_function.h",
+    "compression_utils.cc",
+    "compression_utils.h",
     "dataset_utils.cc",
     "dataset_utils.h",
     "finalization_utils.cc",
@@ -38,6 +41,8 @@ exports_files([
     "split_utils.h",
     "stats_utils.cc",
     "stats_utils.h",
+    "tfdataz_metrics.h",
+    "tfdataz_metrics.cc",
     "unbounded_thread_pool.cc",
     "unbounded_thread_pool.h",
     "utils.cc",
@@ -48,6 +53,7 @@ cc_library(
     name = "captured_function",
     srcs = ["captured_function.cc"],
     hdrs = ["captured_function.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     visibility = ["//visibility:public"],
     deps = [
         ":dataset_utils",
@@ -59,7 +65,6 @@ cc_library(
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
         "//tensorflow/core:protos_all_cc",
-        "//tensorflow/core/kernels:variable_ops",
         "//tensorflow/core/profiler/lib:traceme",
     ] + if_not_mobile([
         "//tensorflow/core/grappler:grappler_item",
@@ -71,6 +76,8 @@ cc_library(
     name = "compression_utils",
     srcs = ["compression_utils.cc"],
     hdrs = ["compression_utils.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
+    visibility = ["//tensorflow:internal"],
     deps = [
         "//tensorflow/core:core_cpu",
         "//tensorflow/core:core_cpu_internal",
@@ -85,6 +92,7 @@ cc_library(
 tf_cc_test(
     name = "compression_utils_test",
     srcs = ["compression_utils_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     tags = [
         "requires-mem:24g",
     ],
@@ -93,10 +101,11 @@ tf_cc_test(
         ":dataset_test_base",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib_internal",
+        "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
-        "//tensorflow/core/platform:status_matchers",
+        "//tensorflow/tsl/platform:status_matchers",
     ],
 )
 
@@ -105,6 +114,7 @@ cc_library(
     testonly = 1,
     srcs = ["dataset_test_base.cc"],
     hdrs = ["dataset_test_base.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     visibility = ["//visibility:public"],
     deps = [
         ":dataset_utils",
@@ -132,6 +142,7 @@ cc_library(
     name = "dataset_utils",
     srcs = ["dataset_utils.cc"],
     hdrs = ["dataset_utils.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     visibility = ["//visibility:public"],
     deps = [
         "//tensorflow/core:core_cpu_internal",
@@ -150,6 +161,7 @@ tf_cc_test(
     name = "dataset_utils_test",
     size = "small",
     srcs = ["dataset_utils_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     deps = [
         ":compression_utils",
         ":dataset_test_base",
@@ -171,6 +183,7 @@ cc_library(
     name = "hash_utils",
     srcs = ["hash_utils.cc"],
     hdrs = ["hash_utils.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":dataset_utils",
         "//tensorflow/core:core_cpu_internal",
@@ -189,6 +202,7 @@ tf_cc_test(
     name = "hash_utils_test",
     size = "small",
     srcs = ["hash_utils_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     deps = [
         ":hash_utils",
         "//tensorflow/cc:cc_ops",
@@ -202,9 +216,13 @@ tf_cc_test(
 cc_library(
     name = "metric_utils",
     srcs = ["metric_utils.cc"],
-    hdrs = ["metric_utils.h"],
+    hdrs = [
+        "metric_utils.h",
+    ],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     visibility = ["//visibility:public"],
     deps = [
+        ":tfdataz_metrics",
         "//tensorflow/core:framework",
         "//tensorflow/core/data:utils",
         "//tensorflow/core/platform:env",
@@ -218,6 +236,7 @@ tf_cc_test(
     name = "metric_utils_test",
     size = "small",
     srcs = ["metric_utils_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     deps = [
         ":metric_utils",
         "//tensorflow/core:framework",
@@ -232,9 +251,43 @@ tf_cc_test(
 )
 
 cc_library(
+    name = "tfdataz_metrics",
+    srcs = ["tfdataz_metrics.cc"],
+    hdrs = ["tfdataz_metrics.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//tensorflow/core/platform:env",
+        "//tensorflow/core/platform:mutex",
+        "//tensorflow/core/platform:thread_annotations",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/time",
+    ],
+)
+
+tf_cc_test(
+    name = "tfdataz_metrics_test",
+    size = "small",
+    srcs = ["tfdataz_metrics_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
+    deps = [
+        ":tfdataz_metrics",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core/platform:env",
+        "//tensorflow/core/util:fake_clock_env",
+        "@com_google_absl//absl/time",
+    ],
+)
+
+cc_library(
     name = "name_utils",
     srcs = ["name_utils.cc"],
     hdrs = ["name_utils.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     visibility = ["//visibility:public"],
     deps = [
         "//tensorflow/core:lib",
@@ -246,6 +299,7 @@ tf_cc_test(
     name = "name_utils_test",
     size = "small",
     srcs = ["name_utils_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     deps = [
         ":name_utils",
         "//tensorflow/core:framework",
@@ -258,6 +312,7 @@ cc_library(
     name = "rewrite_utils",
     srcs = ["rewrite_utils.cc"],
     hdrs = ["rewrite_utils.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":dataset_utils",
         ":hash_utils",
@@ -286,6 +341,7 @@ tf_cc_test(
     name = "rewrite_utils_test",
     size = "small",
     srcs = ["rewrite_utils_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     deps = [
         ":rewrite_utils",
         "//tensorflow/core:framework",
@@ -308,6 +364,7 @@ cc_library(
     name = "root_dataset",
     srcs = ["root_dataset.cc"],
     hdrs = ["root_dataset.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":dataset_utils",
         ":name_utils",
@@ -325,11 +382,14 @@ cc_library(
     name = "serialization_utils",
     srcs = ["serialization_utils.cc"],
     hdrs = ["serialization_utils.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
+        ":compression_utils",
         ":dataset_utils",
         "//tensorflow/core:core_cpu_base",
         "//tensorflow/core:framework",
         "//tensorflow/core:graph",
+        "//tensorflow/core:protos_all_cc",
         "//tensorflow/core/lib/core:status",
     ],
 )
@@ -338,6 +398,7 @@ tf_cc_test(
     name = "serialization_utils_test",
     size = "small",
     srcs = ["serialization_utils_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     deps = [
         ":dataset_test_base",
         ":dataset_utils",
@@ -361,6 +422,7 @@ cc_library(
     name = "split_utils",
     srcs = ["split_utils.cc"],
     hdrs = ["split_utils.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
@@ -371,6 +433,7 @@ tf_cc_test(
     name = "split_utils_test",
     size = "small",
     srcs = ["split_utils_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     deps = [
         ":dataset_test_base",
         ":serialization_utils",
@@ -387,6 +450,7 @@ cc_library(
     name = "snapshot_utils",
     srcs = ["snapshot_utils.cc"],
     hdrs = ["snapshot_utils.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         "//tensorflow/core:core_cpu_lib",
         "//tensorflow/core:dataset_ops_op_lib",
@@ -406,12 +470,14 @@ tf_cc_test(
     name = "snapshot_utils_test",
     size = "small",
     srcs = ["snapshot_utils_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     deps = [
         ":snapshot_utils",
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
+        "//tensorflow/core/data/service:test_util",
     ],
 )
 
@@ -419,6 +485,7 @@ cc_library(
     name = "standalone",
     srcs = ["standalone.cc"],
     hdrs = ["standalone.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":root_dataset",
         ":unbounded_thread_pool",
@@ -426,15 +493,43 @@ cc_library(
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:session_options",
-        "//tensorflow/core/platform:refcount",
+        "//tensorflow/core/data:serialization_utils",
+        "//tensorflow/core/framework:graph_proto_cc",
+        "//tensorflow/tsl/platform:env",
+        "//tensorflow/tsl/platform:errors",
+        "//tensorflow/tsl/platform:refcount",
+        "//tensorflow/tsl/platform:status",
+        "//tensorflow/tsl/platform:statusor",
         "@com_google_absl//absl/memory",
     ],
 )
 
 tf_cc_test(
+    name = "standalone_save_restore_test",
+    srcs = ["standalone_save_restore_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
+    deps = [
+        ":standalone",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core/data/service:common_proto_cc",
+        "//tensorflow/core/data/service:test_util",
+        "//tensorflow/tsl/platform:errors",
+        "//tensorflow/tsl/platform:status",
+        "//tensorflow/tsl/platform:status_matchers",
+        "//tensorflow/tsl/platform:statusor",
+        "//tensorflow/tsl/protobuf:protos_all_cc",
+    ] + tf_protos_all(),
+)
+
+tf_cc_test(
     name = "standalone_test",
     srcs = ["standalone_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     deps = [
         ":standalone",
         "//tensorflow/core:test",
@@ -446,6 +541,7 @@ cc_library(
     name = "stats_utils",
     srcs = ["stats_utils.cc"],
     hdrs = ["stats_utils.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         "//tensorflow/core:lib",
         "@com_google_absl//absl/base:core_headers",
@@ -456,6 +552,7 @@ cc_library(
     name = "unbounded_thread_pool",
     srcs = ["unbounded_thread_pool.cc"],
     hdrs = ["unbounded_thread_pool.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:framework",
@@ -469,6 +566,7 @@ cc_library(
     name = "finalization_utils",
     srcs = ["finalization_utils.cc"],
     hdrs = ["finalization_utils.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":root_dataset",
         "//tensorflow/core:framework",
@@ -481,6 +579,7 @@ tf_cc_test(
     name = "unbounded_thread_pool_test",
     size = "small",
     srcs = ["unbounded_thread_pool_test.cc"],
+    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     deps = [
         ":unbounded_thread_pool",
         "//tensorflow/core:lib_internal",
@@ -493,6 +592,7 @@ cc_library(
     name = "utils",
     srcs = ["utils.cc"],
     hdrs = ["utils.h"],
+    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         "//tensorflow/core:framework",
     ],

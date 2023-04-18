@@ -1,9 +1,9 @@
 diff --git a/llvm/lib/Transforms/Scalar/GVN.cpp b/llvm/lib/Transforms/Scalar/GVN.cpp
-index ddfaf9c2c9fb..5cd78f480175 100644
+index e90db02427df..8a6699608298 100644
 --- a/llvm/lib/Transforms/Scalar/GVN.cpp
 +++ b/llvm/lib/Transforms/Scalar/GVN.cpp
-@@ -1108,6 +1108,40 @@ tryToConvertLoadOfPtrSelect(BasicBlock *DepBB, BasicBlock::iterator End,
-   return AvailableValue::getSelect(Sel);
+@@ -1154,6 +1154,40 @@ static Value *findDominatingValue(const MemoryLocation &Loc, Type *LoadTy,
+   return nullptr;
  }
 
 +/// Get instructions between two given instructions.
@@ -40,11 +40,11 @@ index ddfaf9c2c9fb..5cd78f480175 100644
 +  }
 +}
 +
- bool GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
-                                       Value *Address, AvailableValue &Res) {
-   if (!DepInfo.isDef() && !DepInfo.isClobber()) {
-@@ -1128,6 +1162,25 @@ bool GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
-   const DataLayout &DL = Load->getModule()->getDataLayout();
+ std::optional<AvailableValue>
+ GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
+                                  Value *Address) {
+@@ -1161,6 +1195,24 @@ GVNPass::AnalyzeLoadAvailability(LoadInst *Load, MemDepResult DepInfo,
+   assert(DepInfo.isLocal() && "expected a local dependence");
 
    Instruction *DepInst = DepInfo.getInst();
 +  // Deal with shared memory load of nvptx. Cannot forward if there is a call
@@ -60,12 +60,11 @@ index ddfaf9c2c9fb..5cd78f480175 100644
 +          // Thread-block level barrier may be called directly or indirectly.
 +          // e.g. direct call:
 +          //     call void @llvm.nvvm.barrier0()
-+          return false;
++          return std::nullopt;
 +        }
 +      }
 +    }
 +  }
-+
+
+   const DataLayout &DL = Load->getModule()->getDataLayout();
    if (DepInfo.isClobber()) {
-     // If the dependence is to a store that writes to a superset of the bits
-     // read by the load, we can extract the bits we need for the load from the

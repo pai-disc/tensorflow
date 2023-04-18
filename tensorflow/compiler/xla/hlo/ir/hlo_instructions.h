@@ -32,6 +32,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/hlo/ir/hlo_computation.h"
 #include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
 #include "tensorflow/compiler/xla/hlo/ir/hlo_opcode.h"
+#include "tensorflow/compiler/xla/printer.h"
 #include "tensorflow/compiler/xla/shape.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 
@@ -274,10 +275,13 @@ class HloAsyncInstruction : public HloInstruction {
 
 class HloCopyStartInstruction : public HloInstruction {
  public:
-  explicit HloCopyStartInstruction(const Shape& shape, HloInstruction* operand,
-                                   bool is_cross_program_prefetch);
+  explicit HloCopyStartInstruction(
+      const Shape& shape, HloInstruction* operand,
+      std::optional<int> cross_program_prefetch_index);
 
-  bool is_cross_program_prefetch() const { return is_cross_program_prefetch_; }
+  std::optional<int> cross_program_prefetch_index() const {
+    return cross_program_prefetch_index_;
+  }
   HloInstructionProto ToProto() const override;
 
   static bool ClassOf(const HloInstruction* hlo) {
@@ -295,7 +299,14 @@ class HloCopyStartInstruction : public HloInstruction {
       const Shape& shape, absl::Span<HloInstruction* const> new_operands,
       HloCloneContext* context) const override;
 
-  bool is_cross_program_prefetch_;
+  // Each cross program prefetched buffer has a unique index. The indices are
+  // assigned contiguously starting from zero in
+  // AlternateMemoryBestFitHeap::AllocateCrossProgramPrefetchBuffer. This value
+  // is used during codegen to determine which buffer is being speculated at
+  // runtime. One possible implementation is to initialize an array with boolean
+  // values indicating whether the cross program prefetch succeeds or fails for
+  // each buffer.
+  std::optional<int> cross_program_prefetch_index_;
 };
 
 class HloCompareInstruction : public HloInstruction {
@@ -1128,8 +1139,8 @@ class HloConstantInstruction : public HloInstruction {
       const HloInstruction& other,
       absl::FunctionRef<bool(const HloComputation*, const HloComputation*)>
           eq_computations) const override;
-  std::string OperandsToStringWithCanonicalNameMap(
-      const HloPrintOptions& options,
+  void PrintOperandsWithCanonicalNameMap(
+      Printer* printer, const HloPrintOptions& options,
       CanonicalNameMap* canonical_name_map) const override;
   // Implementation for non-common logic of CloneWithNewOperands.
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -1200,9 +1211,30 @@ class HloCallableInstruction : public HloInstruction {
            hlo->opcode() == HloOpcode::kCustomCall;
   }
 
+  // Gets a list of output/operand buffer pairs that alias each other, where the
+  // output buffer is represented as a ShapeIndex, and the operand buffer is
+  // represented as the operand index and the ShapeIndex. By default this list
+  // is empty.
+  const std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>&
+  output_to_operand_aliasing() const {
+    return output_to_operand_aliasing_;
+  }
+  // Sets the list of output/operand buffer pairs that alias each other.
+  void set_output_to_operand_aliasing(
+      std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+          aliasing) {
+    output_to_operand_aliasing_ = std::move(aliasing);
+  }
+
  protected:
   // Returns the default called computation name.
   virtual std::string default_called_computation_name() const = 0;
+
+ private:
+  // A list of output/operand buffer pairs that alias each other. See comment of
+  // output_to_operand_aliasing().
+  std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+      output_to_operand_aliasing_;
 };
 
 class HloFusionInstruction : public HloCallableInstruction {
@@ -1428,8 +1460,8 @@ class HloParameterInstruction : public HloInstruction {
       const HloInstruction& other,
       absl::FunctionRef<bool(const HloComputation*, const HloComputation*)>
           eq_computations) const override;
-  std::string OperandsToStringWithCanonicalNameMap(
-      const HloPrintOptions& options,
+  void PrintOperandsWithCanonicalNameMap(
+      Printer* printer, const HloPrintOptions& options,
       CanonicalNameMap* canonical_name_map) const override;
   // Implementation for non-common logic of CloneWithNewOperands.
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
@@ -1892,20 +1924,6 @@ class HloCustomCallInstruction : public HloCallableInstruction {
     CHECK(layout_constrained());
     return operand_shapes_with_layout_;
   }
-  // Gets a list of output/operand buffer pairs that alias each other, where the
-  // output buffer is represented as a ShapeIndex, and the operand buffer is
-  // represented as the operand index and the ShapeIndex. By default this list
-  // is empty.
-  const std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>&
-  output_to_operand_aliasing() const {
-    return output_to_operand_aliasing_;
-  }
-  // Sets the list of output/operand buffer pairs that alias each other.
-  void set_output_to_operand_aliasing(
-      std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
-          aliasing) {
-    output_to_operand_aliasing_ = std::move(aliasing);
-  }
   void set_custom_call_schedule(CustomCallSchedule custom_call_schedule) {
     custom_call_schedule_ = custom_call_schedule;
   }
@@ -1958,10 +1976,6 @@ class HloCustomCallInstruction : public HloCallableInstruction {
   std::vector<Shape> operand_shapes_with_layout_;
   // Whether this custom call has a side-effect.
   bool custom_call_has_side_effect_;
-  // A list of output/operand buffer pairs that alias each other. See comment of
-  // output_to_operand_aliasing().
-  std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
-      output_to_operand_aliasing_;
   std::optional<Literal> literal_;
   // A custom-call schedule hint.
   CustomCallSchedule custom_call_schedule_;

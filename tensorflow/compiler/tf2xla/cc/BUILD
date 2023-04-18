@@ -2,6 +2,7 @@ load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
 load("//tensorflow:tensorflow.default.bzl", "tf_gen_op_wrapper_cc")
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//tensorflow/compiler/tf2xla:friends"],
     licenses = ["notice"],
 )
@@ -48,5 +49,6 @@ cc_library(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_all_cc",
+        "//tensorflow/tsl/protobuf:protos_all_cc",
     ],
 )

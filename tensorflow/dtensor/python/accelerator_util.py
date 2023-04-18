@@ -35,13 +35,19 @@ def is_initialized() -> bool:
   return bool(_INITIALIZED_ACCELERATOR_SYSTEM_TYPE)
 
 
+def set_initialized(value):
+  """Sets if accelerator system has been initialized."""
+  global _INITIALIZED_ACCELERATOR_SYSTEM_TYPE
+  _INITIALIZED_ACCELERATOR_SYSTEM_TYPE = value
+
+
 def initialize_multi_client_cluster(job_name: str,
                                     dtensor_jobs: List[str],
                                     client_id: int,
                                     collective_leader: str,
                                     port: Optional[int] = None,
                                     gpu_use_nccl_communication: bool = False,
-                                    enable_coordination_service: bool = False):
+                                    enable_coordination_service: bool = True):
   """Initialize GRPC servers and collectives for multi-client DTensor setup.
 
   This function can be used to initialize a multi-client cluster and enable
@@ -112,7 +118,7 @@ def initialize_multi_client_cluster(job_name: str,
     v1=[])
 def initialize_accelerator_system(
     device_type: Optional[str] = None,
-    enable_coordination_service: Optional[bool] = False) -> str:
+    enable_coordination_service: Optional[bool] = True) -> str:
   """Initializes accelerators and communication fabrics for DTensor.
 
   DTensor configures TensorFlow to run in the local mode or multi-client mode.
@@ -143,6 +149,8 @@ def initialize_accelerator_system(
       The default value is `localhost` in local mode, and
       `worker` when in the multi-client mode. All DTensor clients within the
       same multi-client cluster share the same job name.
+  - `DTENSOR_USE_PARALLEL_EXECUTOR`: string, with its value being `pw` to
+      specify that the backend is Pathways, and TensorFlow otherwise.
 
   Args:
     device_type: Type of accelerator to use, can be CPU, GPU, or TPU. If None,
@@ -181,12 +189,14 @@ def initialize_accelerator_system(
   if config.gpu_use_nccl_communication():
     logical_gpu_count = config.num_local_devices("GPU")
     physical_gpu_count = len(tf_config.list_physical_devices("GPU"))
-    if logical_gpu_count != physical_gpu_count:
+    if logical_gpu_count > physical_gpu_count:
       raise ValueError(
-          f"DTENSOR_GPU_USE_NCCL_COMMUNICATION is set for using NCCL. "
-          f"NCCL Collectives require same number of logical and physical GPUs. "
+          "DTENSOR_GPU_USE_NCCL_COMMUNICATION is set for using NCCL. "
+          "NCCL Collectives require one to one mapping between logical and "
+          "physical GPUs. "
           f"The number of logical GPU ({logical_gpu_count}) "
-          f"differs from the number of physical GPU ({physical_gpu_count}).")
+          f"is more than the number of physical GPU ({physical_gpu_count})."
+      )
 
   # Configure logical host CPU devices for accelerators.
   if device_type in ("GPU", "TPU"):
@@ -211,7 +221,7 @@ def initialize_accelerator_system(
       )._collective_use_nccl_communication = config.gpu_use_nccl_communication(
       )
 
-  if device_type == "TPU":
+  if device_type == "TPU" and not config.backend_is_pw():
     tpu_util.initialize_tpu_system()
 
   _INITIALIZED_ACCELERATOR_SYSTEM_TYPE = device_type
@@ -240,7 +250,7 @@ def shutdown_accelerator_system() -> None:
         "Shutting down accelerator system under multi-client mode is "
         "not supported.")
 
-  if device_type == "TPU":
+  if device_type == "TPU" and not config.backend_is_pw():
     tpu_util.shutdown_tpu_system()
 
   # reset TF context to stop gRPC servers.

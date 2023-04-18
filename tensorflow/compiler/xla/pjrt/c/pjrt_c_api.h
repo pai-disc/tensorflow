@@ -184,11 +184,39 @@ const size_t PJRT_Event_OnReady_Args_STRUCT_SIZE =
 // error status and a pointer to an object of the caller's choice as arguments.
 typedef PJRT_Error* PJRT_Event_OnReady(PJRT_Event_OnReady_Args* args);
 
+// ------------------------ Other Common Data Types ----------------------------
+
+// Named value for key-value pairs.
+typedef struct {
+  size_t struct_size;
+  void* priv;
+  const char* name;
+  size_t name_size;
+  enum {
+    PJRT_NamedValue_kString = 0,
+    PJRT_NamedValue_kInt64,
+    PJRT_NamedValue_kInt64List,
+    PJRT_NamedValue_kFloat
+  } type;
+  union {
+    const char* string_value;
+    int64_t int64_value;
+    const int64_t* int64_array_value;
+    float float_value;
+  };
+  // `value_size` is the number of elements for array/string and 1 for scalar
+  // values.
+  size_t value_size;
+} PJRT_NamedValue;
+const size_t PJRT_NamedValue_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_NamedValue, value_size);
+
 // ---------------------------------- Client -----------------------------------
 
 typedef struct PJRT_Client PJRT_Client;
 typedef struct PJRT_Device PJRT_Device;
 typedef struct PJRT_Executable PJRT_Executable;
+typedef struct PJRT_LoadedExecutable PJRT_LoadedExecutable;
 typedef struct PJRT_Buffer PJRT_Buffer;
 
 typedef struct {
@@ -310,16 +338,34 @@ typedef PJRT_Error* PJRT_Client_LookupDevice(
 typedef struct {
   size_t struct_size;
   void* priv;
+  PJRT_Client* client;
+  int local_hardware_id;
+  // `addressable_device` has the same lifetime as `client`. It is owned by
+  // `client`.
+  PJRT_Device* addressable_device;  // out
+} PJRT_Client_LookupAddressableDevice_Args;
+
+const size_t PJRT_Client_LookupAddressableDevice_Args_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_Client_LookupAddressableDevice_Args,
+                     addressable_device);
+
+// Returns an addressable PJRT_Device* with the specified ID as returned by
+// PJRT_Device_LocalHardwareId.
+typedef PJRT_Error* PJRT_Client_LookupAddressableDevice(
+    PJRT_Client_LookupAddressableDevice_Args* args);
+
+typedef struct {
+  size_t struct_size;
+  void* priv;
   // Serialized code in the specified format below.
-  // String is owned by the caller and should stay alive for the duration of the
-  // compile call.
-  const char* code;
+  // String is owned by the caller.
+  char* code;  // in/out depending on usage
   size_t code_size;
   // Supported formats are:
   // "hlo": code string takes serialized HloModuleProto.
+  // "hlo_with_config": code string takes serialized HloModuleProtoWithConfig.
   // "mlir": code string takes MLIR module bytecode (or string).
-  // String is owned by the caller and should stay alive for the duration of the
-  // compile call.
+  // Ownership of `format` varies across API functions.
   const char* format;
   size_t format_size;
 } PJRT_Program;
@@ -331,13 +377,14 @@ typedef struct {
   void* priv;
   PJRT_Client* client;
   // Only needs to stay alive for the duration of the Compile call.
+  // `program->format` and `program->format_size` are owned by the caller.
   PJRT_Program* program;
   // TODO(b/240560013): consider putting some of option fields in priv.
   // Serialized CompileOptionsProto
   // (https://github.com/tensorflow/tensorflow/blob/master/tensorflow/compiler/xla/pjrt/compile_options.proto)
   const char* compile_options;
   size_t compile_options_size;
-  PJRT_Executable* executable;  // out
+  PJRT_LoadedExecutable* executable;  // out
 } PJRT_Client_Compile_Args;
 
 const size_t PJRT_Client_Compile_Args_STRUCT_SIZE =
@@ -411,6 +458,13 @@ typedef enum {
   // `data` is immutable and will not be freed only for the duration of the
   // PJRT_Client_BufferFromHostBuffer call.
   PJRT_HostBufferSemantics_kImmutableOnlyDuringCall,
+
+  // The runtime may hold onto `data` after the call to
+  // `PJRT_Client_BufferFromHostBuffer`
+  // returns while the runtime completes a transfer to the device. The caller
+  // promises not to mutate or free `data` until the transfer completes, at
+  // which point `done_with_host_buffer` will be triggered.
+  PJRT_HostBufferSemantics_kImmutableUntilTransferCompletes,
 
   // The PjRtBuffer may alias `data` internally and the runtime may use the
   // `data` contents as long as the buffer is alive. The caller promises to
@@ -523,31 +577,9 @@ typedef PJRT_Error* PJRT_Device_IsAddressable(
 typedef struct {
   size_t struct_size;
   void* priv;
-  const char* name;
-  size_t name_size;
-  enum {
-    PJRT_Device_Attribute_kString = 0,
-    PJRT_Device_Attribute_kInt64,
-    PJRT_Device_Attribute_kInt64List
-  } type;
-  union {
-    int64_t int64_value;
-    const int64_t* int64_array_value;
-    const char* string_value;
-  };
-  // `value_size` is the number of elements for array/string and 1 for scalar
-  // values.
-  size_t value_size;
-} PJRT_Device_Attribute;
-const size_t PJRT_Device_Attribute_STRUCT_SIZE =
-    PJRT_STRUCT_SIZE(PJRT_Device_Attribute, value_size);
-
-typedef struct {
-  size_t struct_size;
-  void* priv;
   PJRT_Device* device;
-  size_t num_attributes;              // out
-  PJRT_Device_Attribute* attributes;  // out
+  size_t num_attributes;        // out
+  PJRT_NamedValue* attributes;  // out
 } PJRT_Device_Attributes_Args;
 const size_t PJRT_Device_Attributes_Args_STRUCT_SIZE =
     PJRT_STRUCT_SIZE(PJRT_Device_Attributes_Args, attributes);
@@ -602,8 +634,6 @@ typedef PJRT_Error* PJRT_Device_ToString(PJRT_Device_ToString_Args* args);
 
 // ------------------------------- Executables ---------------------------------
 
-typedef struct PJRT_Buffer PJRT_Buffer;
-
 typedef struct {
   size_t struct_size;
   void* priv;
@@ -612,9 +642,35 @@ typedef struct {
 const size_t PJRT_Executable_Destroy_Args_STRUCT_SIZE =
     PJRT_STRUCT_SIZE(PJRT_Executable_Destroy_Args, executable);
 
-// Frees `executable` and deletes the underlying runtime object as if
-// `PJRT_Executable_Delete` were called. `executable` can be nullptr.
+// Frees `executable`. `executable` can be nullptr.
 typedef PJRT_Error* PJRT_Executable_Destroy(PJRT_Executable_Destroy_Args* args);
+
+typedef struct {
+  size_t struct_size;
+  void* priv;
+  PJRT_LoadedExecutable* executable;
+} PJRT_LoadedExecutable_Destroy_Args;
+const size_t PJRT_LoadedExecutable_Destroy_Args_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_LoadedExecutable_Destroy_Args, executable);
+
+// Frees `executable` and deletes the underlying runtime object as if
+// `PJRT_LoadedExecutable_Delete` were called. `executable` can be nullptr.
+typedef PJRT_Error* PJRT_LoadedExecutable_Destroy(
+    PJRT_LoadedExecutable_Destroy_Args* args);
+
+typedef struct {
+  size_t struct_size;
+  void* priv;
+  PJRT_LoadedExecutable* loaded_executable;
+  PJRT_Executable* executable;  // out
+} PJRT_LoadedExecutable_GetExecutable_Args;
+const size_t PJRT_LoadedExecutable_GetExecutable_Args_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_LoadedExecutable_GetExecutable_Args, executable);
+
+// Constructs a PJRT_Executable from a PJRT_LoadedExecutable. The returned
+// executable should be freed by the caller with PJRT_Executable_Destroy.
+typedef PJRT_Error* PJRT_LoadedExecutable_GetExecutable(
+    PJRT_LoadedExecutable_GetExecutable_Args* args);
 
 typedef struct {
   size_t struct_size;
@@ -635,46 +691,82 @@ typedef PJRT_Error* PJRT_Executable_Name(PJRT_Executable_Name_Args* args);
 typedef struct {
   size_t struct_size;
   void* priv;
-  PJRT_Executable* executable;
+  PJRT_LoadedExecutable* executable;
   PJRT_Device** addressable_devices;  // out
   size_t num_addressable_devices;     // out
-} PJRT_Executable_AddressableDevices_Args;
+} PJRT_LoadedExecutable_AddressableDevices_Args;
 
-const size_t PJRT_Executable_AddressableDevices_Args_STRUCT_SIZE =
-    PJRT_STRUCT_SIZE(PJRT_Executable_AddressableDevices_Args,
+const size_t PJRT_LoadedExecutable_AddressableDevices_Args_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_LoadedExecutable_AddressableDevices_Args,
                      num_addressable_devices);
 
 // Returns a list of devices this executable will run on.
-typedef PJRT_Error* PJRT_Executable_AddressableDevices(
-    PJRT_Executable_AddressableDevices_Args* args);
+typedef PJRT_Error* PJRT_LoadedExecutable_AddressableDevices(
+    PJRT_LoadedExecutable_AddressableDevices_Args* args);
 
 typedef struct {
   size_t struct_size;
   void* priv;
   PJRT_Executable* executable;
-} PJRT_Executable_Delete_Args;
-const size_t PJRT_Executable_Delete_Args_STRUCT_SIZE =
-    PJRT_STRUCT_SIZE(PJRT_Executable_Delete_Args, executable);
+  PJRT_Program* program;  // out, but read below
+} PJRT_Executable_OptimizedProgram_Args;
+const size_t PJRT_Executable_OptimizedProgram_Args_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_Executable_OptimizedProgram_Args, program);
+
+// Retrieves the optimized program for a given PJRT_Executable (SPMD).
+// The caller should populate `program->format` and `format_size`.
+//
+// The implementation will set `program->format` and `program->format_size`
+// to inform callers of the format of the optimized program returned.
+// These members are owned by the implementation.
+//
+// If called with nullptr as `program->code`, `PJRT_Executable_OptimizedProgram`
+// will populate `program->code_size` as an output indicating the number of
+// bytes the string `program->code` requires.
+//
+// If `program->code` is not null, `PJRT_Executable_OptimizedProgram` will fill
+// the buffer pointed to by `program->code` with the serialization of the
+// optimized HLO program. `program->code` must point to a client-owned buffer of
+// size >= `program->code_size`, which must be at large enough to hold the
+// serialization of the optimized program.
+//
+// Callers should generally call this function twice with the same `args`.
+// In the first call, `program->code` must be nullptr. This call will populate
+// `program->code_size`. Clients should then allocate a buffer `code_buff` of at
+// least `code_size` bytes. Before the second call, callers should set
+// `program->code = code_buff`. The second call will then write the serialized
+// program to `code_buff`.
+typedef PJRT_Error* PJRT_Executable_OptimizedProgram(
+    PJRT_Executable_OptimizedProgram_Args* args);
+
+typedef struct {
+  size_t struct_size;
+  void* priv;
+  PJRT_LoadedExecutable* executable;
+} PJRT_LoadedExecutable_Delete_Args;
+const size_t PJRT_LoadedExecutable_Delete_Args_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_LoadedExecutable_Delete_Args, executable);
 
 // Drops `executable`'s reference to the internal runtime object and
 // associated resources, without freeing the `executable` object itself.
-// `executable` can only be used with PJRT_Executable_IsDeleted and
-// PJRT_Executable_Destroy after calling this method. The internal runtime
+// `executable` can only be used with PJRT_LoadedExecutable_IsDeleted and
+// PJRT_LoadedExecutable_Destroy after calling this method. The internal runtime
 // executable will be freed after the last execution completes.
-typedef PJRT_Error* PJRT_Executable_Delete(PJRT_Executable_Delete_Args* args);
+typedef PJRT_Error* PJRT_LoadedExecutable_Delete(
+    PJRT_LoadedExecutable_Delete_Args* args);
 
 typedef struct {
   size_t struct_size;
   void* priv;
-  PJRT_Executable* executable;
+  PJRT_LoadedExecutable* executable;
   bool is_deleted;  // out
-} PJRT_Executable_IsDeleted_Args;
-const size_t PJRT_Executable_IsDeleted_Args_STRUCT_SIZE =
-    PJRT_STRUCT_SIZE(PJRT_Executable_IsDeleted_Args, is_deleted);
+} PJRT_LoadedExecutable_IsDeleted_Args;
+const size_t PJRT_LoadedExecutable_IsDeleted_Args_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_LoadedExecutable_IsDeleted_Args, is_deleted);
 
-// True if and only if PJRT_Executable_Delete has previously been called.
-typedef PJRT_Error* PJRT_Executable_IsDeleted(
-    PJRT_Executable_IsDeleted_Args* args);
+// True if and only if PJRT_LoadedExecutable_Delete has previously been called.
+typedef PJRT_Error* PJRT_LoadedExecutable_IsDeleted(
+    PJRT_LoadedExecutable_IsDeleted_Args* args);
 
 typedef struct {
   size_t struct_size;
@@ -691,7 +783,7 @@ const size_t PJRT_ExecuteOptions_STRUCT_SIZE =
 typedef struct {
   size_t struct_size;
   void* priv;
-  PJRT_Executable* executable;
+  PJRT_LoadedExecutable* executable;
   // Only needs to stay alive for the duration of the Execute call.
   PJRT_ExecuteOptions* options;
   // Execution input of size [`num_devices`, `num_args`].
@@ -720,12 +812,13 @@ typedef struct {
   // at compile time. Setting this field may not be supported on all platforms
   // or executables.
   PJRT_Device* execute_device;
-} PJRT_Executable_Execute_Args;
-const size_t PJRT_Executable_Execute_Args_STRUCT_SIZE =
-    PJRT_STRUCT_SIZE(PJRT_Executable_Execute_Args, device_complete_events);
+} PJRT_LoadedExecutable_Execute_Args;
+const size_t PJRT_LoadedExecutable_Execute_Args_STRUCT_SIZE = PJRT_STRUCT_SIZE(
+    PJRT_LoadedExecutable_Execute_Args, device_complete_events);
 
 // Executes on devices addressable by the client.
-typedef PJRT_Error* PJRT_Executable_Execute(PJRT_Executable_Execute_Args* args);
+typedef PJRT_Error* PJRT_LoadedExecutable_Execute(
+    PJRT_LoadedExecutable_Execute_Args* args);
 
 typedef struct {
   size_t struct_size;
@@ -752,6 +845,91 @@ const size_t PJRT_Executable_SizeOfGeneratedCodeInBytes_Args_STRUCT_SIZE =
 
 typedef PJRT_Error* PJRT_Executable_SizeOfGeneratedCodeInBytes(
     PJRT_Executable_SizeOfGeneratedCodeInBytes_Args* args);
+
+typedef struct {
+  size_t struct_size;
+  void* priv;
+  PJRT_LoadedExecutable* executable;
+  size_t num_properties;  // out
+  // `properties` and any embedded data are owned by and have the same lifetime
+  // as `executable`.
+  PJRT_NamedValue* properties;  // out
+} PJRT_LoadedExecutable_GetCostAnalysis_Args;
+
+const size_t PJRT_LoadedExecutable_GetCostAnalysis_Args_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_LoadedExecutable_GetCostAnalysis_Args, properties);
+
+// Get the cost properties for the executable. Different platforms may return
+// different properties; for example, some platforms may return the number of
+// operations, or memory size of the input/output of the executable, based on
+// program analysis.
+typedef PJRT_Error* PJRT_LoadedExecutable_GetCostAnalysis(
+    PJRT_LoadedExecutable_GetCostAnalysis_Args* args);
+
+typedef struct PJRT_SerializedExecutable PJRT_SerializedExecutable;
+
+typedef struct {
+  size_t struct_size;
+  void* priv;
+  const PJRT_Executable* executable;
+  PJRT_SerializedExecutable* serialized_executable;  // out
+} PJRT_Executable_Serialize_Args;
+const size_t PJRT_Executable_Serialize_Args_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_Executable_Serialize_Args, serialized_executable);
+
+// Returns a platform-specific serialization of `executable`. The serialization
+// is not guaranteed to be stable over time.
+typedef PJRT_Error* PJRT_Executable_Serialize(
+    PJRT_Executable_Serialize_Args* args);
+
+typedef struct {
+  size_t struct_size;
+  void* priv;
+  PJRT_Client* client;
+  const char* serialized_executable;
+  size_t serialized_executable_size;
+  PJRT_LoadedExecutable* loaded_executable;  // out
+} PJRT_Executable_DeserializeAndLoad_Args;
+const size_t PJRT_Executable_DeserializeAndLoad_Args_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_Executable_DeserializeAndLoad_Args,
+                     loaded_executable);
+
+// Deserializes an executable serialized by `PJRT_Executable_Serialize`.
+// `serialized_executable` must have been produced by the same platform and
+// library version as this one.
+typedef PJRT_Error* PJRT_Executable_DeserializeAndLoad(
+    PJRT_Executable_DeserializeAndLoad_Args* args);
+
+// -------------------------- Serialized Executables ---------------------------
+
+typedef struct {
+  size_t struct_size;
+  void* priv;
+  PJRT_SerializedExecutable* serialized_executable;
+} PJRT_SerializedExecutable_Destroy_Args;
+const size_t PJRT_SerializedExecutable_Destroy_Args_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_SerializedExecutable_Destroy_Args,
+                     serialized_executable);
+
+// Destroys a `PJRT_SerializedExecutable`.
+typedef PJRT_Error* PJRT_SerializedExecutable_Destroy(
+    PJRT_SerializedExecutable_Destroy_Args* args);
+
+// The string pointed to by `data` is owned by `serialized_executable` and has
+// the same object lifetime.
+typedef struct {
+  size_t struct_size;
+  void* priv;
+  PJRT_SerializedExecutable* serialized_executable;
+  const char* data;  // out
+  size_t data_size;  // out
+} PJRT_SerializedExecutable_Data_Args;
+const size_t PJRT_SerializedExecutable_Data_Args_STRUCT_SIZE =
+    PJRT_STRUCT_SIZE(PJRT_SerializedExecutable_Data_Args, data_size);
+
+// Returns the data of a `PJRT_SerializedExecutable` and its length in bytes
+typedef PJRT_Error* PJRT_SerializedExecutable_Data(
+    PJRT_SerializedExecutable_Data_Args* args);
 
 // ---------------------------------- Buffers ----------------------------------
 
@@ -954,6 +1132,7 @@ typedef struct {
   _PJRT_API_STRUCT_FIELD(PJRT_Client_Devices);
   _PJRT_API_STRUCT_FIELD(PJRT_Client_AddressableDevices);
   _PJRT_API_STRUCT_FIELD(PJRT_Client_LookupDevice);
+  _PJRT_API_STRUCT_FIELD(PJRT_Client_LookupAddressableDevice);
   _PJRT_API_STRUCT_FIELD(PJRT_Client_Compile);
   _PJRT_API_STRUCT_FIELD(PJRT_Client_DefaultDeviceAssignment);
   _PJRT_API_STRUCT_FIELD(PJRT_Client_BufferFromHostBuffer);
@@ -969,12 +1148,22 @@ typedef struct {
 
   _PJRT_API_STRUCT_FIELD(PJRT_Executable_Destroy);
   _PJRT_API_STRUCT_FIELD(PJRT_Executable_Name);
-  _PJRT_API_STRUCT_FIELD(PJRT_Executable_AddressableDevices);
   _PJRT_API_STRUCT_FIELD(PJRT_Executable_NumOutputs);
   _PJRT_API_STRUCT_FIELD(PJRT_Executable_SizeOfGeneratedCodeInBytes);
-  _PJRT_API_STRUCT_FIELD(PJRT_Executable_Delete);
-  _PJRT_API_STRUCT_FIELD(PJRT_Executable_IsDeleted);
-  _PJRT_API_STRUCT_FIELD(PJRT_Executable_Execute);
+  _PJRT_API_STRUCT_FIELD(PJRT_Executable_OptimizedProgram);
+  _PJRT_API_STRUCT_FIELD(PJRT_Executable_Serialize);
+
+  _PJRT_API_STRUCT_FIELD(PJRT_LoadedExecutable_Destroy);
+  _PJRT_API_STRUCT_FIELD(PJRT_LoadedExecutable_GetExecutable);
+  _PJRT_API_STRUCT_FIELD(PJRT_LoadedExecutable_AddressableDevices);
+  _PJRT_API_STRUCT_FIELD(PJRT_LoadedExecutable_GetCostAnalysis);
+  _PJRT_API_STRUCT_FIELD(PJRT_LoadedExecutable_Delete);
+  _PJRT_API_STRUCT_FIELD(PJRT_LoadedExecutable_IsDeleted);
+  _PJRT_API_STRUCT_FIELD(PJRT_LoadedExecutable_Execute);
+  _PJRT_API_STRUCT_FIELD(PJRT_Executable_DeserializeAndLoad);
+
+  _PJRT_API_STRUCT_FIELD(PJRT_SerializedExecutable_Destroy);
+  _PJRT_API_STRUCT_FIELD(PJRT_SerializedExecutable_Data);
 
   _PJRT_API_STRUCT_FIELD(PJRT_Buffer_Destroy);
   _PJRT_API_STRUCT_FIELD(PJRT_Buffer_OnDeviceTrimmedShape);

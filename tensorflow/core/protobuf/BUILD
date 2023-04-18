@@ -16,6 +16,7 @@ load(
 )
 
 package(
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//tensorflow:internal",
         "//tensorflow/core:__subpackages__",
@@ -61,9 +62,12 @@ COMMON_PROTO_SRCS = [
 tf_proto_library(
     name = "autotuning_proto",
     srcs = ["autotuning.proto"],
-    cc_api_version = 2,
     make_default_target_header_only = True,
-    protodeps = ["//tensorflow/compiler/xla/stream_executor:dnn_proto"],
+    protodeps = ["//tensorflow/tsl/protobuf:autotuning_proto"],
+    exports = ["//tensorflow/tsl/protobuf:autotuning_proto"],
+    cc_libs = [
+        "//tensorflow/tsl/protobuf:dnn_proto_cc",
+    ]
 )
 
 tf_proto_library(
@@ -74,6 +78,9 @@ tf_proto_library(
     protodeps = [
         "//tensorflow/compiler/xla/stream_executor:dnn_proto",
     ],
+    cc_libs = [
+        "//tensorflow/tsl/protobuf:dnn_proto_cc",
+    ]
 )
 
 tf_proto_library(

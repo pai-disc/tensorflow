@@ -25,10 +25,12 @@ limitations under the License.
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/xla/debug_options_flags.h"
+#include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
+#include "tensorflow/compiler/xla/hlo/ir/hlo_opcode.h"
 #include "tensorflow/compiler/xla/service/gpu/gpu_fusible.h"
+#include "tensorflow/compiler/xla/service/gpu/gpu_performance_model.h"
+#include "tensorflow/compiler/xla/service/gpu/ir_emission_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_graph_dumper.h"
-#include "tensorflow/compiler/xla/service/hlo_instruction.h"
-#include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/service/hlo_reachability.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 
@@ -48,6 +50,7 @@ bool IsProfitableOperand(HloInstruction* instr) {
 }
 
 FusionDecision LegalToFuse(HloInstruction* instr1, HloInstruction* instr2,
+                           const GpuDeviceInfo& device_info,
                            FusionInfoCache* fusion_info_cache) {
   CHECK(instr1->opcode() == HloOpcode::kFusion);
 
@@ -64,7 +67,7 @@ FusionDecision LegalToFuse(HloInstruction* instr1, HloInstruction* instr2,
   }
 
   // Do this check last, as it may be expensive.
-  return FusionFitsInBudget(*instr1, *instr2,
+  return FusionFitsInBudget(*instr1, *instr2, device_info,
                             /*is_consumer_producer_fusion=*/false,
                             fusion_info_cache);
 }
@@ -95,7 +98,8 @@ HloInstruction* SelectPreferredFusionCandidate(
 
 std::vector<HloInstruction*> GetProducerConsumerMultiOutputFusionCandidates(
     const HloInstruction* producer, const HloReachabilityMap& reachability,
-    FusionInfoCache* fusion_info_cache, GpuHloCostAnalysis* cost_analysis) {
+    FusionInfoCache* fusion_info_cache, GpuHloCostAnalysis* cost_analysis,
+    const GpuDeviceInfo& device_info) {
   std::vector<HloInstruction*> fusion_candidates;
   const HloComputation* computation = producer->parent();
   const HloModule* module = computation->parent();
@@ -158,7 +162,7 @@ std::vector<HloInstruction*> GetProducerConsumerMultiOutputFusionCandidates(
                                 << " would introduce a cycle when fused.");
       continue;
     }
-    if (!FusionFitsInBudget(*producer, *consumer,
+    if (!FusionFitsInBudget(*producer, *consumer, device_info,
                             /*is_consumer_producer_fusion=*/false,
                             fusion_info_cache)) {
       dump_negative_explanation(
@@ -174,6 +178,15 @@ std::vector<HloInstruction*> GetProducerConsumerMultiOutputFusionCandidates(
       continue;
     }
 
+    GpuPerformanceModel::RunTimes t = GpuPerformanceModel::EstimateRunTimes(
+        producer, cost_analysis, device_info, {consumer},
+        /*multi_output=*/true);
+    if (t.time_fused > t.time_unfused) {
+      dump_negative_explanation(FusionDecision{}
+                                << "will execute slower if fused");
+      continue;
+    }
+
     fusion_candidates.push_back(consumer);
   }
   return fusion_candidates;
@@ -185,6 +198,9 @@ FusionDecision IsSiblingFusionCandidate(const HloInstruction* instr) {
   }
   if (!IsFusibleAsMultiOutputFusionRoot(*instr)) {
     return "not fusible as MOF root";
+  }
+  if (IsNestableVariadicReduction(*instr)) {
+    return "merging with variadic reductions is not supported yet";
   }
   // Check if the users of multioutput fusion is not a get-tuple-element.
   // If this is the case, we bail out because the transformation assumes
@@ -245,7 +261,7 @@ bool GpuMultiOutputFusion::FuseSiblings(HloInstruction* parent,
       if (NoFusionPossible sibling_fusible =
               (!IsSiblingFusionCandidate(*j) || !is_disconnected(*i, *j) ||
                !ShapesCompatibleForMultiOutputFusion(*(*i), *(*j)) ||
-               !LegalToFuse(*i, *j, fusion_info_cache))) {
+               !LegalToFuse(*i, *j, device_info_, fusion_info_cache))) {
         // We pick `j` arbitrarily as a consumer.
         if (dump_fusion) {
           RegisterFusionState(
@@ -306,7 +322,9 @@ bool GpuMultiOutputFusion::FuseSiblings(HloInstruction* parent,
 StatusOr<bool> GpuMultiOutputFusion::DoMultiOutputFusion() {
   bool changed = false;
   RecomputeReachability();
-  GpuHloCostAnalysis cost_analysis({shape_size_function_});
+  GpuHloCostAnalysis cost_analysis({shape_size_function_,
+                                    /*per_second_rates=*/{},
+                                    /*count_multiple_input_accesses=*/true});
   TF_RETURN_IF_ERROR(computation_->Accept(&cost_analysis));
   std::vector<HloInstruction*> defs_before_uses =
       computation_->MakeInstructionPostOrder();
@@ -335,7 +353,8 @@ StatusOr<bool> GpuMultiOutputFusion::DoMultiOutputFusion() {
     // multi-output fusion will occur before the current op in the order of
     // traversal, and hence, not get into the way of subsequent fusion attempts.
     const auto candidates = GetProducerConsumerMultiOutputFusionCandidates(
-        producer, *reachability_, &fusion_info_cache, &cost_analysis);
+        producer, *reachability_, &fusion_info_cache, &cost_analysis,
+        device_info_);
     auto* consumer_for_fusion = SelectPreferredFusionCandidate(candidates);
     if (consumer_for_fusion == nullptr) {
       continue;
@@ -427,6 +446,11 @@ StatusOr<bool> GpuMultiOutputFusion::Run(
   bool changed = false;
   for (auto* computation :
        module->MakeNonfusionComputations(execution_threads)) {
+    // Skip Softmax CustomCall computations.
+    if (computation->IsCustomCallComputation() &&
+        IsSoftmaxCustomCall(*computation->CustomCallInstruction())) {
+      continue;
+    }
     computation_ = computation;
     TF_ASSIGN_OR_RETURN(bool fusion_changed, DoMultiOutputFusion());
     if (fusion_changed) {

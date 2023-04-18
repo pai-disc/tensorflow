@@ -69,9 +69,8 @@ std::string GetROCDLDir(const HloModuleConfig& config) {
     }
     checked = true;
   }
-#if TENSORFLOW_USE_DCU
-  std::string libdevice_dir = tsl::io::JoinPath(rocm_path, "amdgcn/bitcode");
-#elif (TF_ROCM_VERSION >= 30900) && (!TENSORFLOW_USE_DCU)
+
+#if (TF_ROCM_VERSION >= 30900 || TENSORFLOW_USE_DCU)
   std::string libdevice_dir = tensorflow::io::JoinPath(rocm_path, "amdgcn/bitcode");
 #else
   std::string libdevice_dir = tensorflow::io::JoinPath(rocm_path, "lib");
@@ -98,7 +97,8 @@ std::string GetROCDLDir(const HloModuleConfig& config) {
 }  // namespace
 
 Status AMDGPUCompiler::OptimizeHloConvolutionCanonicalization(
-    HloModule* hlo_module, se::StreamExecutor* stream_exec,
+    HloModule* hlo_module, GpuVersion gpu_version,
+    se::dnn::VersionInfo dnn_version,
     se::DeviceMemoryAllocator* device_allocator) {
   // Convert convolutions into CustomCalls to MIOpen, then canonicalize them
   // (PadInsertion).
@@ -131,9 +131,12 @@ Status AMDGPUCompiler::OptimizeHloConvolutionCanonicalization(
 
 Status AMDGPUCompiler::OptimizeHloPostLayoutAssignment(
     HloModule* hlo_module, se::StreamExecutor* stream_exec,
-    se::DeviceMemoryAllocator* device_allocator) {
+    se::DeviceMemoryAllocator* device_allocator,
+    const GpuTargetConfig& gpu_target_config,
+    const AutotuneResults* autotune_results) {
   TF_RETURN_IF_ERROR(GpuCompiler::OptimizeHloPostLayoutAssignment(
-      hlo_module, stream_exec, device_allocator));
+      hlo_module, stream_exec, device_allocator, gpu_target_config,
+      autotune_results));
 
   HloPassPipeline post_pipeline("AMDGPU post-layout_assignment");
 
@@ -157,9 +160,7 @@ GpuVersion AMDGPUCompiler::GetGpuVersion(se::StreamExecutor* stream_exec) {
 StatusOr<std::pair<std::string, std::vector<uint8_t>>>
 AMDGPUCompiler::CompileTargetBinary(const HloModuleConfig& module_config,
                                     llvm::Module* llvm_module,
-                                    GpuVersion gpu_version,
-                                    se::StreamExecutor* stream_exec,
-                                    bool relocatable,
+                                    GpuVersion gpu_version, bool relocatable,
                                     const HloModule* debug_module) {
   if (rocdl_dir_.empty()) {
     // Compute rocdl_dir_ just once and cache it in this member.
