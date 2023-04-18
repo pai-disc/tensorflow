@@ -46,7 +46,7 @@ struct FallbackInlinerInterface : public mlir::DialectInlinerInterface {
   using DialectInlinerInterface::DialectInlinerInterface;
 
   bool isLegalToInline(Operation *op, Region *dest, bool would_be_cloned,
-                       IRMapping &) const final {
+                       BlockAndValueMapping &) const final {
     return true;
   }
 };
@@ -304,7 +304,9 @@ void ExecuteOp::getOpAttrs(
 // ConstDenseTensorOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult ConstDenseTensorOp::fold(FoldAdaptor) { return getValue(); }
+OpFoldResult ConstDenseTensorOp::fold(ArrayRef<Attribute> operands) {
+  return getValue();
+}
 
 //===----------------------------------------------------------------------===//
 // CoreRTTensorHandleToFallbackTensorOp

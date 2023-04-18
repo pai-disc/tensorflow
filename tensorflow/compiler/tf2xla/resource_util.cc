@@ -22,6 +22,7 @@ limitations under the License.
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/tf2xla/resource_operation_table.h"
 #include "tensorflow/compiler/xla/status_macros.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/statusor.h"
 #include "tensorflow/core/graph/algorithm.h"
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -31,7 +32,7 @@ limitations under the License.
 namespace tensorflow {
 namespace {
 
-using tsl::StatusOr;
+using stream_executor::port::StatusOr;
 
 const char kIdentityNOp[] = "IdentityN";
 const char kIfOp[] = "If";

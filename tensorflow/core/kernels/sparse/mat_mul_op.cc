@@ -245,9 +245,7 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
                         Tensor** output, Tensor* output_transposed,
                         Tensor** matmul_result) {
     TensorShape output_shape;
-    if (rank == 3) {
-      TF_RETURN_IF_ERROR(output_shape.AddDimWithStatus(batch_size));
-    }
+    if (rank == 3) output_shape.AddDim(batch_size);
 
     if (!transpose_output) {
       output_shape.AppendShape({num_rows, num_cols});
@@ -533,15 +531,13 @@ class CSRMatMulGPUOp : public CSRMatMulOp<GPUDevice, T> {
     const int64_t b_slice_size = b_inner_dim * b_outer_dim;
 
     TensorShape c_shape;
-    if (rank == 3) {
-      OP_REQUIRES_OK(ctx, c_shape.AddDimWithStatus(batch_size));
-    }
+    if (rank == 3) c_shape.AddDim(batch_size);
     if (this->transpose_output_) {
-      OP_REQUIRES_OK(ctx, c_shape.AddDimWithStatus(b_outer_dim));
-      OP_REQUIRES_OK(ctx, c_shape.AddDimWithStatus(a_outer_dim));
+      c_shape.AddDim(b_outer_dim);
+      c_shape.AddDim(a_outer_dim);
     } else {
-      OP_REQUIRES_OK(ctx, c_shape.AddDimWithStatus(a_outer_dim));
-      OP_REQUIRES_OK(ctx, c_shape.AddDimWithStatus(b_outer_dim));
+      c_shape.AddDim(a_outer_dim);
+      c_shape.AddDim(b_outer_dim);
     }
 
     const int64_t c_matrix_lhs = c_shape.dim_size(row_dim);
@@ -651,12 +647,10 @@ class CSRMatMulGPUOp : public CSRMatMulOp<GPUDevice, T> {
     } else {
       TensorShape b_t_transposed_shape;
       if (rank == 3) {
-        OP_REQUIRES_OK(ctx, b_t_transposed_shape.AddDimWithStatus(batch_size));
+        b_t_transposed_shape.AddDim(batch_size);
       }
-      OP_REQUIRES_OK(ctx, b_t_transposed_shape.AddDimWithStatus(
-                              b_t.dim_size(row_dim + 1)));
-      OP_REQUIRES_OK(
-          ctx, b_t_transposed_shape.AddDimWithStatus(b_t.dim_size(row_dim)));
+      b_t_transposed_shape.AddDim(b_t.dim_size(row_dim + 1));
+      b_t_transposed_shape.AddDim(b_t.dim_size(row_dim));
       OP_REQUIRES_OK(ctx, ctx->allocate_temp(DataTypeToEnum<T>::value,
                                              b_t_transposed_shape, &b_t_input));
       const GPUDevice& d = ctx->eigen_device<GPUDevice>();
@@ -741,12 +735,14 @@ namespace {
 template <typename T>
 struct GPUDataType;
 
+// GPUDataType templates are currently not instantiated in the ROCm flow
+// So leaving out the #elif TENSORFLOW_USE_ROCM blocks for now
+// hipblas library is not (yet) being pulled in via rocm_configure.bzl
+// so cannot reference tyeps from hipblas headers here
 template <>
 struct GPUDataType<Eigen::half> {
 #if GOOGLE_CUDA
   static constexpr cudaDataType_t type = CUDA_R_16F;
-#else
-  static constexpr hipDataType type = HIP_R_16F;
 #endif
 };
 
@@ -754,8 +750,6 @@ template <>
 struct GPUDataType<float> {
 #if GOOGLE_CUDA
   static constexpr cudaDataType_t type = CUDA_R_32F;
-#else
-  static constexpr hipDataType type = HIP_R_32F;
 #endif
 };
 
@@ -763,8 +757,6 @@ template <>
 struct GPUDataType<std::complex<float>> {
 #if GOOGLE_CUDA
   static constexpr cudaDataType_t type = CUDA_C_32F;
-#else
-  static constexpr hipDataType type = HIP_C_32F;
 #endif
 };
 
@@ -772,8 +764,6 @@ template <>
 struct GPUDataType<double> {
 #if GOOGLE_CUDA
   static constexpr cudaDataType_t type = CUDA_R_64F;
-#else
-  static constexpr hipDataType type = HIP_R_64F;
 #endif
 };
 
@@ -781,8 +771,6 @@ template <>
 struct GPUDataType<std::complex<double>> {
 #if GOOGLE_CUDA
   static constexpr cudaDataType_t type = CUDA_C_64F;
-#else
-  static constexpr hipDataType type = HIP_C_64F;
 #endif
 };
 
@@ -868,14 +856,10 @@ class CSRSparseMatrixMatMul<GPUDevice, T> {
           cusparseCreateDnMat(&matC, m, n, ldc, c.data(), GPUDataType<T>::type,
                               CUSPARSE_ORDER_COL));
 
-#if CUDA_VERSION >= 12000
-      cusparseSpMMAlg_t algo = CUSPARSE_SPMM_ALG_DEFAULT;
-#else
-      cusparseSpMMAlg_t algo = CUSPARSE_MM_ALG_DEFAULT;
-#endif
       size_t bufferSize = 0;
       TF_RETURN_IF_ERROR(cuda_sparse.SpMMBufferSize(
-          transA, transB, &alpha, matA, matB, &beta, matC, algo, &bufferSize));
+          transA, transB, &alpha, matA, matB, &beta, matC,
+          CUSPARSE_MM_ALG_DEFAULT, &bufferSize));
 
       Tensor buffer;
       TF_RETURN_IF_ERROR(ctx->allocate_temp(
@@ -883,7 +867,7 @@ class CSRSparseMatrixMatMul<GPUDevice, T> {
       DCHECK(buffer.flat<int8>().data() != nullptr);
 
       TF_RETURN_IF_ERROR(cuda_sparse.SpMM(transA, transB, &alpha, matA, matB,
-                                          &beta, matC, algo,
+                                          &beta, matC, CUSPARSE_MM_ALG_DEFAULT,
                                           buffer.flat<int8>().data()));
 
       TF_RETURN_IF_GPUSPARSE_ERROR(cusparseDestroyDnMat(matB));
@@ -899,16 +883,16 @@ class CSRSparseMatrixMatMul<GPUDevice, T> {
       TF_RETURN_IF_GPUSPARSE_ERROR(se::wrap::hipsparseCreateCsr(
           &matA, m, k, nnz, const_cast<int*>(a.row_ptr.data()),
           const_cast<int*>(a.col_ind.data()), const_cast<T*>(a.values.data()),
-          HIPSPARSE_INDEX_32I, HIPSPARSE_INDEX_32I, HIPSPARSE_INDEX_BASE_ZERO,
+          CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, HIPSPARSE_INDEX_BASE_ZERO,
           GPUDataType<T>::type));
 
       TF_RETURN_IF_GPUSPARSE_ERROR(se::wrap::hipsparseCreateDnMat(
           &matB, n, k, ldb, const_cast<T*>(b.data()), GPUDataType<T>::type,
-          HIPSPARSE_ORDER_COLUMN));
+          HIPSPARSE_ORDER_COL));
 
       TF_RETURN_IF_GPUSPARSE_ERROR(se::wrap::hipsparseCreateDnMat(
           &matC, m, n, ldc, c.data(), GPUDataType<T>::type,
-          HIPSPARSE_ORDER_COLUMN));
+          HIPSPARSE_ORDER_COL));
 
       size_t bufferSize = 0;
       TF_RETURN_IF_ERROR(cuda_sparse.SpMMBufferSize(
@@ -921,7 +905,7 @@ class CSRSparseMatrixMatMul<GPUDevice, T> {
       DCHECK(buffer.flat<int8>().data() != nullptr);
 
       TF_RETURN_IF_ERROR(cuda_sparse.SpMM(transA, transB, &alpha, matA, matB,
-                                          &beta, matC, HIPSPARSE_MM_ALG_DEFAULT,
+                                          &beta, matC, CUSPARSE_MM_ALG_DEFAULT,
                                           buffer.flat<int8>().data()));
 
       TF_RETURN_IF_GPUSPARSE_ERROR(se::wrap::hipsparseDestroyDnMat(matB));

@@ -20,10 +20,9 @@ limitations under the License.
 #include <string_view>
 #include <tuple>
 
-#include "absl/container/node_hash_map.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/synchronization/mutex.h"
 #include "tensorflow/compiler/xla/runtime/custom_call_registry.h"
-#include "tensorflow/compiler/xla/runtime/state.h"
 #include "tensorflow/compiler/xla/stream_executor/stream_executor.h"
 
 namespace xla {
@@ -33,20 +32,23 @@ namespace gpu {
 void RegisterKernelLaunchCustomCalls(
     runtime::DirectCustomCallRegistry& registry);
 
-// Kernels loaded by Gpu executable for a single stream executor.
-class StreamExecutorKernels
-    : public runtime::StateVector<std::unique_ptr<se::KernelBase>> {};
-
 // Xla runtime Gpu executable owns the pre-compiled device module (PTX and
 // Cubin for Nvidia Gpus) for all device kernels, and the cache keeps a mapping
-// from stream executor to pre-loaded kernels
-class GpuExecutableKernels {
+// from the kernel name to the loaded device kernel.
+class GpuExecutableKernelsCache {
  public:
-  StreamExecutorKernels* operator()(se::StreamExecutor* executor);
+  GpuExecutableKernelsCache() = default;
+
+  se::KernelBase* Get(se::StreamExecutor* executor, std::string_view name);
+
+  se::KernelBase* Set(se::StreamExecutor* executor, std::string_view name,
+                      std::unique_ptr<se::KernelBase> kernel);
 
  private:
   mutable absl::Mutex mutex_;
-  absl::node_hash_map<se::StreamExecutor*, StreamExecutorKernels> kernels_
+
+  using Key = std::tuple<se::StreamExecutor*, std::string_view>;
+  absl::flat_hash_map<Key, std::unique_ptr<se::KernelBase>> kernels_cache_
       ABSL_GUARDED_BY(mutex_);
 };
 

@@ -25,7 +25,6 @@ from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import indexed_slices as indexed_slices_lib
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import tensor_conversion_registry
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import type_spec
 from tensorflow.python.ops import array_ops
@@ -726,16 +725,16 @@ class ShardedVariableMixin(trackable.Trackable):
 
     return {trackable.VARIABLE_VALUE_KEY: _saveable_factory}
 
-  def _export_to_saved_model_graph(self, object_map, tensor_map,
-                                   options, **kwargs):
+  def _map_resources(self, save_options):
     """For implementing `Trackable`."""
-    resource_list = []
+    obj_map, resource_map = {}, {}
     for v in self._variables + [self._saving_variable]:
-      resource_list.extend(v._export_to_saved_model_graph(  # pylint:disable=protected-access
-          object_map, tensor_map, options, **kwargs))
-    object_map[self] = ShardedVariable([object_map[self._saving_variable]],
-                                       name=self.name)
-    return resource_list
+      v_obj_map, v_resource_map = v._map_resources(save_options)  # pylint:disable=protected-access
+      obj_map.update(v_obj_map)
+      resource_map.update(v_resource_map)
+    obj_map[self] = ShardedVariable([obj_map[self._saving_variable]],
+                                    name=self.name)
+    return obj_map, resource_map
 
   @property
   def _unique_id(self):
@@ -889,8 +888,7 @@ def _var_to_tensor(var, dtype=None, name=None, as_ref=False):
 
 # Register a conversion function which reads the value of the variable,
 # allowing instances of the class to be used as tensors.
-tensor_conversion_registry.register_tensor_conversion_function(
-    ShardedVariable, _var_to_tensor)
+ops.register_tensor_conversion_function(ShardedVariable, _var_to_tensor)
 
 ShardedVariable._overload_all_operators()  # pylint: disable=protected-access
 

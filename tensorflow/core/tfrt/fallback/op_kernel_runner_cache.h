@@ -19,6 +19,7 @@ limitations under the License.
 #include <memory>
 
 #include "absl/strings/string_view.h"
+#include "tensorflow/core/framework/node_def_util.h"
 #include "tensorflow/core/tfrt/fallback/op_kernel_runner.h"
 #include "tfrt/host_context/location.h"  // from @tf_runtime
 

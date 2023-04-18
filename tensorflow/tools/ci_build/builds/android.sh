@@ -18,9 +18,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/builds_common.sh"
-# To setup Android via `configure` script.
-export TF_SET_ANDROID_WORKSPACE=1
-yes "" | ./configure
+configure_android_workspace
 
 # The Bazel builds are intentionally built for x86 and arm64 to maximize build
 # coverage while minimizing compilation time. For full build coverage and

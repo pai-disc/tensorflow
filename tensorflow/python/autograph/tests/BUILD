@@ -1,7 +1,5 @@
 load(":reference_test.bzl", "reference_test")
 
-# copybara:uncomment package(default_applicable_licenses = ["//tensorflow:license"])
-
 licenses(["notice"])
 
 py_library(

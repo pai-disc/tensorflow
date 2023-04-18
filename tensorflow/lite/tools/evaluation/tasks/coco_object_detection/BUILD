@@ -2,7 +2,6 @@ load("//tensorflow/lite:build_def.bzl", "tflite_copts")
 load("//tensorflow/lite/tools/evaluation/tasks:build_def.bzl", "task_linkopts")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//visibility:public",
     ],
@@ -27,7 +26,7 @@ cc_library(
     copts = tflite_copts(),
     linkopts = task_linkopts(),
     deps = [
-        "//tensorflow/lite/core/c:common",
+        "//tensorflow/lite/c:common",
         "//tensorflow/lite/tools:command_line_flags",
         "//tensorflow/lite/tools:logging",
         "//tensorflow/lite/tools/evaluation:evaluation_stage",

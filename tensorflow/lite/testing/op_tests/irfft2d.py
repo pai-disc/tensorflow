@@ -14,7 +14,7 @@
 # ==============================================================================
 """Test configs for irfft2d."""
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from tensorflow.lite.testing.zip_test_utils import create_tensor_data
 from tensorflow.lite.testing.zip_test_utils import ExtraConvertOptions

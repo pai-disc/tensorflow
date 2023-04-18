@@ -1,6 +1,9 @@
 exports_files(["LICENSE"])
 
-load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load(
+    "@org_tensorflow//third_party:common.bzl",
+    "template_rule",
+)
 
 _DNNL_COPTS_THREADPOOL = [
     "-fopenmp-simd",
@@ -110,26 +113,26 @@ _DNNL_RUNTIME_OMP = {
     "#cmakedefine01 BUILD_XEHP": "#define BUILD_XEHP 0",
 }
 
-expand_template(
+template_rule(
     name = "dnnl_config_h",
+    src = "include/oneapi/dnnl/dnnl_config.h.in",
     out = "include/oneapi/dnnl/dnnl_config.h",
     substitutions = select({
         "@org_tensorflow//third_party/mkl_dnn:build_with_mkl_aarch64_openmp": _DNNL_RUNTIME_OMP,
         "//conditions:default": _DNNL_RUNTIME_THREADPOOL,
     }),
-    template = "include/oneapi/dnnl/dnnl_config.h.in",
 )
 
-expand_template(
+template_rule(
     name = "dnnl_version_h",
+    src = "include/oneapi/dnnl/dnnl_version.h.in",
     out = "include/oneapi/dnnl/dnnl_version.h",
     substitutions = {
         "@DNNL_VERSION_MAJOR@": "2",
-        "@DNNL_VERSION_MINOR@": "7",
-        "@DNNL_VERSION_PATCH@": "3",
+        "@DNNL_VERSION_MINOR@": "6",
+        "@DNNL_VERSION_PATCH@": "0",
         "@DNNL_VERSION_HASH@": "N/A",
     },
-    template = "include/oneapi/dnnl/dnnl_version.h.in",
 )
 
 cc_library(
@@ -158,6 +161,7 @@ cc_library(
         "src/cpu/aarch64/xbyak_aarch64/xbyak_aarch64",
         "src/cpu/gemm",
     ],
+    linkopts = ["-lgomp"],
     textual_hdrs = glob(
         [
             "include/**/*",

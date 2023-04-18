@@ -7,8 +7,6 @@ load(
 )
 load("//tensorflow:tensorflow.bzl", "tf_copts")
 
-# copybara:uncomment package(default_applicable_licenses = ["//tensorflow:license"])
-
 cc_library(
     name = "cc_op_fuzz_gen_main",
     srcs = [
@@ -30,7 +28,6 @@ cc_library(
         "//tensorflow/core/platform:hash",
         "//tensorflow/tsl/platform:status",
         "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -39,8 +36,15 @@ cc_library(
 # tf_gen_op_wrappers_fuzz(
 #     name = "array_ops_fuzz",
 #     api_def_srcs = ["//tensorflow/core/api_def:base_api_def"],
-#     kernel_deps = [
+#     extra_gen_deps = ["//tensorflow/c/kernels:bitcast_op_lib"],
+#     op_lib_names = [
+#         "array_ops",
+#     ],
+#     pkg = "//tensorflow/core",
+#     deps = [
+#         "//third_party/mediapipe/framework/port:parse_text_proto",
 #         "//tensorflow/c/kernels:bitcast_op",
+#         "//tensorflow/cc:cc_ops",
 #         "//tensorflow/core/kernels:array",
 #         "//tensorflow/core/kernels:check_numerics_op",
 #         "//tensorflow/core/kernels:fake_quant_ops",
@@ -53,7 +57,6 @@ cc_library(
 #         "//tensorflow/core/kernels/linalg:matrix_diag_op",
 #         "//tensorflow/core/kernels/linalg:matrix_set_diag_op",
 #     ],
-#     op_def_src = "//tensorflow/core/ops:array_ops_op_lib",
 # )
 # copybara:uncomment_end
 

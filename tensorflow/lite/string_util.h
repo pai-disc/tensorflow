@@ -44,38 +44,31 @@ limitations under the License.
 #include <stddef.h>
 #include <stdint.h>
 
-#include <limits>
 #include <vector>
 
-#include "tensorflow/lite/core/c/common.h"
+#include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/string_type.h"
 
 namespace tflite {
 
-// Convenient structure to store string pointer and length. Note that
-// methods on DynamicBuffer enforce that the whole buffer (and by extension
-// every contained string) is of max length (2ul << 30) - 1. See
-// string_util.cc for more info.
+// Convenient structure to store string pointer and length.
 typedef struct {
   const char* str;
-  size_t len;
+  int len;
 } StringRef;
-
-constexpr uint64_t kDefaultMaxLength = std::numeric_limits<int>::max();
 
 // DynamicBuffer holds temporary buffer that will be used to create a dynamic
 // tensor. A typical usage is to initialize a DynamicBuffer object, fill in
 // content and call CreateStringTensor in op.Eval().
 class DynamicBuffer {
  public:
-  explicit DynamicBuffer(size_t max_length = kDefaultMaxLength)
-      : offset_({0}), max_length_(max_length) {}
+  DynamicBuffer() : offset_({0}) {}
 
   // Add string to dynamic buffer by resizing the buffer and copying the data.
-  TfLiteStatus AddString(const StringRef& string);
+  void AddString(const StringRef& string);
 
   // Add string to dynamic buffer by resizing the buffer and copying the data.
-  TfLiteStatus AddString(const char* str, size_t len);
+  void AddString(const char* str, size_t len);
 
   // Join a list of string with separator, and add as a single string to the
   // buffer.
@@ -100,15 +93,7 @@ class DynamicBuffer {
   // Data buffer to store contents of strings, not including headers.
   std::vector<char> data_;
   // Offset of the starting index of each string in data buffer.
-  std::vector<size_t> offset_;
-  // Max length in number of characters that we permit the total
-  // buffer containing the concatenation of all added strings to be.
-  // For historical reasons this is limited to 32bit length. At this files
-  // inception, sizes were represented using 32bit which forced an implicit cap
-  // on the size of the buffer. When this was refactored to use size_t (which
-  // could be 64bit) we enforce that the buffer remains at most 32bit length to
-  // avoid a change in behavior.
-  const size_t max_length_;
+  std::vector<int32_t> offset_;
 };
 
 // Return num of strings in a String tensor.

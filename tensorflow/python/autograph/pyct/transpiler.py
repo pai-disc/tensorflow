@@ -271,7 +271,7 @@ class GenericTranspiler(object):
     Args:
       obj: A Python object, function, type, etc.
       user_context: An opaque object (may be None) that is forwarded to
-        transform_ast, through the ctx.user attribute.
+        transform_ast, through the ctx.user_context argument.
     Returns:
       The result of calling transform_function.
 
@@ -304,7 +304,7 @@ class GenericTranspiler(object):
     Args:
       mod: A Python module.
       user_context: An opaque object (may be None) that is forwarded to
-        transform_ast, through the ctx.user attribute.
+        transform_ast, through the ctx.user_context argument.
     Returns:
       List[Tuple[Any, Any]]. By default it returns the output of transform_ast,
       evaluated on each supported member, other than modules, together with a
@@ -332,7 +332,7 @@ class GenericTranspiler(object):
     Args:
       fn: A function or lambda.
       user_context: An opaque object (may be None) that is forwarded to
-        transform_ast, through the ctx.user attribute.
+        transform_ast, through the ctx.user_context argument.
     Returns:
       Tuple[Any, Any]. By default it returns the output of transform_ast,
       together with a `transformer.Context` containing information about the
@@ -440,7 +440,7 @@ class PyToPy(GenericTranspiler):
     Args:
       fn: A function or lambda.
       user_context: An opaque object (may be None) that is forwarded to
-        transform_ast, through the ctx.user attribute.
+        transform_ast, through the ctx.user_context argument.
     Returns:
       A tuple:
         * A function or lambda with the same signature and closure as `fn`

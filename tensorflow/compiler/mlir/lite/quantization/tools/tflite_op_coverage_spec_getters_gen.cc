@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include <list>
+#include <regex>  // NOLINT
 #include <string>
 
 #include "absl/strings/match.h"
@@ -23,8 +24,6 @@ limitations under the License.
 #include "llvm/TableGen/Main.h"
 #include "llvm/TableGen/Record.h"
 #include "mlir/TableGen/Operator.h"  // from @llvm-project
-#include "tensorflow/tsl/platform/logging.h"
-#include "tensorflow/tsl/platform/regexp.h"
 
 using llvm::LessRecord;
 using llvm::raw_ostream;
@@ -144,8 +143,7 @@ bool CheckTypeConstraints(llvm::Init *input_value,
 
 void GenerateStaticQuantOp(std::vector<Record *> &defs,
                            std::vector<std::string> &result,
-                           InputDataType act_type, const bool per_axis,
-                           const bool is_toco) {
+                           InputDataType act_type, bool per_axis) {
   std::list<std::string> required_types = {
       GetTypeToStringRepresentation().at("F32")};
 
@@ -171,8 +169,8 @@ void GenerateStaticQuantOp(std::vector<Record *> &defs,
   // Dimension equals to -1 means per-channel quantization is not supported for
   // the op. Therefore check whether the return value is positive integer as
   // well.
-  static const LazyRE2 per_channel_support_regex = {
-      "int GetQuantizationDimIndex\\(\\) \\{ return (\\d*); \\}"};
+  std::regex per_channel_support_regex(
+      "(.*)(int GetQuantizationDimIndex\\(\\) \\{ return (\\d*); \\})(.*)");
 
   for (const auto *def : defs) {
     Operator op(def);
@@ -190,22 +188,11 @@ void GenerateStaticQuantOp(std::vector<Record *> &defs,
                              per_axis)) {
       std::string op_name = op.getCppClassName().str();
 
-      // TODO(b/197195711): Please add the additional operations for 16x8 MLIR
-      // quantizer. This code is temporary until 16x8 is fully supported in MLIR
-      // quantizer.
-      if (act_type == InputDataType::INT16) {
-        if (absl::StrContains(op_name, "LSTMOp") && is_toco) {
-          continue;
-        } else if (!absl::StrContains(op_name, "LSTMOp") && !is_toco) {
-          continue;
-        }
-      }
-
       if (per_axis) {
         std::string op_extra_declaration = op.getExtraClassDeclaration().str();
-        bool per_axis_support = RE2::PartialMatch(
+        bool per_axis_support = std::regex_match(
             absl::StrReplaceAll(op_extra_declaration, {{"\n", " "}}),
-            *per_channel_support_regex);
+            per_channel_support_regex);
         if (per_axis_support) result.emplace_back(op_name);
       } else {
         result.emplace_back(op_name);
@@ -222,8 +209,7 @@ void EmitStaticInt8PerAxisQuantOp(std::vector<Record *> &defs,
   os.indent(4) << "new std::set<std::string>({\n";
 
   std::vector<std::string> result;
-  GenerateStaticQuantOp(defs, result, InputDataType::INT8, /*per_axis=*/true,
-                        /*is_toco=*/false);
+  GenerateStaticQuantOp(defs, result, InputDataType::INT8, true);
 
   for (const auto &op_name : result) {
     os.indent(6) << "\"" << op_name << "\",\n";
@@ -242,8 +228,7 @@ void EmitStaticInt8PerTensorQuantOp(std::vector<Record *> &defs,
   os.indent(4) << "new std::set<std::string>({\n";
 
   std::vector<std::string> result;
-  GenerateStaticQuantOp(defs, result, InputDataType::INT8, /*per_axis=*/false,
-                        /*is_toco=*/false);
+  GenerateStaticQuantOp(defs, result, InputDataType::INT8, false);
 
   for (const auto &op_name : result) {
     os.indent(6) << "\"" << op_name << "\",\n";
@@ -262,8 +247,7 @@ void EmitStaticUInt8PerAxisQuantOp(std::vector<Record *> &defs,
   os.indent(4) << "new std::set<std::string>({\n";
 
   std::vector<std::string> result;
-  GenerateStaticQuantOp(defs, result, InputDataType::UINT8, /*per_axis=*/true,
-                        /*is_toco=*/false);
+  GenerateStaticQuantOp(defs, result, InputDataType::UINT8, true);
 
   for (const auto &op_name : result) {
     os.indent(6) << "\"" << op_name << "\",\n";
@@ -282,8 +266,7 @@ void EmitStaticUInt8PerTensorQuantOp(std::vector<Record *> &defs,
   os.indent(4) << "new std::set<std::string>({\n";
 
   std::vector<std::string> result;
-  GenerateStaticQuantOp(defs, result, InputDataType::UINT8, /*per_axis=*/false,
-                        /*is_toco=*/false);
+  GenerateStaticQuantOp(defs, result, InputDataType::UINT8, false);
 
   for (const auto &op_name : result) {
     os.indent(6) << "\"" << op_name << "\",\n";
@@ -315,31 +298,7 @@ void EmitStaticQuantWithInt16ActOp(std::vector<Record *> &defs,
   os.indent(4) << "new std::set<std::string>({\n";
 
   std::vector<std::string> result;
-  GenerateStaticQuantOp(defs, result, InputDataType::INT16, /*per_axis=*/false,
-                        /*is_toco=*/false);
-
-  for (const auto &op_name : result) {
-    os.indent(6) << "\"" << op_name << "\",\n";
-  }
-
-  os.indent(4) << "});";
-  os.indent(2) << "return *result;\n";
-  os.indent(0) << "}\n";
-}
-
-void EmitStaticQuantWithInt16ActTocoOp(std::vector<Record *> &defs,
-                                       raw_ostream *ostream) {
-  raw_ostream &os = *ostream;
-  llvm::sort(defs, LessRecord());
-
-  os.indent(0) << "const std::set<std::string> "
-                  "&ExportStaticInt8WithInt16ActTocoSpec() {\n";
-  os.indent(2) << "static const std::set<std::string> * result =\n";
-  os.indent(4) << "new std::set<std::string>({\n";
-
-  std::vector<std::string> result;
-  GenerateStaticQuantOp(defs, result, InputDataType::INT16, /*per_axis=*/false,
-                        /*is_toco=*/true);
+  GenerateStaticQuantOp(defs, result, InputDataType::INT16, false);
 
   for (const auto &op_name : result) {
     os.indent(6) << "\"" << op_name << "\",\n";
@@ -356,7 +315,6 @@ static bool TFLiteOpCoverageSpecWritersMain(raw_ostream &os,
   EmitStaticQuantOp(op_defs, &os);
   EmitDynamicRangeOp(op_defs, &os);
   EmitStaticQuantWithInt16ActOp(op_defs, &os);
-  EmitStaticQuantWithInt16ActTocoOp(op_defs, &os);
   EmitSparseOp(op_defs, &os);
   return false;
 }

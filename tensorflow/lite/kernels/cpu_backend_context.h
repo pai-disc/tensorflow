@@ -24,9 +24,8 @@ limitations under the License.
 #include <memory>
 
 #include "public/gemmlowp.h"
-#include "pthreadpool.h"  // from @pthreadpool
 #include "ruy/context.h"  // from @ruy
-#include "tensorflow/lite/core/c/common.h"
+#include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/external_cpu_backend_context.h"
 
 namespace tflite {
@@ -53,8 +52,6 @@ class CpuBackendContext final : public TfLiteInternalBackendContext {
   void SetUseCaching(bool flag);
 
   bool use_caching() const { return use_caching_; }
-
-  pthreadpool_t get_xnnpack_threadpool();
 
   void ClearCaches() override { ruy_context_->ClearPrepackedCache(); }
 
@@ -117,11 +114,6 @@ class CpuBackendContext final : public TfLiteInternalBackendContext {
   // CpuBackendGem operations to a library that permits such an optimization
   // (currently the Ruy library only).
   bool use_caching_;
-
-  // A smart pointer for the xnnpack threadpool. Is created by a call from the
-  // interpreter, and then consumed by xnnpack, possibly via a TFLite kernel.
-  std::unique_ptr<pthreadpool, decltype(&pthreadpool_destroy)>
-      xnnpack_threadpool_{nullptr, &pthreadpool_destroy};
 
   CpuBackendContext(const CpuBackendContext&) = delete;
 };

@@ -5,11 +5,9 @@ load("//tensorflow/core/platform:build_config.bzl", "pyx_library", "tf_additiona
 
 visibility = [
     "//tensorflow:__subpackages__",
-    "//tensorflow/dtensor:dtensor-internal",
 ]
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = visibility,
     licenses = ["notice"],
 )
@@ -36,7 +34,6 @@ py_library(
             "benchmark.py",  # In platform_benchmark.
             "analytics.py",  # In platform_analytics.
             "device_context.py",  # In platform_device_context.
-            "self_check.py",  # In self_check
         ],
     ) + ["build_info.py"],
     srcs_version = "PY3",
@@ -52,16 +49,6 @@ py_library(
         "@absl_py//absl/flags",
         "@absl_py//absl/logging",
         "@rules_python//python/runfiles",
-    ],
-)
-
-py_library(
-    name = "self_check",
-    srcs = ["self_check.py"],
-    srcs_version = "PY3",
-    deps = [
-        ":_pywrap_cpu_feature_guard",
-        ":build_info",
     ],
 )
 
@@ -128,8 +115,6 @@ tf_py_test(
     ],
     python_version = "PY3",
     tags = [
-        "no_mac",  # TODO(b/259295275) re-enable after fixing sysconfig.get_path breakage
-        "no_oss",  # TODO(b/259295275) re-enable after fixing sysconfig.get_path breakage
         "no_pip",
         "no_windows",
     ],
@@ -145,10 +130,6 @@ tf_py_test(
     size = "small",
     srcs = ["flags_test.py"],
     python_version = "PY3",
-    tags = [
-        "no_mac",  # TODO(b/259295275) re-enable after fixing sysconfig.get_path breakage
-        "no_oss",  # TODO(b/263966250) re-enable after fixing sysconfig.get_path breakage
-    ],
     deps = [
         ":client_testlib",
         ":platform",
@@ -161,7 +142,6 @@ tf_py_test(
     srcs = ["stacktrace_handler_test.py"],
     python_version = "PY3",
     tags = [
-        "no_oss",  # TODO(b/263966250) re-enable after fixing sysconfig.get_path breakage
         "no_windows",
         "nomac",
     ],
@@ -196,11 +176,11 @@ tf_python_pybind_extension(
     ],
 )
 
-tf_python_pybind_extension(
+pybind_extension(
     name = "_pywrap_cpu_feature_guard",
     srcs = ["cpu_feature_guard_wrapper.cc"],
     deps = [
-        "//tensorflow/core/platform:cpu_feature_guard_hdr",  # Only depend on header to avoid ODR issues.
+        "//tensorflow/core/platform:cpu_feature_guard",
         "//third_party/python_runtime:headers",
         "@pybind11",
     ],

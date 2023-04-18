@@ -2,7 +2,6 @@
 # core_runtime libraries.
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//tensorflow/core/tfrt/eager:__pkg__"],
     licenses = ["notice"],
 )

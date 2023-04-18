@@ -24,7 +24,6 @@ limitations under the License.
 
 #include "absl/types/span.h"
 #include "tensorflow/compiler/xla/pjrt/pjrt_client.h"
-#include "tensorflow/compiler/xla/python/pjrt_ifrt/pjrt_executable.h"
 #include "tensorflow/compiler/xla/python/py_buffer.h"
 #include "tensorflow/compiler/xla/python/py_client.h"
 #include "tensorflow/compiler/xla/python/traceback.h"
@@ -73,40 +72,36 @@ class PyShardedToken {
 class PyLoadedExecutable
     : public std::enable_shared_from_this<PyLoadedExecutable> {
  public:
-  PyLoadedExecutable(
-      std::shared_ptr<PyClient> client,
-      std::unique_ptr<ifrt::LoadedExecutable> ifrt_loaded_executable,
-      std::shared_ptr<Traceback> traceback,
-      std::optional<std::string> fingerprint,
-      std::vector<pybind11::capsule> host_callbacks);
+  PyLoadedExecutable(std::shared_ptr<PyClient> client,
+                     std::unique_ptr<PjRtLoadedExecutable> executable,
+                     std::shared_ptr<Traceback> traceback,
+                     std::optional<std::string> fingerprint,
+                     std::vector<pybind11::capsule> host_callbacks);
   ~PyLoadedExecutable();
 
   std::shared_ptr<PyClient> client() const { return client_; }
-  ifrt::LoadedExecutable* ifrt_loaded_executable() const {
-    return ifrt_loaded_executable_.get();
+  std::shared_ptr<PjRtLoadedExecutable> executable() const {
+    return executable_;
   }
 
   absl::Span<const PjRtLoadedExecutable::LogicalDeviceIds>
   addressable_device_logical_ids() const {
-    return ifrt_loaded_executable_->addressable_device_logical_ids();
+    return executable_->addressable_device_logical_ids();
   }
 
   std::vector<ClientAndPtr<PjRtDevice>> AddressableDevices() const;
 
   int64_t SizeOfGeneratedCodeInBytes() const {
-    return ifrt_loaded_executable_->SizeOfGeneratedCodeInBytes();
+    return executable_->SizeOfGeneratedCodeInBytes();
   }
 
   StatusOr<CompiledMemoryStats> GetCompiledMemoryStats() const {
-    return ifrt_loaded_executable_->GetCompiledMemoryStats();
+    return executable_->GetCompiledMemoryStats();
   }
 
-  void Delete() {
-    // TODO(hyeontaek): Return Status.
-    TF_CHECK_OK(ifrt_loaded_executable_->Delete().Await());
-  }
+  void Delete() { return executable_->Delete(); }
 
-  bool is_deleted() { return ifrt_loaded_executable_->IsDeleted(); }
+  bool is_deleted() { return executable_->IsDeleted(); }
 
   StatusOr<std::vector<PyBuffer::object>> Execute(
       absl::Span<PyBuffer::object const> args, PjRtDevice* device);
@@ -142,31 +137,11 @@ class PyLoadedExecutable
 
   Traceback* traceback() { return traceback_.get(); }
 
-  ifrt::LoadedExecutable* ifrt_executable() const {
-    return ifrt_loaded_executable_.get();
-  }
+  const PjRtLoadedExecutable& pjrt_executable() const { return *executable_; }
 
-  // Short-term escape hatch to get PjRtLoadedExecutable from PyExecutable.
-  // TODO(hyeontaek): Migrate all users of this method to be agnostic of PjRt.
-  PjRtLoadedExecutable* pjrt_executable() const {
-    auto* exec = llvm::dyn_cast_or_null<ifrt::PjRtCompatibleLoadedExecutable>(
-        ifrt_loaded_executable_.get());
-    if (exec == nullptr) {
-      throw XlaRuntimeError(
-          "This operation is implemented for a PjRt-compatible backend only.");
-    }
-    return exec->pjrt_loaded_executable();
+  PjRtLoadedExecutable* mutable_pjrt_executable() const {
+    return executable_.get();
   }
-  std::shared_ptr<PjRtLoadedExecutable> shared_ptr_pjrt_executable() {
-    auto* exec = llvm::dyn_cast_or_null<ifrt::PjRtCompatibleLoadedExecutable>(
-        ifrt_loaded_executable_.get());
-    if (exec == nullptr) {
-      throw XlaRuntimeError(
-          "This operation is implemented for a PjRt-compatible backend only.");
-    }
-    return exec->shared_ptr_pjrt_loaded_executable();
-  }
-
   const ExecuteOptions& options() const { return options_; }
   const std::optional<std::string>& fingerprint() const { return fingerprint_; }
 
@@ -174,13 +149,14 @@ class PyLoadedExecutable
   void KeepAlive(pybind11::object obj);
 
  private:
-  StatusOr<std::pair<std::vector<PyBuffer::object>, ifrt::Future<Status>>>
-  ExecuteInternal(absl::Span<PyBuffer::object const> args, PjRtDevice* device);
+  StatusOr<std::pair<std::vector<PyBuffer::object>, PyToken>> ExecuteInternal(
+      absl::Span<PyBuffer::object const> args, PjRtDevice* device,
+      std::optional<std::vector<PjRtFuture<Status>>>& returned_futures);
 
   friend class PyClient;
 
   std::shared_ptr<PyClient> client_;
-  std::unique_ptr<ifrt::LoadedExecutable> ifrt_loaded_executable_;
+  std::shared_ptr<PjRtLoadedExecutable> executable_;
   std::shared_ptr<Traceback> traceback_;
 
   // Identical executables (i.e. representing the same program) will have the

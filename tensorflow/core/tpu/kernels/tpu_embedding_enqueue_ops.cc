@@ -92,9 +92,8 @@ class EnqueueTPUEmbeddingArbitraryTensorBatchOp : public OpKernel {
     }
     fixed_state_create_params.combiners_size = c_str_combiners.size();
     fixed_state_create_params.combiners = c_str_combiners.data();
-    fixed_state_ = stream_executor::tpu::OpsApiFn()
-                       ->TpuEmbeddingTensorBatchFixedState_CreateFn(
-                           &fixed_state_create_params);
+    fixed_state_ = tpu::OpsApiFn()->TpuEmbeddingTensorBatchFixedState_CreateFn(
+        &fixed_state_create_params);
 
     OP_REQUIRES_OK(ctx, status.status());
   }
@@ -168,8 +167,7 @@ class EnqueueTPUEmbeddingArbitraryTensorBatchOp : public OpKernel {
       tensorflow::profiler::TraceMe enqueue_batch_trace(
           [] { return "EnqueueBatch"; },
           tensorflow::profiler::TraceMeLevel::kInfo);
-      stream_executor::tpu::OpsApiFn()->TpuEmbeddingEngine_EnqueueTensorBatchFn(
-          &params);
+      tpu::OpsApiFn()->TpuEmbeddingEngine_EnqueueTensorBatchFn(&params);
       OP_REQUIRES_OK(ctx, status.status());
     }
 
@@ -187,8 +185,7 @@ class EnqueueTPUEmbeddingArbitraryTensorBatchOp : public OpKernel {
   }
 
   ~EnqueueTPUEmbeddingArbitraryTensorBatchOp() override {
-    stream_executor::tpu::OpsApiFn()
-        ->TpuEmbeddingTensorBatchFixedState_DestroyFn(fixed_state_);
+    tpu::OpsApiFn()->TpuEmbeddingTensorBatchFixedState_DestroyFn(fixed_state_);
   }
 
  private:

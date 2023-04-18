@@ -48,7 +48,6 @@ do_external_licenses_check(){
 @bazel_tools//tools
 @local
 @com_google_absl//absl
-@pybind11_abseil//pybind11_abseil
 @org_tensorflow//
 @com_github_googlecloudplatform_google_cloud_cpp//google
 @com_github_grpc_grpc//src/compiler
@@ -66,7 +65,6 @@ EOF
 @bazel_tools//tools/
 @org_tensorflow//tensorflow
 @com_google_absl//
-@pybind11_abseil//pybind11_abseil
 //external
 @local
 @com_github_googlecloudplatform_google_cloud_cpp//

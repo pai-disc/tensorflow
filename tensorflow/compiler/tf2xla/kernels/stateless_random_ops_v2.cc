@@ -99,7 +99,6 @@ xla::RngOutput StatelessRngUniformV2(xla::RandomAlgorithm const& alg,
   using std::placeholders::_3;
   auto generator = std::bind(BitGenerator, alg, _1, _2, _3);
   switch (type) {
-    case xla::F16:
     case xla::F32:
     case xla::F64:
       return xla::UniformFloatingPointDistribution(key, counter, generator,
@@ -113,7 +112,7 @@ xla::RngOutput StatelessRngUniformV2(xla::RandomAlgorithm const& alg,
       break;
     default:
       return {builder->ReportError(xla::Unimplemented(
-                  "Types other than F16, F32, S32, S64, U32 and U64 are not "
+                  "Types other than F32, S32, S64, U32 and U64 are not "
                   "implemented by "
                   "StatelessRngUniformV2; got %s",
                   xla::primitive_util::LowercasePrimitiveTypeName(type))),
@@ -180,15 +179,6 @@ xla::XlaOp MaybeSliceCounter(xla::RandomAlgorithm const& alg,
   return counter;
 }
 
-DataType MaybeConvertBF16ToF32(DataType const& dtype) {
-  if (dtype == DT_BFLOAT16) {
-    // We'll go through F32 to generate BF16.
-    // TODO(b/256243456): Generate BF16 directly from U16.
-    return DT_FLOAT;
-  }
-  return dtype;
-}
-
 class StatelessRandomUniformOp : public XlaOpKernel {
  public:
   explicit StatelessRandomUniformOp(OpKernelConstruction* ctx)
@@ -219,7 +209,7 @@ class StatelessRandomUniformOp : public XlaOpKernel {
                                              ctx->InputShape(key_input_idx),
                                              counter_shape));
 
-    auto rng_dtype = MaybeConvertBF16ToF32(dtype_);
+    DataType rng_dtype = dtype_ == DT_DOUBLE ? DT_DOUBLE : DT_FLOAT;
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(rng_dtype, shape, &xla_shape));
     xla::PrimitiveType rng_primitive_type = xla_shape.element_type();
@@ -257,8 +247,8 @@ class StatelessRandomUniformOp : public XlaOpKernel {
 REGISTER_XLA_OP(Name("StatelessRandomUniformV2")
                     .CompileTimeConstantInput("shape")
                     .CompileTimeConstantInput("alg")
-                    .TypeConstraint("dtype", {DT_DOUBLE, DT_FLOAT, DT_HALF,
-                                              DT_BFLOAT16}),
+                    .TypeConstraint("dtype",
+                                    {DT_DOUBLE, DT_FLOAT, DT_BFLOAT16}),
                 StatelessRandomUniformOp);
 
 class StatelessRandomUniformIntOp : public XlaOpKernel {
@@ -402,7 +392,8 @@ class StatelessRandomNormalOp : public XlaOpKernel {
                                              ctx->InputShape(key_input_idx),
                                              counter_shape));
 
-    auto rng_dtype = MaybeConvertBF16ToF32(dtype_);
+    DataType rng_dtype = dtype_ == DT_DOUBLE ? DT_DOUBLE : DT_FLOAT;
+
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(rng_dtype, shape, &xla_shape));
 
@@ -440,8 +431,8 @@ class StatelessRandomNormalOp : public XlaOpKernel {
 REGISTER_XLA_OP(Name("StatelessRandomNormalV2")
                     .CompileTimeConstantInput("shape")
                     .CompileTimeConstantInput("alg")
-                    .TypeConstraint("dtype", {DT_DOUBLE, DT_FLOAT, DT_HALF,
-                                              DT_BFLOAT16}),
+                    .TypeConstraint("dtype",
+                                    {DT_DOUBLE, DT_FLOAT, DT_BFLOAT16}),
                 StatelessRandomNormalOp);
 
 class StatelessTruncatedNormalOp : public XlaOpKernel {
@@ -473,7 +464,7 @@ class StatelessTruncatedNormalOp : public XlaOpKernel {
 
     xla::XlaBuilder* builder = ctx->builder();
 
-    auto rng_dtype = MaybeConvertBF16ToF32(dtype_);
+    DataType rng_dtype = dtype_ == DT_DOUBLE ? DT_DOUBLE : DT_FLOAT;
     xla::Shape xla_shape;
     OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(rng_dtype, shape, &xla_shape));
 
@@ -497,8 +488,8 @@ class StatelessTruncatedNormalOp : public XlaOpKernel {
 REGISTER_XLA_OP(Name("StatelessTruncatedNormalV2")
                     .CompileTimeConstantInput("shape")
                     .CompileTimeConstantInput("alg")
-                    .TypeConstraint("dtype", {DT_DOUBLE, DT_FLOAT, DT_HALF,
-                                              DT_BFLOAT16}),
+                    .TypeConstraint("dtype",
+                                    {DT_DOUBLE, DT_FLOAT, DT_BFLOAT16}),
                 StatelessTruncatedNormalOp);
 
 class GetKeyCounterOp : public XlaOpKernel {

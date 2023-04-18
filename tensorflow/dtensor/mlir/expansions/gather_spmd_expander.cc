@@ -15,14 +15,12 @@ limitations under the License.
 
 #include "tensorflow/dtensor/mlir/expansions/gather_spmd_expander.h"
 
-#include <optional>
 #include <string>
 #include <vector>
 
 #include "absl/types/optional.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
-#include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
 #include "tensorflow/core/platform/errors.h"
 #include "tensorflow/dtensor/cc/tensor_layout.h"
 #include "tensorflow/dtensor/mlir/collectives.h"
@@ -35,51 +33,153 @@ namespace tensorflow {
 namespace dtensor {
 
 StatusOr<mlir::Operation*> GatherV2SPMDExpander::ExpandOp(mlir::Operation* op) {
-  return ExpandOpHelper<mlir::TF::GatherV2Op>(op);
-}
+  auto gather_op = llvm::cast<mlir::TF::GatherV2Op>(op);
+  TF_ASSIGN_OR_RETURN(int64_t axis, ExtractConstIntFromValue(gather_op.axis()));
+  TF_ASSIGN_OR_RETURN(auto params_layout,
+                      ExtractLayoutFromOperand(gather_op.params()));
+  TF_ASSIGN_OR_RETURN(auto indices_layout,
+                      ExtractLayoutFromOperand(gather_op.indices()));
+  TF_ASSIGN_OR_RETURN(auto output_layout, ExtractSingleLayoutFromOp(gather_op));
 
-StatusOr<int64_t> GatherV2SPMDExpander::GetAxis(mlir::Operation* op) {
-  return ExtractConstIntFromValue(
-      llvm::cast<mlir::TF::GatherV2Op>(op).getAxis());
-}
+  const auto params_rank = ValueRank(gather_op.params());
+  const auto indices_rank = ValueRank(gather_op.indices());
+  if (params_rank == -1)
+    return errors::InvalidArgument("missing rank for params input");
+  if (indices_rank == -1)
+    return errors::InvalidArgument("missing rank for indices input");
 
-StatusOr<uint64_t> GatherV2SPMDExpander::GetBatchDim(mlir::Operation* op) {
-  return llvm::cast<mlir::TF::GatherV2Op>(op).getBatchDims();
-}
+  // Handle the case of negative axis.
+  if (axis < 0) axis += params_rank;
 
-StatusOr<mlir::Operation*> ResourceGatherSPMDExpander::ExpandOp(
-    mlir::Operation* op) {
-  return ExpandOpHelper<mlir::TF::ResourceGatherOp>(op);
-}
+  int batch_dims = gather_op.batch_dims();
 
-StatusOr<int64_t> ResourceGatherSPMDExpander::GetAxis(mlir::Operation* op) {
-  return 0;
-}
+  auto params = gather_op.params();
+  auto indices = gather_op.indices();
 
-StatusOr<uint64_t> ResourceGatherSPMDExpander::GetBatchDim(
-    mlir::Operation* op) {
-  return llvm::cast<mlir::TF::ResourceGatherOp>(op).getBatchDims();
+  mlir::OpBuilder builder(op);
+
+  // Step 1: If the params are sharded on dim axis, an unconditional all-concat
+  // is generated. Alternatively, we could do: all-concating indices, followed
+  // by tf.Gather + slicing with correct masks.
+  //
+  // Currently we only support the case that the output layout matching the
+  // params layout for all non-axis dim. Other cases needs either a slicing or
+  // all-concat, which can be added later.
+  {
+    LayoutProto tgt_params_layout;
+    *tgt_params_layout.mutable_mesh_config() = params_layout->mesh().ToProto();
+    // check the first half
+    for (int i = 0; i < axis; ++i) {
+      const auto dim_name = params_layout->sharding_spec(i);
+      if (dim_name != output_layout->sharding_spec(i)) {
+        return errors::InvalidArgument(
+            llvm::formatv(
+                "input and output layout do not agree on non-axis dim {0}. "
+                "\n  params: {1}\n  output: {2}, axis: {3}",
+                i, params_layout->ToString(), output_layout->ToString(), axis)
+                .str());
+      }
+      tgt_params_layout.add_sharding_specs()->set_sharding_spec(dim_name);
+    }
+    // Set replicated for `axis` dim.
+    tgt_params_layout.add_sharding_specs()->set_sharding_spec(
+        Layout::kUnshardedDim);
+    // Check the second half
+    for (int i = axis + 1; i < params_rank; ++i) {
+      auto dim_name = params_layout->sharding_spec(i);
+      // To align the param dim with output, we can think we insert indices_rank
+      // - batch_dims dims from indices and remove one from param (axis), so
+      // the shifting is indices_rank - batch_dims - 1.
+      if (dim_name !=
+          output_layout->sharding_spec(i + indices_rank - batch_dims - 1)) {
+        return errors::InvalidArgument(
+            llvm::formatv(
+                "input and output layout do not agree on non-axis dim {0}. "
+                "\n  params: {1}\n  output: {2}, axis: {3}",
+                i, params_layout->ToString(), output_layout->ToString(), axis)
+                .str());
+      }
+      tgt_params_layout.add_sharding_specs()->set_sharding_spec(dim_name);
+    }
+
+    if (!Layout::IsUnshardedDimension(params_layout->sharding_spec(axis))) {
+      TF_ASSIGN_OR_RETURN(
+          params, EmitAllGather(builder, params, *params_layout,
+                                Layout::FromProto(tgt_params_layout).value()));
+    }
+  }
+
+  // Step 2: Check the output layout. If it requires all-relayouting indices.
+  // Do it.
+  //
+  // Indices shape is not big typically. Relayouting is expected to be cheap.
+  {
+    bool indices_relayout_needed = false;
+    LayoutProto tgt_indices_layout;
+    *tgt_indices_layout.mutable_mesh_config() = output_layout->mesh().ToProto();
+    for (int i = 0; i < indices_rank; ++i) {
+      int index_in_output;
+      int index_in_indices;
+      if (i < batch_dims) {
+        // For dim within batch_dims, indices dim is aligning at the same index
+        // as output.
+        index_in_output = i;
+        index_in_indices = i;
+      } else {
+        // For dim after batch_dims, we can remove batch_dims from outputs and
+        // indices first, i.e., (i - batch_dims), add axis back, i.e., axis -
+        // batch_dims, and then put batch_dims back, so the target position in
+        // output is
+        //
+        //   i - batch_dims + axis - batch_dims + batch_dims
+        //
+        // which is as follows:
+        index_in_output = i + axis - batch_dims;
+        index_in_indices = i;
+      }
+      tgt_indices_layout.add_sharding_specs()->set_sharding_spec(
+          output_layout->sharding_spec(index_in_output));
+
+      if (output_layout->sharding_spec(index_in_output) !=
+          indices_layout->sharding_spec(index_in_indices)) {
+        indices_relayout_needed = true;
+      }
+    }
+
+    if (indices_relayout_needed) {
+      TF_ASSIGN_OR_RETURN(
+          indices, EmitRelayout(indices, *indices_layout,
+                                Layout::FromProto(tgt_indices_layout).value()));
+    }
+  }
+
+  auto new_gather = builder.create<mlir::TF::GatherV2Op>(
+      gather_op.getLoc(), gather_op.getResult().getType(), params, indices,
+      gather_op.axis(), gather_op.batch_dims());
+  op->getResult(0).replaceAllUsesWith(new_gather.output());
+  op->erase();
+
+  return InferSPMDExpandedLocalShape(new_gather);
 }
 
 StatusOr<llvm::DenseMap<int, Layout>>
-GatherCommonSPMDExpander::ComputeLayoutForward(
+GatherV2SPMDExpander::ComputeLayoutForward(
     mlir::Operation* op, const llvm::DenseMap<int, Layout>& input_layouts) {
-  TF_ASSIGN_OR_RETURN(int64_t axis, GetAxis(op));
-  TF_ASSIGN_OR_RETURN(uint64_t batch_dims, GetBatchDim(op));
-
+  auto gather_op = llvm::cast<mlir::TF::GatherV2Op>(op);
   TF_ASSIGN_OR_RETURN(const Mesh mesh, ExtractDeviceMeshEnclosingCluster(op));
 
-  std::optional<Layout> params_layout;
-  if (input_layouts.find(0) != input_layouts.end()) {
-    params_layout.emplace(input_layouts.lookup(0));
-  }
-  std::optional<Layout> indices_layout;
-  if (input_layouts.find(1) != input_layouts.end()) {
-    indices_layout.emplace(input_layouts.lookup(1));
-  }
+  TF_ASSIGN_OR_RETURN(int64_t axis, ExtractConstIntFromValue(gather_op.axis()));
+  int batch_dims = gather_op.batch_dims();
 
-  const int params_rank = ValueRank(op->getOperand(0));
-  const int indices_rank = ValueRank(op->getOperand(1));
+  absl::optional<Layout> params_layout;
+  if (input_layouts.find(0) != input_layouts.end())
+    params_layout.emplace(input_layouts.lookup(0));
+  absl::optional<Layout> indices_layout;
+  if (input_layouts.find(1) != input_layouts.end())
+    indices_layout.emplace(input_layouts.lookup(1));
+
+  const int params_rank = ValueRank(gather_op.params());
+  const int indices_rank = ValueRank(gather_op.indices());
   if (params_rank == -1)
     return errors::InvalidArgument("missing rank for params input");
   if (indices_rank == -1)
@@ -87,112 +187,112 @@ GatherCommonSPMDExpander::ComputeLayoutForward(
 
   // Handle the case of negative axis.
   if (axis < 0) axis += params_rank;
-  if (batch_dims < 0) batch_dims += indices_rank;
-  if (!params_layout && !indices_layout) {
-    return llvm::DenseMap<int, Layout>();
+
+  if (params_layout || indices_layout) {
+    std::vector<std::string> output_layout_specs;
+
+    // Get a list of mesh dims that params uses, other than the dim for axis.
+    llvm::DenseSet<llvm::StringRef> params_mesh_dims;
+    if (params_layout) {
+      for (int i = 0; i < params_rank; ++i)
+        if (i != axis &&
+            !Layout::IsUnshardedDimension(params_layout->sharding_spec(i)))
+          params_mesh_dims.insert(params_layout->sharding_spec(i));
+    }
+
+    auto add_mesh_dim_if = [&](const absl::optional<Layout>& input_layout,
+                               int64 dim, bool indices = false) {
+      // Only add the mesh dimension to the output_layout if 1) the input layout
+      // exists and 2) when the input is indices and the params dims don't
+      // contain the mesh dim we are adding (to avoid two different tensor dims
+      // being sharded over the same mesh dim).
+      // Note that params->sharding_spec(axis) is specifically excluded from the
+      // params_mesh_dims during construction above. This means that if we are
+      // processing the indices layout and it contains
+      // params->sharding_spec(axis) we will still add that sharding_spec to the
+      // output layout.
+      if (input_layout && (!indices || !params_mesh_dims.contains(
+                                           input_layout->sharding_spec(dim))))
+        output_layout_specs.push_back(input_layout->sharding_spec(dim));
+      else
+        output_layout_specs.push_back(Layout::kUnshardedDim);
+    };
+
+    for (int i = 0; i < axis; ++i) add_mesh_dim_if(params_layout, i);
+    for (int i = batch_dims; i < indices_rank; ++i)
+      add_mesh_dim_if(indices_layout, i, /*indices=*/true);
+    for (int i = axis + 1; i < params_rank; ++i)
+      add_mesh_dim_if(params_layout, i);
+
+    TF_ASSIGN_OR_RETURN(const Layout output_layout,
+                        Layout::GetLayout(output_layout_specs, mesh));
+    return llvm::DenseMap<int, Layout>({{0, output_layout}});
   }
-  std::vector<std::string> output_layout_specs;
 
-  // Get a list of mesh dims that params uses, other than the dim for axis.
-  llvm::DenseSet<llvm::StringRef> params_mesh_dims;
-  if (params_layout) {
-    for (int i = 0; i < params_rank; ++i)
-      if (i != axis &&
-          !Layout::IsUnshardedDimension(params_layout->sharding_spec(i)))
-        params_mesh_dims.insert(params_layout->sharding_spec(i));
-  }
-
-  auto add_mesh_dim_if = [&](const absl::optional<Layout>& input_layout,
-                             int64 dim, bool indices = false) {
-    // Only add the mesh dimension to the output_layout if 1) the input layout
-    // exists and 2) when the input is indices and the params dims don't
-    // contain the mesh dim we are adding (to avoid two different tensor dims
-    // being sharded over the same mesh dim).
-    // Note that params->sharding_spec(axis) is specifically excluded from the
-    // params_mesh_dims during construction above. This means that if we are
-    // processing the indices layout and it contains
-    // params->sharding_spec(axis) we will still add that sharding_spec to the
-    // output layout.
-    if (input_layout && (!indices || !params_mesh_dims.contains(
-                                         input_layout->sharding_spec(dim))))
-      output_layout_specs.push_back(input_layout->sharding_spec(dim));
-    else
-      output_layout_specs.push_back(Layout::kUnshardedDim);
-  };
-
-  for (int i = 0; i < axis; ++i) add_mesh_dim_if(params_layout, i);
-  for (int i = batch_dims; i < indices_rank; ++i)
-    add_mesh_dim_if(indices_layout, i, /*indices=*/true);
-  for (int i = axis + 1; i < params_rank; ++i)
-    add_mesh_dim_if(params_layout, i);
-
-  TF_ASSIGN_OR_RETURN(const Layout output_layout,
-                      Layout::GetLayout(output_layout_specs, mesh));
-  return llvm::DenseMap<int, Layout>({{0, output_layout}});
+  return llvm::DenseMap<int, Layout>();
 }
 
 StatusOr<llvm::DenseMap<int, Layout>>
-GatherCommonSPMDExpander::ComputeLayoutBackward(
+GatherV2SPMDExpander::ComputeLayoutBackward(
     mlir::Operation* op, const llvm::DenseMap<int, Layout>& output_layouts) {
-  TF_ASSIGN_OR_RETURN(int64_t axis, GetAxis(op));
-  TF_ASSIGN_OR_RETURN(uint64_t batch_dims, GetBatchDim(op));
+  auto gather_op = llvm::cast<mlir::TF::GatherV2Op>(op);
   TF_ASSIGN_OR_RETURN(const Mesh mesh, ExtractDeviceMeshEnclosingCluster(op));
 
-  llvm::DenseMap<int, Layout> input_layouts(op->getNumOperands());
-  // Axis is a constant so replicate it. ResourceGatherOp does not have axis.
-  if (llvm::isa<mlir::TF::GatherV2Op>(op)) {
-    input_layouts[2] = Layout::ReplicatedOnMesh(mesh, /*rank=*/0);
+  llvm::DenseMap<int, Layout> input_layouts(gather_op.getNumOperands());
+  // axis is const
+  input_layouts[2] = Layout::ReplicatedOnMesh(mesh, /*rank=*/0);
+
+  if (output_layouts.find(0) != output_layouts.end()) {
+    // This will always exist since there is only one output.
+    const Layout output_layout = output_layouts.lookup(0);
+
+    TF_ASSIGN_OR_RETURN(int64_t axis,
+                        ExtractConstIntFromValue(gather_op.axis()));
+    int batch_dims = gather_op.batch_dims();
+
+    const int params_rank = ValueRank(gather_op.params());
+    const int indices_rank = ValueRank(gather_op.indices());
+    if (params_rank == -1)
+      return errors::InvalidArgument("missing rank for params input");
+    if (indices_rank == -1)
+      return errors::InvalidArgument("missing rank for indices input");
+
+    // Handle the case of negative axis.
+    if (axis < 0) axis += params_rank;
+
+    std::vector<std::string> params_layout_specs;
+    std::vector<std::string> indices_layout_specs;
+    params_layout_specs.reserve(params_rank);
+    indices_layout_specs.reserve(indices_rank);
+
+    // Extract the params layout. We will request that axis is replicated as
+    // that gives the least issues with spmd expansion.
+    // E.g. If we had axis = 1 and parmas layout [p0 p1 p2 p3]
+    // input layout [i0 i1] then the output layout would have been
+    // [p0 i0 i1 p2 p3] so to go backwards, we extract the ranges [0, axis)
+    // and [axis + indices.rank(), output.rank()) for params (with a replicated
+    // dim for the missing dimension inbetween). Indices layout is based on the
+    // range [axis, axis+indices)/
+    for (int i = 0; i < axis; ++i)
+      params_layout_specs.push_back(output_layout.sharding_spec(i));
+    params_layout_specs.push_back(Layout::kUnshardedDim);
+    for (int i = axis + indices_rank - batch_dims; i < output_layout.rank();
+         ++i)
+      params_layout_specs.push_back(output_layout.sharding_spec(i));
+
+    // Extract the indices layout.
+    for (int i = 0; i < batch_dims; ++i)
+      indices_layout_specs.push_back(output_layout.sharding_spec(i));
+    for (int i = axis; i < axis + indices_rank - batch_dims; ++i)
+      indices_layout_specs.push_back(output_layout.sharding_spec(i));
+
+    TF_ASSIGN_OR_RETURN(const Layout params_layout,
+                        Layout::GetLayout(params_layout_specs, mesh));
+    TF_ASSIGN_OR_RETURN(const Layout indices_layout,
+                        Layout::GetLayout(indices_layout_specs, mesh));
+    input_layouts[0] = params_layout;
+    input_layouts[1] = indices_layout;
   }
-
-  auto it = output_layouts.find(0);
-  if (it == output_layouts.end()) {
-    return input_layouts;
-  }
-
-  // This will always exist since there is only one output.
-  const Layout output_layout = it->getSecond();
-
-  const int params_rank = ValueRank(op->getOperand(0));
-  const int indices_rank = ValueRank(op->getOperand(1));
-  if (params_rank == -1)
-    return errors::InvalidArgument("missing rank for params input");
-  if (indices_rank == -1)
-    return errors::InvalidArgument("missing rank for indices input");
-
-  // Handle the case of negative axis.
-  if (axis < 0) axis += params_rank;
-  if (batch_dims < 0) batch_dims += indices_rank;
-  std::vector<std::string> params_layout_specs;
-  std::vector<std::string> indices_layout_specs;
-  params_layout_specs.reserve(params_rank);
-  indices_layout_specs.reserve(indices_rank);
-
-  // Extract the params layout. We will request that axis is replicated as
-  // that gives the least issues with spmd expansion.
-  // E.g. If we had axis = 1 and parmas layout [p0 p1 p2 p3]
-  // input layout [i0 i1] then the output layout would have been
-  // [p0 i0 i1 p2 p3] so to go backwards, we extract the ranges [0, axis)
-  // and [axis + indices.rank(), output.rank()) for params (with a replicated
-  // dim for the missing dimension inbetween). Indices layout is based on the
-  // range [axis, axis+indices)/
-  for (int i = 0; i < axis; ++i)
-    params_layout_specs.push_back(output_layout.sharding_spec(i));
-  params_layout_specs.push_back(Layout::kUnshardedDim);
-  for (int i = axis + indices_rank - batch_dims; i < output_layout.rank(); ++i)
-    params_layout_specs.push_back(output_layout.sharding_spec(i));
-
-  // Extract the indices layout.
-  for (int i = 0; i < batch_dims; ++i)
-    indices_layout_specs.push_back(output_layout.sharding_spec(i));
-  for (int i = axis; i < axis + indices_rank - batch_dims; ++i)
-    indices_layout_specs.push_back(output_layout.sharding_spec(i));
-
-  TF_ASSIGN_OR_RETURN(const Layout params_layout,
-                      Layout::GetLayout(params_layout_specs, mesh));
-  TF_ASSIGN_OR_RETURN(const Layout indices_layout,
-                      Layout::GetLayout(indices_layout_specs, mesh));
-  input_layouts[0] = params_layout;
-  input_layouts[1] = indices_layout;
 
   return input_layouts;
 }
@@ -268,19 +368,19 @@ Status GatherNdGetInputLayoutFromOutput(const Layout& output_layout,
 StatusOr<mlir::Operation*> GatherNdSPMDExpander::ExpandOp(mlir::Operation* op) {
   auto gather_op = llvm::cast<mlir::TF::GatherNdOp>(op);
   TF_ASSIGN_OR_RETURN(Layout params_layout,
-                      ExtractRequiredLayoutFromOperand(gather_op.getParams()));
+                      ExtractRequiredLayoutFromOperand(gather_op.params()));
   TF_ASSIGN_OR_RETURN(Layout indices_layout,
-                      ExtractRequiredLayoutFromOperand(gather_op.getIndices()));
+                      ExtractRequiredLayoutFromOperand(gather_op.indices()));
   TF_ASSIGN_OR_RETURN(Layout output_layout,
                       ExtractRequiredSingleLayoutFromOp(gather_op));
 
   TF_ASSIGN_OR_RETURN(
       llvm::ArrayRef<int64_t> indices_shape,
-      GetGlobalShapeOfValueFromDTensorLayout(gather_op.getIndices()));
+      GetGlobalShapeOfValueFromDTensorLayout(gather_op.indices()));
   const int index_dimensions = indices_shape.back();
 
-  const auto params_rank = ValueRank(gather_op.getParams());
-  const auto indices_rank = ValueRank(gather_op.getIndices());
+  const auto params_rank = ValueRank(gather_op.params());
+  const auto indices_rank = ValueRank(gather_op.indices());
   if (params_rank == -1)
     return errors::InvalidArgument("missing rank for params input");
   if (indices_rank == -1)
@@ -339,10 +439,10 @@ StatusOr<mlir::Operation*> GatherNdSPMDExpander::ExpandOp(mlir::Operation* op) {
 
   TF_ASSIGN_OR_RETURN(
       mlir::Value params,
-      EmitRelayout(gather_op.getParams(), params_layout, new_params_layout));
+      EmitRelayout(gather_op.params(), params_layout, new_params_layout));
   TF_ASSIGN_OR_RETURN(
       mlir::Value indices,
-      EmitRelayout(gather_op.getIndices(), indices_layout, new_indices_layout));
+      EmitRelayout(gather_op.indices(), indices_layout, new_indices_layout));
 
   mlir::OpBuilder builder(op);
 
@@ -350,14 +450,14 @@ StatusOr<mlir::Operation*> GatherNdSPMDExpander::ExpandOp(mlir::Operation* op) {
   // so we have to provided the output type. This output type is incorrect and
   // we manually run shape inference after.
   mlir::TF::GatherNdOp new_gather = builder.create<mlir::TF::GatherNdOp>(
-      op->getLoc(), gather_op.getOutput().getType(), params, indices);
+      op->getLoc(), gather_op.output().getType(), params, indices);
   InferSPMDExpandedLocalShape(new_gather);
 
-  TF_ASSIGN_OR_RETURN(mlir::Value output,
-                      EmitRelayout(new_gather.getOutput(), merged_output_layout,
-                                   output_layout));
+  TF_ASSIGN_OR_RETURN(
+      mlir::Value output,
+      EmitRelayout(new_gather.output(), merged_output_layout, output_layout));
 
-  gather_op.getOutput().replaceAllUsesWith(output);
+  gather_op.output().replaceAllUsesWith(output);
   gather_op.erase();
   return output.getDefiningOp();
 }
@@ -368,10 +468,10 @@ GatherNdSPMDExpander::ComputeLayoutForward(
   auto gather_op = llvm::cast<mlir::TF::GatherNdOp>(op);
   TF_ASSIGN_OR_RETURN(Mesh mesh, ExtractDeviceMeshEnclosingCluster(op));
 
-  std::optional<Layout> params_layout;
+  absl::optional<Layout> params_layout;
   if (input_layouts.find(0) != input_layouts.end())
     params_layout.emplace(input_layouts.lookup(0));
-  std::optional<Layout> indices_layout;
+  absl::optional<Layout> indices_layout;
   if (input_layouts.find(1) != input_layouts.end())
     indices_layout.emplace(input_layouts.lookup(1));
 
@@ -382,8 +482,8 @@ GatherNdSPMDExpander::ComputeLayoutForward(
     return errors::Unimplemented(
         "dynamic last dimension for index is not supported");
 
-  const int params_rank = ValueRank(gather_op.getParams());
-  const int indices_rank = ValueRank(gather_op.getIndices());
+  const int params_rank = ValueRank(gather_op.params());
+  const int indices_rank = ValueRank(gather_op.indices());
   if (params_rank == -1)
     return errors::InvalidArgument("missing rank for params input");
   if (indices_rank == -1)
@@ -417,8 +517,8 @@ GatherNdSPMDExpander::ComputeLayoutBackward(
     return errors::Unimplemented(
         "dynamic last dimension for index is not supported");
 
-  const int params_rank = ValueRank(gather_op.getParams());
-  const int indices_rank = ValueRank(gather_op.getIndices());
+  const int params_rank = ValueRank(gather_op.params());
+  const int indices_rank = ValueRank(gather_op.indices());
   if (params_rank == -1)
     return errors::InvalidArgument("missing rank for params input");
   if (indices_rank == -1)

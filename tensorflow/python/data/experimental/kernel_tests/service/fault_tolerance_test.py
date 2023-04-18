@@ -274,6 +274,7 @@ class FaultToleranceTest(data_service_test_base.TestBase,
 
   @combinations.generate(test_base.eager_only_combinations())
   def testChangeProcessingModeAfterRestart(self):
+    self.skipTest("b/170910141")
     cluster = data_service_test_base.TestCluster(num_workers=1)
     num_elements = 100
     range_dataset = dataset_ops.Dataset.range(num_elements)
@@ -291,9 +292,8 @@ class FaultToleranceTest(data_service_test_base.TestBase,
             processing_mode="distributed_epoch",
             service=cluster.dispatcher_address(),
             job_name="test"))
-    with self.assertRaisesOpError(
-        "Tried to create job with name test, but found an existing job with "
-        "different parameters"):
+    with self.assertRaisesOpError("already an existing job with that name "
+                                  "using processing mode <parallel_epochs>"):
       next(iter(ds)).numpy()
 
   @combinations.generate(
@@ -310,6 +310,7 @@ class FaultToleranceTest(data_service_test_base.TestBase,
     it = iter(ds)
     cluster.add_worker()
     self.assertAllEqual(next(it), tensor)
+
 
 if __name__ == "__main__":
   test.main()

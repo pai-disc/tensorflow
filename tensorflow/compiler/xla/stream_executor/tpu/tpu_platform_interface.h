@@ -30,6 +30,8 @@ typedef SE_TpuTopology* TpuTopologyPtr;
 
 class TpuPlatformInterface : public stream_executor::Platform {
  public:
+  using Status = stream_executor::port::Status;
+
   // Returns a TPU platform to be used by TPU ops. If multiple TPU platforms are
   // registered, finds the most suitable one. Returns nullptr if no TPU platform
   // is registered or an error occurred.
@@ -41,11 +43,11 @@ class TpuPlatformInterface : public stream_executor::Platform {
   static TpuPlatformInterface* GetRegisteredPlatform(
       bool initialize_platform = true, int num_tries = 5);
 
-  virtual tsl::Status Reset(bool only_tear_down, absl::string_view reason) = 0;
+  virtual Status Reset(bool only_tear_down, absl::string_view reason) = 0;
 
-  tsl::Status Reset(absl::string_view reason) { return Reset(false, reason); }
+  Status Reset(absl::string_view reason) { return Reset(false, reason); }
 
-  tsl::Status Reset() { return Reset(false, {}); }
+  Status Reset() { return Reset(false, {}); }
 
   virtual int64_t TpuMemoryLimit() = 0;
 

@@ -52,11 +52,8 @@ class ConcatenateDatasetOp::Dataset : public DatasetBase {
     auto os_input = input->output_shapes();
     auto os_concatenate = to_concatenate->output_shapes();
     for (int i = 0; i < os_input.size(); i++) {
-      PartialTensorShape output_tensorshape({});
-      OP_REQUIRES_OK(ctx,
-                     MostSpecificCompatibleShape(os_input[i], os_concatenate[i],
-                                                 &output_tensorshape));
-      output_shapes_.push_back(output_tensorshape);
+      output_shapes_.push_back(
+          MostSpecificCompatibleShape(os_input[i], os_concatenate[i]));
     }
   }
   ~Dataset() override {
@@ -158,16 +155,12 @@ class ConcatenateDatasetOp::Dataset : public DatasetBase {
     explicit Iterator(const Params& params)
         : DatasetIterator<Dataset>(params), i_(0) {}
 
-    bool SymbolicCheckpointCompatible() const override { return true; }
-
     Status Initialize(IteratorContext* ctx) override {
       TF_ASSIGN_OR_RETURN(input_contexts_,
                           CreateInputIteratorContexts(ctx, dataset()));
-      TF_RETURN_IF_ERROR(dataset()->input_->MakeIterator(
-          &input_contexts_[0], this, strings::StrCat(prefix(), "[0]"),
-          &input_impl_));
-      ctx->MergeCheckpoint(input_contexts_[0].checkpoint());
-      return OkStatus();
+      return dataset()->input_->MakeIterator(&input_contexts_[0], this,
+                                             strings::StrCat(prefix(), "[0]"),
+                                             &input_impl_);
     }
 
     Status GetNextInternal(IteratorContext* ctx,
@@ -181,7 +174,6 @@ class ConcatenateDatasetOp::Dataset : public DatasetBase {
       while (i_ < 2) {
         TF_RETURN_IF_ERROR(input_impl_->GetNext(&input_contexts_[i_],
                                                 out_tensors, end_of_sequence));
-        ctx->MergeCheckpoint(input_contexts_[i_].checkpoint());
         if (!*end_of_sequence) {
           return OkStatus();
         }
@@ -207,11 +199,11 @@ class ConcatenateDatasetOp::Dataset : public DatasetBase {
                         IteratorStateWriter* writer) override {
       mutex_lock l(mu_);
       TF_RETURN_IF_ERROR(writer->WriteScalar(full_name(kIndex), i_));
-      TF_RETURN_IF_ERROR(
-          writer->WriteScalar(full_name(kInputImplUninitialized),
-                              static_cast<int64_t>(!input_impl_)));
       if (input_impl_) {
         TF_RETURN_IF_ERROR(SaveInput(ctx, writer, input_impl_));
+      } else {
+        TF_RETURN_IF_ERROR(
+            writer->WriteScalar(full_name(kInputImplUninitialized), ""));
       }
       return OkStatus();
     }
@@ -220,10 +212,7 @@ class ConcatenateDatasetOp::Dataset : public DatasetBase {
                            IteratorStateReader* reader) override {
       mutex_lock l(mu_);
       TF_RETURN_IF_ERROR(reader->ReadScalar(full_name(kIndex), &i_));
-      int64_t input_uninitialized;
-      TF_RETURN_IF_ERROR(reader->ReadScalar(full_name(kInputImplUninitialized),
-                                            &input_uninitialized));
-      if (static_cast<bool>(input_uninitialized)) {
+      if (reader->Contains(full_name(kInputImplUninitialized))) {
         input_impl_.reset();
         return OkStatus();
       }
@@ -248,20 +237,20 @@ class ConcatenateDatasetOp::Dataset : public DatasetBase {
     std::vector<IteratorContext> input_contexts_;
   };
 
-  Status MostSpecificCompatibleShape(const PartialTensorShape& ts1,
-                                     const PartialTensorShape& ts2,
-                                     PartialTensorShape* output_tensorshape) {
+  static PartialTensorShape MostSpecificCompatibleShape(
+      const PartialTensorShape& ts1, const PartialTensorShape& ts2) {
     if (ts1.dims() != ts2.dims() || ts1.unknown_rank() || ts2.unknown_rank())
-      return OkStatus();
+      return PartialTensorShape();
+    PartialTensorShape output_tensorshape({});
     auto dims1 = ts1.dim_sizes();
     auto dims2 = ts2.dim_sizes();
     for (int d = 0; d < ts1.dims(); d++) {
       if (dims1[d] == dims2[d])
-        TF_RETURN_IF_ERROR(output_tensorshape->AddDimWithStatus(dims1[d]));
+        output_tensorshape.AddDim(dims1[d]);
       else
-        TF_RETURN_IF_ERROR(output_tensorshape->AddDimWithStatus(-1));
+        output_tensorshape.AddDim(-1);
     }
-    return OkStatus();
+    return output_tensorshape;
   }
 
   const DatasetBase* input_;

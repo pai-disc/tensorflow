@@ -58,7 +58,7 @@ class DecodeRawOp : public OpKernel {
     }
     TensorShape out_shape = input.shape();
     if (str_size == -1 || str_size == 0) {  // Empty input
-      OP_REQUIRES_OK(context, out_shape.AddDimWithStatus(0));
+      out_shape.AddDim(0);
       Tensor* output_tensor = nullptr;
       OP_REQUIRES_OK(context, context->allocate_output("output", out_shape,
                                                        &output_tensor));
@@ -70,7 +70,7 @@ class DecodeRawOp : public OpKernel {
                                 " that is not a multiple of ", sizeof(T),
                                 ", the size of ", DataTypeString(out_type_)));
     const int64_t added_dim = str_size / sizeof(T);
-    OP_REQUIRES_OK(context, out_shape.AddDimWithStatus(added_dim));
+    out_shape.AddDim(added_dim);
     Tensor* output_tensor = nullptr;
     OP_REQUIRES_OK(
         context, context->allocate_output("output", out_shape, &output_tensor));

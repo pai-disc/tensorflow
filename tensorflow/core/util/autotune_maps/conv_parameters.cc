@@ -20,32 +20,32 @@ limitations under the License.
 
 #include "absl/strings/str_format.h"
 #include "tensorflow/core/platform/hash.h"
+#include "tensorflow/core/util/autotune_maps/autotune_maps_utils.h"
 #include "tensorflow/core/util/autotune_maps/conv_parameters.pb.h"
-#include "tensorflow/tsl/lib/strings/proto_serialization.h"
 
 namespace tensorflow {
 
 namespace {
-using ::tsl::protobuf::util::MessageDifferencer;
+using ::tensorflow::protobuf::util::MessageDifferencer;
 
 uint64 ComputeHash(int device_id, const ConvParametersProto& proto) {
-  return Hash64Combine(device_id, tsl::DeterministicProtoHash64(proto));
+  return Hash64Combine(device_id, autotune_maps_utils::HashProto(proto));
 }
 
 uint64 ComputeHash(int device_id, const MatmulParametersProto& proto) {
-  return Hash64Combine(device_id, tsl::DeterministicProtoHash64(proto));
+  return Hash64Combine(device_id, autotune_maps_utils::HashProto(proto));
 }
 }  // namespace
 
 ConvParameters::ConvParameters(
-    se::StreamExecutor* stream_exec, int64_t batch, int64_t in_depths,
-    const absl::Span<const int64_t> in, int data_format, int64_t out_depths,
-    const absl::Span<const int64_t> filter,
+    int64_t batch, int64_t in_depths, const absl::Span<const int64_t> in,
+    int data_format, int64_t out_depths, const absl::Span<const int64_t> filter,
     const absl::Span<const int64_t> dilation,
     const absl::Span<const int64_t> stride,
-    const absl::Span<const int64_t> padding, DataType dtype, int group_count,
-    absl::optional<ConvParameters::FusionInfo> fusion_info, int version)
-    : device_id_(stream_exec->device_ordinal()) {
+    const absl::Span<const int64_t> padding, DataType dtype, int device_id,
+    int group_count, absl::optional<ConvParameters::FusionInfo> fusion_info,
+    int version)
+    : device_id_(device_id) {
   proto_.set_batch(batch);
   proto_.set_in_depths(in_depths);
   *proto_.mutable_in() = {in.begin(), in.end()};
@@ -65,17 +65,16 @@ ConvParameters::ConvParameters(
     fusion_proto.set_is_contrib(fusion_info.value().is_contrib);
     *proto_.mutable_fusion() = fusion_proto;
   }
-  // Have to convert to std::string because apparently our open-source protobuf
-  // does not speak absl::string_view.
   proto_.set_device_identifier(
-      std::string(stream_exec->GetDeviceDescription().model_str()));
+      autotune_maps_utils::DeviceIdToIdentifier(device_id));
   proto_.set_version(version);
   hash_code_ = ComputeHash(device_id_, proto_);
 }
+
 ConvParameters::ConvParameters(int device_id, const ConvParametersProto& proto)
     : device_id_(device_id),
       proto_(proto),
-      hash_code_(ComputeHash(device_id_, proto_)) {}
+      hash_code_(ComputeHash(device_id, proto_)) {}
 
 bool ConvParameters::operator==(const ConvParameters& other) const {
   return device_id_ == other.device_id_ &&
@@ -85,11 +84,11 @@ bool ConvParameters::operator==(const ConvParameters& other) const {
 string ConvParameters::ToString() const { return proto_.DebugString(); }
 
 MatmulParameters::MatmulParameters(
-    se::StreamExecutor* stream_exec, DataType ab_dtype, DataType c_dtype,
-    bool trans_a, bool trans_b, uint64_t m, uint64_t n, uint64_t k, int64_t lda,
-    int64_t ldb, int64_t ldc,
-    stream_executor::dnn::ActivationMode activation_mode, int version)
-    : device_id_(stream_exec->device_ordinal()) {
+    DataType ab_dtype, DataType c_dtype, bool trans_a, bool trans_b, uint64_t m,
+    uint64_t n, uint64_t k, int64_t lda, int64_t ldb, int64_t ldc,
+    stream_executor::dnn::ActivationMode activation_mode, int device_id,
+    int version)
+    : device_id_(device_id) {
   proto_.set_ab_dtype(ab_dtype);
   proto_.set_c_dtype(c_dtype);
 
@@ -103,19 +102,17 @@ MatmulParameters::MatmulParameters(
   proto_.set_ldc(ldc);
   proto_.set_activation_mode(activation_mode);
 
-  // Have to convert to std::string because apparently our open-source protobuf
-  // does not speak absl::string_view.
   proto_.set_device_identifier(
-      std::string(stream_exec->GetDeviceDescription().model_str()));
+      autotune_maps_utils::DeviceIdToIdentifier(device_id));
   proto_.set_version(version);
   hash_code_ = ComputeHash(device_id_, proto_);
 }
 
-MatmulParameters::MatmulParameters(se::StreamExecutor* stream_exec,
+MatmulParameters::MatmulParameters(int device_id,
                                    const MatmulParametersProto& proto)
-    : device_id_(stream_exec->device_ordinal()),
+    : device_id_(device_id),
       proto_(proto),
-      hash_code_(ComputeHash(device_id_, proto_)) {}
+      hash_code_(ComputeHash(device_id, proto_)) {}
 
 bool MatmulParameters::operator==(const MatmulParameters& other) const {
   return device_id_ == other.device_id_ &&

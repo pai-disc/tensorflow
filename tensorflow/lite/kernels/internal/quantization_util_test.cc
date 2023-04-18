@@ -171,7 +171,7 @@ TEST(QuantizationUtilTest, ChooseQuantizationParamsZeroPointOnMinBoundary) {
   EXPECT_EQ(qp.zero_point, 0);
 }
 
-#if GTEST_HAS_DEATH_TEST
+#ifdef GTEST_HAS_DEATH_TEST
 TEST(QuantizationUtilTest, ChooseQuantizationParamsZeroNotInRange) {
   // Assumption is that zero is within the range.
   EXPECT_DEATH(ChooseQuantizationParams<uint8>(10.0, 30.0), "");
@@ -328,7 +328,7 @@ TEST(QuantizationUtilTest, IntegerDoubleCompare) {
   EXPECT_EQ(1, IntegerDoubleCompare(INFINITY, NAN));
 }
 
-#if GTEST_HAS_DEATH_TEST
+#ifdef GTEST_HAS_DEATH_TEST
 TEST(QuantizationUtilTest, ChooseQuantizationParamsInvalidRange) {
   EXPECT_DEATH(ChooseQuantizationParams<uint8>(10.0, -30.0), "");
 }

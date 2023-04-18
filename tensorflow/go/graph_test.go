@@ -259,9 +259,6 @@ func TestGraphAddGradientsSums(t *testing.T) {
 		Name:  "y1",
 		Input: []Input{y0},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	y1 := op1.Output(0)
 
 	grad, err := g.AddGradients("", []Output{y0, y1}, []Output{x}, nil)
@@ -296,10 +293,6 @@ func TestGraphAddGradientsSums(t *testing.T) {
 func TestGraphAddGradientsWithInitialValues(t *testing.T) {
 	g := NewGraph()
 	x, err := Placeholder(g, "x", Float)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	op0, err := g.AddOperation(OpSpec{
 		Type:  "Square",
 		Name:  "y0",

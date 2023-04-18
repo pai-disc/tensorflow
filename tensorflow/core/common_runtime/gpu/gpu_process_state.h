@@ -18,7 +18,6 @@ limitations under the License.
 
 #include <functional>
 #include <map>
-#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -78,9 +77,6 @@ class GPUProcessState {
   // underlying allocator.  REQUIRES: Must be a valid type (see
   // config.proto for the list of supported strings.).
   //
-  // `options` is read on the very first call to this function in the process.
-  // After that if you pass in a set of options, they will be ignored.
-  //
   // REQUIRES: tf_device_id must be a valid id for a BaseGPUDevice available in
   // the current system environment.  Otherwise returns nullptr.
   virtual Allocator* GetGPUAllocator(
@@ -97,11 +93,7 @@ class GPUProcessState {
     return gpu_allocators_.size();
   }
 
-  // `options` is read on the very first call to this function in the process,
-  // e.g. to set the memory limit on this allocator.  After that if you pass in
-  // a different set of options, they will be ignored.
-  virtual Allocator* GetGpuHostAllocator(const GPUOptions& options,
-                                         int numa_node);
+  virtual Allocator* GetGpuHostAllocator(int numa_node);
 
   // Registers a Visitor to be invoked on new chunks of memory allocated by the
   // SubAllocator of every GPU proximate to the specified bus.  The AllocVisitor

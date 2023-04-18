@@ -34,7 +34,7 @@ struct hash<se::StreamExecutorConfig> {
 
 namespace stream_executor {
 
-tsl::StatusOr<StreamExecutor*> ExecutorCache::GetOrCreate(
+port::StatusOr<StreamExecutor*> ExecutorCache::GetOrCreate(
     const StreamExecutorConfig& config,
     const std::function<ExecutorFactory>& factory) {
   // In the fast path case, the cache already has an entry and we can just
@@ -66,7 +66,7 @@ tsl::StatusOr<StreamExecutor*> ExecutorCache::GetOrCreate(
   }
 
   VLOG(2) << "building executor";
-  tsl::StatusOr<std::unique_ptr<StreamExecutor>> result = factory();
+  port::StatusOr<std::unique_ptr<StreamExecutor>> result = factory();
   if (!result.ok()) {
     VLOG(2) << "failed to get build executor: " << result.status();
     // If construction failed, leave the cache Entry around, but with a null
@@ -77,7 +77,7 @@ tsl::StatusOr<StreamExecutor*> ExecutorCache::GetOrCreate(
   return entry->configurations.back().second.get();
 }
 
-tsl::StatusOr<StreamExecutor*> ExecutorCache::Get(
+port::StatusOr<StreamExecutor*> ExecutorCache::Get(
     const StreamExecutorConfig& config) {
   Entry* entry = nullptr;
   {
@@ -94,8 +94,8 @@ tsl::StatusOr<StreamExecutor*> ExecutorCache::Get(
             }
           }
         }
-        return tsl::Status(
-            tsl::error::NOT_FOUND,
+        return port::Status(
+            port::error::NOT_FOUND,
             absl::StrFormat("No executors own stream %p", config.gpu_stream));
       }
     }
@@ -104,16 +104,16 @@ tsl::StatusOr<StreamExecutor*> ExecutorCache::Get(
     if (it != cache_.end()) {
       entry = &it->second;
     } else {
-      return tsl::Status(
-          tsl::error::NOT_FOUND,
+      return port::Status(
+          port::error::NOT_FOUND,
           absl::StrFormat("No executors registered for (ordinal %d, hash %x)",
                           config.ordinal, config.hash));
     }
   }
   absl::ReaderMutexLock lock{&entry->configurations_mutex};
   if (entry->configurations.empty()) {
-    return tsl::Status(
-        tsl::error::NOT_FOUND,
+    return port::Status(
+        port::error::NOT_FOUND,
         absl::StrFormat("No executors registered for (ordinal %d, hash %x)",
                         config.ordinal, config.hash));
   }
@@ -125,8 +125,8 @@ tsl::StatusOr<StreamExecutor*> ExecutorCache::Get(
       return iter.second.get();
     }
   }
-  return tsl::Status(tsl::error::NOT_FOUND,
-                     "No executor found with a matching config.");
+  return port::Status(port::error::NOT_FOUND,
+                      "No executor found with a matching config.");
 }
 
 void ExecutorCache::DestroyAllExecutors() {

@@ -20,11 +20,8 @@ limitations under the License.
 
 #include "absl/algorithm/container.h"
 #include "absl/strings/str_format.h"
-#include "tensorflow/compiler/xla/hlo/experimental/auto_sharding/auto_sharding.h"
-#include "tensorflow/compiler/xla/hlo/experimental/auto_sharding/auto_sharding_solver_option.h"
 #include "tensorflow/compiler/xla/hlo/experimental/auto_sharding/auto_sharding_strategy.h"
 #include "tensorflow/compiler/xla/hlo/experimental/auto_sharding/auto_sharding_util.h"
-#include "tensorflow/compiler/xla/hlo/experimental/auto_sharding/cluster_environment.h"
 #include "tensorflow/tsl/platform/errors.h"
 
 namespace xla {
@@ -91,17 +88,11 @@ class DotHandler {
   void SplitLhsSpaceRhsSpace(int mesh_dim0, int mesh_dim1) {
     for (int64_t i = 0; i < lhs_space_dims_.size(); ++i) {
       for (int64_t j = 0; j < rhs_space_dims_.size(); ++j) {
-        if (lhs_->shape().dimensions().at(lhs_space_dims_.at(i)) <
-                device_mesh_.dim(mesh_dim0) ||
-            rhs_->shape().dimensions().at(rhs_space_dims_.at(j)) <
-                device_mesh_.dim(mesh_dim1)) {
-          continue;
-        }
-        if (solver_option_.only_allow_divisible_intermediate &&
-            (!IsDivisible(lhs_->shape().dimensions().at(lhs_space_dims_.at(i)),
-                          device_mesh_.dim(mesh_dim0)) ||
-             !IsDivisible(rhs_->shape().dimensions().at(rhs_space_dims_.at(j)),
-                          device_mesh_.dim(mesh_dim1)))) {
+        // TODO(b/220942808) Shard non-dividible op dimensions.
+        if (!IsDivisible(lhs_->shape().dimensions().at(lhs_space_dims_.at(i)),
+                         device_mesh_.dim(mesh_dim0)) ||
+            !IsDivisible(rhs_->shape().dimensions().at(rhs_space_dims_.at(j)),
+                         device_mesh_.dim(mesh_dim1))) {
           continue;
         }
         std::string name =
@@ -126,17 +117,10 @@ class DotHandler {
   void SplitLhsSpaceOnly(int mesh_dim0, int mesh_dim1) {
     for (int64_t i = 0; i < lhs_space_dims_.size(); ++i) {
       for (int64_t j = i + 1; j < lhs_space_dims_.size(); ++j) {
-        if (lhs_->shape().dimensions().at(lhs_space_dims_.at(i)) <
-                device_mesh_.dim(mesh_dim0) ||
-            lhs_->shape().dimensions().at(lhs_space_dims_.at(j)) <
-                device_mesh_.dim(mesh_dim1)) {
-          continue;
-        }
-        if (solver_option_.only_allow_divisible_intermediate &&
-            (!IsDivisible(lhs_->shape().dimensions().at(lhs_space_dims_.at(i)),
-                          device_mesh_.dim(mesh_dim0)) ||
-             !IsDivisible(lhs_->shape().dimensions().at(lhs_space_dims_.at(j)),
-                          device_mesh_.dim(mesh_dim1)))) {
+        if (!IsDivisible(lhs_->shape().dimensions().at(lhs_space_dims_.at(i)),
+                         device_mesh_.dim(mesh_dim0)) ||
+            !IsDivisible(lhs_->shape().dimensions().at(lhs_space_dims_.at(j)),
+                         device_mesh_.dim(mesh_dim1))) {
           continue;
         }
         std::string name =
@@ -158,17 +142,10 @@ class DotHandler {
   void SplitRhsSpaceOnly(int mesh_dim0, int mesh_dim1) {
     for (int64_t i = 0; i < rhs_space_dims_.size(); ++i) {
       for (int64_t j = i + 1; j < rhs_space_dims_.size(); ++j) {
-        if (rhs_->shape().dimensions().at(rhs_space_dims_.at(i)) <
-                device_mesh_.dim(mesh_dim0) ||
-            rhs_->shape().dimensions().at(rhs_space_dims_.at(j)) <
-                device_mesh_.dim(mesh_dim1)) {
-          continue;
-        }
-        if (solver_option_.only_allow_divisible_intermediate &&
-            (!IsDivisible(rhs_->shape().dimensions().at(rhs_space_dims_.at(i)),
-                          device_mesh_.dim(mesh_dim0)) ||
-             !IsDivisible(rhs_->shape().dimensions().at(rhs_space_dims_.at(j)),
-                          device_mesh_.dim(mesh_dim1)))) {
+        if (!IsDivisible(rhs_->shape().dimensions().at(rhs_space_dims_.at(i)),
+                         device_mesh_.dim(mesh_dim0)) ||
+            !IsDivisible(rhs_->shape().dimensions().at(rhs_space_dims_.at(j)),
+                         device_mesh_.dim(mesh_dim1))) {
           continue;
         }
         std::string name =
@@ -197,18 +174,10 @@ class DotHandler {
                           mesh_dim1, mesh_dim1);
       for (int64_t i = 0; i < lhs_space_dims_.size(); ++i) {
         for (int64_t j = 0; j < lhs_con_dims_.size(); ++j) {
-          if (lhs_->shape().dimensions().at(lhs_space_dims_.at(i)) <
-                  device_mesh_.dim(mesh_dim0) ||
-              lhs_->shape().dimensions().at(lhs_con_dims_.at(j)) <
-                  device_mesh_.dim(mesh_dim1)) {
-            continue;
-          }
-          if (solver_option_.only_allow_divisible_intermediate &&
-              (!IsDivisible(
-                   lhs_->shape().dimensions().at(lhs_space_dims_.at(i)),
-                   device_mesh_.dim(mesh_dim0)) ||
-               !IsDivisible(lhs_->shape().dimensions().at(lhs_con_dims_.at(j)),
-                            device_mesh_.dim(mesh_dim1)))) {
+          if (!IsDivisible(lhs_->shape().dimensions().at(lhs_space_dims_.at(i)),
+                           device_mesh_.dim(mesh_dim0)) ||
+              !IsDivisible(lhs_->shape().dimensions().at(lhs_con_dims_.at(j)),
+                           device_mesh_.dim(mesh_dim1))) {
             continue;
           }
 
@@ -238,18 +207,10 @@ class DotHandler {
                           mesh_dim1, mesh_dim0);
       for (int64_t i = 0; i < rhs_space_dims_.size(); ++i) {
         for (int64_t j = 0; j < lhs_con_dims_.size(); ++j) {
-          if (rhs_->shape().dimensions().at(rhs_space_dims_.at(i)) <
-                  device_mesh_.dim(mesh_dim1) ||
-              lhs_->shape().dimensions().at(lhs_con_dims_.at(j)) <
-                  device_mesh_.dim(mesh_dim0)) {
-            continue;
-          }
-          if (solver_option_.only_allow_divisible_intermediate &&
-              (!IsDivisible(
-                   rhs_->shape().dimensions().at(rhs_space_dims_.at(i)),
-                   device_mesh_.dim(mesh_dim1)) ||
-               !IsDivisible(lhs_->shape().dimensions().at(lhs_con_dims_.at(j)),
-                            device_mesh_.dim(mesh_dim0)))) {
+          if (!IsDivisible(rhs_->shape().dimensions().at(rhs_space_dims_.at(i)),
+                           device_mesh_.dim(mesh_dim1)) ||
+              !IsDivisible(lhs_->shape().dimensions().at(lhs_con_dims_.at(j)),
+                           device_mesh_.dim(mesh_dim0))) {
             continue;
           }
           HloSharding output_spec =
@@ -279,12 +240,7 @@ class DotHandler {
                          [](int64_t size) { return size > 1; }) == 1) {
       for (int64_t i = 0; i < lhs_batch_dims_.size(); ++i) {
         for (int64_t j = 0; j < device_mesh_.num_dimensions(); ++j) {
-          if (lhs_->shape().dimensions().at(lhs_batch_dims_.at(i)) <
-              device_mesh_.dim(j)) {
-            continue;
-          }
-          if (solver_option_.only_allow_divisible_intermediate &&
-              !IsDivisible(lhs_->shape().dimensions().at(lhs_batch_dims_.at(i)),
+          if (!IsDivisible(lhs_->shape().dimensions().at(lhs_batch_dims_.at(i)),
                            device_mesh_.dim(j))) {
             continue;
           }
@@ -304,20 +260,11 @@ class DotHandler {
 
   void SplitTwoBatchDims(int mesh_dim0, int mesh_dim1) {
     if (lhs_batch_dims_.size() == 2 && device_mesh_.dim(mesh_dim0) > 1 &&
-        device_mesh_.dim(mesh_dim1) > 1) {
-      if (lhs_->shape().dimensions().at(lhs_batch_dims_.at(0)) <
-              device_mesh_.dim(mesh_dim0) ||
-          lhs_->shape().dimensions().at(lhs_batch_dims_.at(1)) <
-              device_mesh_.dim(mesh_dim1)) {
-        return;
-      }
-      if (solver_option_.only_allow_divisible_intermediate &&
-          (!IsDivisible(lhs_->shape().dimensions().at(lhs_batch_dims_.at(0)),
-                        device_mesh_.dim(mesh_dim0)) ||
-           !IsDivisible(lhs_->shape().dimensions().at(lhs_batch_dims_.at(1)),
-                        device_mesh_.dim(mesh_dim1)))) {
-        return;
-      }
+        device_mesh_.dim(mesh_dim1) > 1 &&
+        IsDivisible(lhs_->shape().dimensions().at(lhs_batch_dims_.at(0)),
+                    device_mesh_.dim(mesh_dim0)) &&
+        IsDivisible(lhs_->shape().dimensions().at(lhs_batch_dims_.at(1)),
+                    device_mesh_.dim(mesh_dim1))) {
       std::string name =
           absl::StrFormat("Sb = Sb x Sb @ {%d,%d}", mesh_dim0, mesh_dim1);
       HloSharding output_spec =
@@ -340,19 +287,10 @@ class DotHandler {
           absl::StrFormat("SbSi = SbSi x SbR @ {%d,%d}", mesh_dim0, mesh_dim1);
       for (int64_t i = 0; i < lhs_space_dims_.size(); ++i) {
         for (int64_t j = 0; j < lhs_batch_dims_.size(); ++j) {
-          if (lhs_->shape().dimensions().at(lhs_space_dims_.at(i)) <
-                  device_mesh_.dim(mesh_dim0) ||
-              lhs_->shape().dimensions().at(lhs_batch_dims_.at(j)) <
-                  device_mesh_.dim(mesh_dim1)) {
-            continue;
-          }
-          if (solver_option_.only_allow_divisible_intermediate &&
-              (!IsDivisible(
-                   lhs_->shape().dimensions().at(lhs_space_dims_.at(i)),
-                   device_mesh_.dim(mesh_dim0)) ||
-               !IsDivisible(
-                   lhs_->shape().dimensions().at(lhs_batch_dims_.at(j)),
-                   device_mesh_.dim(mesh_dim1)))) {
+          if (!IsDivisible(lhs_->shape().dimensions().at(lhs_space_dims_.at(i)),
+                           device_mesh_.dim(mesh_dim0)) ||
+              !IsDivisible(lhs_->shape().dimensions().at(lhs_batch_dims_.at(j)),
+                           device_mesh_.dim(mesh_dim1))) {
             continue;
           }
           HloSharding output_spec =
@@ -378,19 +316,10 @@ class DotHandler {
           absl::StrFormat("SbSj = SbR x SbSj @ {%d,%d}", mesh_dim0, mesh_dim1);
       for (int64_t i = 0; i < rhs_space_dims_.size(); ++i) {
         for (int64_t j = 0; j < lhs_batch_dims_.size(); ++j) {
-          if (rhs_->shape().dimensions().at(rhs_space_dims_.at(i)) <
-                  device_mesh_.dim(mesh_dim1) ||
-              lhs_->shape().dimensions().at(lhs_batch_dims_.at(j)) <
-                  device_mesh_.dim(mesh_dim0)) {
-            continue;
-          }
-          if (solver_option_.only_allow_divisible_intermediate &&
-              (!IsDivisible(
-                   rhs_->shape().dimensions().at(rhs_space_dims_.at(i)),
-                   device_mesh_.dim(mesh_dim1)) ||
-               !IsDivisible(
-                   lhs_->shape().dimensions().at(lhs_batch_dims_.at(j)),
-                   device_mesh_.dim(mesh_dim0)))) {
+          if (!IsDivisible(rhs_->shape().dimensions().at(rhs_space_dims_.at(i)),
+                           device_mesh_.dim(mesh_dim1)) ||
+              !IsDivisible(lhs_->shape().dimensions().at(lhs_batch_dims_.at(j)),
+                           device_mesh_.dim(mesh_dim0))) {
             continue;
           }
           HloSharding output_spec =
@@ -419,18 +348,10 @@ class DotHandler {
                           mesh_dim0, mesh_dim1, mesh_dim1);
       for (int64_t i = 0; i < lhs_con_dims_.size(); ++i) {
         for (int64_t j = 0; j < lhs_batch_dims_.size(); ++j) {
-          if (lhs_->shape().dimensions().at(lhs_con_dims_.at(i)) <
-                  device_mesh_.dim(mesh_dim1) ||
-              lhs_->shape().dimensions().at(lhs_batch_dims_.at(j)) <
-                  device_mesh_.dim(mesh_dim0)) {
-            continue;
-          }
-          if (solver_option_.only_allow_divisible_intermediate &&
-              (!IsDivisible(lhs_->shape().dimensions().at(lhs_con_dims_.at(i)),
-                            device_mesh_.dim(mesh_dim1)) ||
-               !IsDivisible(
-                   lhs_->shape().dimensions().at(lhs_batch_dims_.at(j)),
-                   device_mesh_.dim(mesh_dim0)))) {
+          if (!IsDivisible(lhs_->shape().dimensions().at(lhs_con_dims_.at(i)),
+                           device_mesh_.dim(mesh_dim1)) ||
+              !IsDivisible(lhs_->shape().dimensions().at(lhs_batch_dims_.at(j)),
+                           device_mesh_.dim(mesh_dim0))) {
             continue;
           }
           HloSharding output_spec =
@@ -462,25 +383,14 @@ class DotHandler {
                           mesh_dim0, mesh_dim1, mesh_dim0, mesh_dim1);
       for (int64_t i = 0; i < lhs_con_dims_.size(); ++i) {
         for (int64_t j = i + 1; j < lhs_con_dims_.size(); ++j) {
-          if (lhs_->shape().dimensions().at(lhs_con_dims_.at(i)) <
-                  device_mesh_.dim(mesh_dim0) ||
-              lhs_->shape().dimensions().at(lhs_con_dims_.at(j)) <
-                  device_mesh_.dim(mesh_dim1) ||
-              rhs_->shape().dimensions().at(rhs_con_dims_.at(i)) <
-                  device_mesh_.dim(mesh_dim0) ||
-              rhs_->shape().dimensions().at(rhs_con_dims_.at(j)) <
-                  device_mesh_.dim(mesh_dim1)) {
-            continue;
-          }
-          if (solver_option_.only_allow_divisible_intermediate &&
-              (!IsDivisible(lhs_->shape().dimensions().at(lhs_con_dims_.at(i)),
-                            device_mesh_.dim(mesh_dim0)) ||
-               !IsDivisible(lhs_->shape().dimensions().at(lhs_con_dims_.at(j)),
-                            device_mesh_.dim(mesh_dim1)) ||
-               !IsDivisible(rhs_->shape().dimensions().at(rhs_con_dims_.at(i)),
-                            device_mesh_.dim(mesh_dim0)) ||
-               !IsDivisible(rhs_->shape().dimensions().at(rhs_con_dims_.at(j)),
-                            device_mesh_.dim(mesh_dim1)))) {
+          if (!IsDivisible(lhs_->shape().dimensions().at(lhs_con_dims_.at(i)),
+                           device_mesh_.dim(mesh_dim0)) ||
+              !IsDivisible(lhs_->shape().dimensions().at(lhs_con_dims_.at(j)),
+                           device_mesh_.dim(mesh_dim1)) ||
+              !IsDivisible(rhs_->shape().dimensions().at(rhs_con_dims_.at(i)),
+                           device_mesh_.dim(mesh_dim0)) ||
+              !IsDivisible(rhs_->shape().dimensions().at(rhs_con_dims_.at(j)),
+                           device_mesh_.dim(mesh_dim1))) {
             continue;
           }
           HloSharding output_spec = HloSharding::Replicate();
@@ -506,12 +416,7 @@ class DotHandler {
       std::string name = absl::StrFormat("RR = RS x SR @ {%d} (allreduce @ %d)",
                                          mesh_dim0, mesh_dim0);
       for (int64_t i = 0; i < lhs_con_dims_.size(); ++i) {
-        if (lhs_->shape().dimensions().at(lhs_con_dims_.at(i)) <
-            device_mesh_.dim(mesh_dim0)) {
-          continue;
-        }
-        if (solver_option_.only_allow_divisible_intermediate &&
-            !IsDivisible(lhs_->shape().dimensions().at(lhs_con_dims_.at(i)),
+        if (!IsDivisible(lhs_->shape().dimensions().at(lhs_con_dims_.at(i)),
                          device_mesh_.dim(mesh_dim0))) {
           continue;
         }
@@ -542,14 +447,8 @@ class DotHandler {
 
       // Si = Si x R @ 0
       for (int64_t i = 0; i < lhs_space_dims_.size(); ++i) {
-        if (lhs_->shape().dimensions(lhs_space_dims_[i]) < num_devices) {
-          continue;
-        }
-        if (solver_option_.only_allow_divisible_intermediate &&
-            !IsDivisible(lhs_->shape().dimensions(lhs_space_dims_[i]),
-                         num_devices)) {
-          continue;
-        }
+        if (IsDivisible(lhs_->shape().dimensions(lhs_space_dims_[i]),
+                        num_devices)) {
           std::string name = absl::StrFormat("Si = Si x R @ %d", mesh_dim);
           HloSharding output_spec = Tile(ins_->shape(), {space_base_dim_ + i},
                                          {mesh_dim}, device_mesh_1d_);
@@ -558,18 +457,13 @@ class DotHandler {
           HloSharding rhs_spec = HloSharding::Replicate();
           AppendNewStrategy(ins_, name, output_spec, {lhs_spec, rhs_spec}, 0, 0,
                             cluster_env_, strategy_map_, strategies_);
+        }
       }
 
       // R = Sk x Sk @ (allreduce @ 0)
       for (int64_t i = 0; i < lhs_con_dims_.size(); ++i) {
-          if (lhs_->shape().dimensions(lhs_con_dims_[i]) < num_devices) {
-          continue;
-          }
-          if (solver_option_.only_allow_divisible_intermediate &&
-              !IsDivisible(lhs_->shape().dimensions(lhs_con_dims_[i]),
-                           num_devices)) {
-          continue;
-          }
+        if (IsDivisible(lhs_->shape().dimensions(lhs_con_dims_[i]),
+                        num_devices)) {
           std::string name = absl::StrFormat(
               "R = Sk x Sk @ %d (allreduce @ %d)", mesh_dim, mesh_dim);
           HloSharding output_spec = HloSharding::Replicate();
@@ -585,6 +479,7 @@ class DotHandler {
                             communication_cost, cluster_env_, strategy_map_,
                             strategies_);
         }
+      }
     }
   }
 
@@ -594,15 +489,10 @@ class DotHandler {
                          [](int64_t size) { return size > 1; }) > 1) {
       int mesh_dim = 0;
       for (int64_t i = 0; i < lhs_batch_dims_.size(); ++i) {
-          if (rhs_->shape().dimensions().at(lhs_batch_dims_.at(i)) <
-              device_mesh_.dim(mesh_dim)) {
+        if (!IsDivisible(rhs_->shape().dimensions().at(lhs_batch_dims_.at(i)),
+                         device_mesh_.dim(mesh_dim))) {
           continue;
-          }
-          if (solver_option_.only_allow_divisible_intermediate &&
-              !IsDivisible(rhs_->shape().dimensions().at(lhs_batch_dims_.at(i)),
-                           device_mesh_.dim(mesh_dim))) {
-          continue;
-          }
+        }
         std::string name =
             absl::StrFormat("Sb_%d = Sb x Sb @ {%d} 1d", i, mesh_dim);
         HloSharding output_spec =

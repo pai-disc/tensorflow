@@ -55,7 +55,7 @@ void ExtractAsyncValue(
 
   // Fast path if async value is already available.
   if (async_value->IsAvailable()) {
-    auto *storage = AsyncRuntime::GetStorage(value);
+    void *storage = AsyncRuntime::GetStorage(value);
     emplace_fn(storage, dst);
     AsyncRuntime::DropRef(AsyncRuntime::ToAsyncRuntimeObject(value));
     return;
@@ -63,7 +63,7 @@ void ExtractAsyncValue(
 
   // Wait for the async value completion, and emplace the `dst`.
   async_value->AndThen([value, emplace_fn, dst = FormRef(dst)]() {
-    auto *storage = AsyncRuntime::GetStorage(value);
+    void *storage = AsyncRuntime::GetStorage(value);
     emplace_fn(storage, dst.get());
     AsyncRuntime::DropRef(AsyncRuntime::ToAsyncRuntimeObject(value));
   });
@@ -77,7 +77,7 @@ void ExtractAsyncValue(
 
   // Fast path if async value is already available.
   if (async_value->IsAvailable()) {
-    auto *storage = AsyncRuntime::GetStorage(value);
+    void *storage = AsyncRuntime::GetStorage(value);
     emplace_fn(storage, dst, context);
     AsyncRuntime::DropRef(AsyncRuntime::ToAsyncRuntimeObject(value));
     return;
@@ -85,7 +85,7 @@ void ExtractAsyncValue(
 
   // Wait for the async value completion, and emplace the `dst`.
   async_value->AndThen([value, emplace_fn, context, dst = FormRef(dst)]() {
-    auto *storage = AsyncRuntime::GetStorage(value);
+    void *storage = AsyncRuntime::GetStorage(value);
     emplace_fn(storage, dst.get(), context);
     AsyncRuntime::DropRef(AsyncRuntime::ToAsyncRuntimeObject(value));
   });

@@ -29,8 +29,7 @@ Status AppendTpuEmbeddingErrorPayload(Status obj) {
         absl::StrCat(kTpuEmbeddingErrorMessage, ". ", obj.error_message());
     Status status(obj.code(), error_message);
     TPUEmbeddingError error_payload;
-    status.SetPayload(kTpuEmbeddingErrorUrl,
-                      absl::Cord(error_payload.SerializeAsString()));
+    status.SetPayload(kTpuEmbeddingErrorUrl, error_payload.SerializeAsString());
     return status;
   }
 }

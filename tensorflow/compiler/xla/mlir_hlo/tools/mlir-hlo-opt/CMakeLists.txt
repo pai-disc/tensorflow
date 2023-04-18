@@ -22,11 +22,9 @@ set(LIBS
 
         AllGmlStPasses
         GmlStDialect
-        GmlStPasses
         LmhloDialect
         LmhloGPUDialect
         MhloRegisterDialects
-        MhloTestAnalysis
         LmhloPasses
         AllMhloPasses
         AllThloPasses

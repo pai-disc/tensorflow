@@ -15,8 +15,6 @@ limitations under the License.
 
 #include "tensorflow/compiler/mlir/tensorflow/transforms/cluster_ops_by_policy.h"
 
-#include <optional>
-
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
@@ -102,7 +100,7 @@ void ValuesConstraintSet::Walk(
 Optional<ValueConstraint> ValuesConstraintSet::GetConstraint(
     Value value) const {
   auto it = constraints_.find(value);
-  if (it == constraints_.end()) return std::nullopt;
+  if (it == constraints_.end()) return None;
   return it->getSecond();
 }
 
@@ -388,10 +386,10 @@ static Optional<ValuesConstraintSet> CanBeClustered(
     const std::function<bool(Operation *op)> &filter) {
   // Check that op has no side effects. This guarantees that we will not
   // reorder side-effecting ops during cluster formation.
-  if (!isMemoryEffectFree(op)) return std::nullopt;
+  if (!MemoryEffectOpInterface::hasNoEffect(op)) return llvm::None;
 
   // Operation rejected by the custom filter.
-  if (filter && !filter(op)) return std::nullopt;
+  if (filter && !filter(op)) return llvm::None;
 
   // Initially we do not have any constraints on the operation results.
   ValuesConstraintSet result_constraints;
@@ -403,7 +401,7 @@ static Optional<ValuesConstraintSet> CanBeClustered(
       return operands_constraints.Resolve();
   }
 
-  return std::nullopt;
+  return llvm::None;
 }
 
 // Compute initial clustering state based on the clustering polocy.

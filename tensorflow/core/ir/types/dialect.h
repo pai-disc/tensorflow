@@ -18,7 +18,6 @@ limitations under the License.
 
 #include <string>
 
-#include "mlir/Dialect/Quant/QuantTypes.h"  // from @llvm-project
 #include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
 #include "mlir/IR/Diagnostics.h"  // from @llvm-project
 #include "mlir/IR/Dialect.h"  // from @llvm-project
@@ -51,8 +50,7 @@ class TensorFlowType : public Type {
 
 // Returns true if the specified type is a valid TensorFlow element type.
 inline bool IsValidTFElementType(Type type) {
-  return type.isa<ComplexType, FloatType, IntegerType, TensorFlowType,
-                  quant::QuantizedType>();
+  return type.isa<ComplexType, FloatType, IntegerType, TensorFlowType>();
 }
 
 // Returns true if this is a valid TensorFlow tensor type.

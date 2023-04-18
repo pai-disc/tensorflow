@@ -158,8 +158,7 @@ Status ShapeRefiner::InferShapesForFunction(const FunctionDef* function_def,
                                             AttrSlice attributes,
                                             InferenceContext* outer_context) {
   const Graph* graph;
-  const string& fname = function_def->signature().name();
-  auto it = functions_.find(fname);
+  auto it = functions_.find(function_def);
   if (it != functions_.end()) {
     graph = it->second.get();
   } else {
@@ -176,7 +175,7 @@ Status ShapeRefiner::InferShapesForFunction(const FunctionDef* function_def,
     options.allow_internal_ops = true;
     TF_RETURN_IF_ERROR(
         ConvertNodeDefsToGraph(options, result.nodes, new_graph));
-    functions_[fname].reset(new_graph);
+    functions_[function_def].reset(new_graph);
     graph = new_graph;
   }
 

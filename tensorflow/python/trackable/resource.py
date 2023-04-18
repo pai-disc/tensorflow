@@ -172,8 +172,7 @@ class CapturableResource(base.Trackable, metaclass=_ResourceMetaclass):
         self._resource_handle = self._create_resource()
     return self._resource_handle
 
-  def _export_to_saved_model_graph(
-      self, object_map, tensor_map, **unused_kwargs):
+  def _map_resources(self, _):
     """For implementing `Trackable`."""
     new_obj = copy.copy(self)
     # pylint: disable=protected-access
@@ -181,9 +180,9 @@ class CapturableResource(base.Trackable, metaclass=_ResourceMetaclass):
       new_resource = new_obj._create_resource()
     new_obj._resource_handle = new_resource
     # pylint: enable=protected-access
-    object_map[self] = new_obj
-    tensor_map[self.resource_handle] = new_resource
-    return [self.resource_handle]
+    obj_map = {self: new_obj}
+    resource_map = {self.resource_handle: new_resource}
+    return obj_map, resource_map
 
   def _trackable_children(self, save_type, **kwargs):
     children = super()._trackable_children(save_type, **kwargs)

@@ -36,18 +36,15 @@ namespace mlir {
 namespace quant {
 namespace {
 
-using QuantMethod =
-    tensorflow::quantization::QuantizationMethod::ExperimentalMethod;
-
 class InsertQuantizedFunctionsPass
     : public PassWrapper<InsertQuantizedFunctionsPass,
                          OperationPass<ModuleOp>> {
  public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InsertQuantizedFunctionsPass)
 
-  explicit InsertQuantizedFunctionsPass() = default;
-  explicit InsertQuantizedFunctionsPass(QuantMethod quantization_method,
-                                        OpSet op_set) {
+  explicit InsertQuantizedFunctionsPass() {}
+  explicit InsertQuantizedFunctionsPass(QuantizationMethod quantization_method,
+                                        const OpSet& op_set) {
     quantization_method_ = quantization_method;
     op_set_ = op_set;
   }
@@ -76,22 +73,18 @@ class InsertQuantizedFunctionsPass
 
   // Returns the function library for the given quantization method and opset
   // pair.
-  llvm::StringRef GetFunctionLibrary(QuantMethod quantization_method,
+  llvm::StringRef GetFunctionLibrary(QuantizationMethod quantization_method,
                                      OpSet op_set);
 
-  Option<QuantMethod> quantization_method_{
+  Option<QuantizationMethod> quantization_method_{
       *this, "quantization-method",
-      llvm::cl::init(
-          tensorflow::quantization::QuantizationMethod::STATIC_RANGE),
+      llvm::cl::init(QuantizationMethod::kPostTrainingQuantization),
       llvm::cl::desc("Choose quantization method."),
       llvm::cl::values(
-          clEnumValN(tensorflow::quantization::QuantizationMethod::STATIC_RANGE,
-                     "ptq", "Post-training static-range quantization"),
-          clEnumValN(
-              tensorflow::quantization::QuantizationMethod::DYNAMIC_RANGE,
-              "drq", "Post-training dynamic-range quantizaiton"),
-          clEnumValN(tensorflow::quantization::QuantizationMethod::WEIGHT_ONLY,
-                     "weight_only", "Post-training weight_only quantizaiton"))};
+          clEnumValN(QuantizationMethod::kPostTrainingQuantization, "ptq",
+                     "Post-training static-range quantization"),
+          clEnumValN(QuantizationMethod::kDynamicRangeQuantization, "drq",
+                     "Post-training dynamic-range quantizaiton"))};
 
   Option<OpSet> op_set_{
       *this, "target-opset", llvm::cl::init(OpSet::TF),
@@ -105,22 +98,13 @@ class InsertQuantizedFunctionsPass
 };
 
 llvm::StringRef InsertQuantizedFunctionsPass::GetFunctionLibrary(
-    QuantMethod quantization_method, OpSet op_set) {
+    QuantizationMethod quantization_method, OpSet op_set) {
   absl::flat_hash_map<OpSet, llvm::StringRef> function_library_map;
-  if (quantization_method ==
-      tensorflow::quantization::QuantizationMethod::DYNAMIC_RANGE) {
+  if (quantization_method == QuantizationMethod::kDynamicRangeQuantization) {
     function_library_map = {
-        {OpSet::TF, kQuantizedFunctionLibraryInMLIR_TF_DRQ},
         {OpSet::UNIFORM_QUANTIZED,
          kQuantizedFunctionLibraryInMLIR_UNIFORM_QUANTIZED_DRQ},
-        {OpSet::XLA, kQuantizedFunctionLibraryInMLIR_TF_DRQ}};
-  } else if (quantization_method ==
-             tensorflow::quantization::QuantizationMethod::WEIGHT_ONLY) {
-    // Uniform quantized opset is not supported for weight-only as inputs for
-    // weight quantization are floats. And only dequantize_i8 is used from the
-    // quantized function library.
-    function_library_map = {{OpSet::TF, kQuantizedFunctionLibraryInMLIR},
-                            {OpSet::XLA, kQuantizedFunctionLibraryInMLIR}};
+        {OpSet::TF, kQuantizedFunctionLibraryInMLIR_TF_DRQ}};
   } else {
     function_library_map = {{OpSet::TF, kQuantizedFunctionLibraryInMLIR},
                             {OpSet::UNIFORM_QUANTIZED,
@@ -186,15 +170,6 @@ void InsertQuantizedFunctionsPass::runOnOperation() {
     func::FuncOp new_func = func.clone();
     new_func.setPrivate();
     symbol_table.insert(new_func);
-
-    // For consistency, we require all quantized composite function to have
-    // the "tf_quant.quantized_ops" attribute.
-    if (!new_func.getSymName().starts_with("quantized_")) continue;
-    if (!new_func->hasAttrOfType<ArrayAttr>("tf_quant.quantized_ops")) {
-      new_func->emitError() << "Missing \"tf_quant.quantized_ops\" "
-                               "attribute in the quantized composite function.";
-      signalPassFailure();
-    }
   }
 }
 
@@ -202,9 +177,9 @@ void InsertQuantizedFunctionsPass::runOnOperation() {
 
 // Creates an instance of the pass for inserting quantized functions.
 std::unique_ptr<OperationPass<ModuleOp>> CreateInsertQuantizedFunctionsPass(
-    QuantMethod quantization_method, OpSet target_opset) {
+    QuantizationMethod quantization_method, const OpSet& op_set) {
   return std::make_unique<InsertQuantizedFunctionsPass>(quantization_method,
-                                                        target_opset);
+                                                        op_set);
 }
 
 }  // namespace quant

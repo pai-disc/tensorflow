@@ -96,7 +96,7 @@ void ComputeCostPass::runOnOperation() {
       signalPassFailure();
     }
 
-    float total_cost = GetCostForFunc(&func, *target);
+    float total_cost = GetCostForFunc(&func, target.getValue());
     OpBuilder builder(func);
     UpdateCost(func, total_cost, &builder);
   }

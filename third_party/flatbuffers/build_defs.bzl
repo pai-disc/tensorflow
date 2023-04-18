@@ -362,7 +362,7 @@ _gen_flatbuffer_srcs = rule(
         "_flatc": attr.label(
             default = Label("@flatbuffers//:flatc"),
             executable = True,
-            cfg = "exec",
+            cfg = "host",
         ),
     },
     output_to_genfiles = True,

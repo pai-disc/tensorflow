@@ -24,7 +24,7 @@ static bool InitModule() {
   VLOG(1) << "DisabledManifestPath: " << *DisabledManifestPath();
   *TestPlatform() = XLA_PLATFORM;
   VLOG(1) << "TestPlatform: " << *TestPlatform();
-  return true;
+  return false;
 }
 
 static bool module_initialized = InitModule();

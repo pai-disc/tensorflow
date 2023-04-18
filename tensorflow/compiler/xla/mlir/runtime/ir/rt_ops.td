@@ -67,14 +67,13 @@ def RT_ExportOp : RT_Op<"export", [
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "mlir::FunctionOpInterface":$function_ref)>,
-    OpBuilder<(ins "mlir::FunctionOpInterface":$function_ref, 
-                   "unsigned":$ordinal)>,
+    OpBuilder<(ins "mlir::func::FuncOp":$function_ref)>,
+    OpBuilder<(ins "mlir::func::FuncOp":$function_ref, "unsigned":$ordinal)>,
   ];
 
   let extraClassDeclaration = [{
     llvm::Optional<unsigned> ordinal();
-    mlir::FunctionOpInterface exported(mlir::SymbolTable& sym_table);
+    mlir::func::FuncOp exported(mlir::SymbolTable& sym_table);
   }];
 
   let assemblyFormat = "$function_ref (`ordinal` $ordinal^)? attr-dict";
@@ -244,7 +243,7 @@ def RT_CallOp : RT_Op<"call"> {
     ExecutionContextType:$ctx,
     StrAttr:$callee,
     UnitAttr:$dynamic,
-    Variadic<AnyType>:$arguments
+    Variadic<AnyType>:$operands
   );
 
   let results = (outs
@@ -253,8 +252,8 @@ def RT_CallOp : RT_Op<"call"> {
   );
 
   let assemblyFormat = [{
-    (`dynamic` $dynamic^)? $ctx `[` $callee `]`  `(` $arguments `)`
-    attr-dict `:` functional-type($arguments, $results)
+    (`dynamic` $dynamic^)? $ctx `[` $callee `]`  `(` $operands `)`
+    attr-dict `:` functional-type($operands, $results)
   }];
 }
 
@@ -328,9 +327,9 @@ def RT_YieldOp : RT_Op<"yield",
     the users of `rt.trace` operation results.
   }];
 
-  let arguments = (ins Variadic<AnyType>:$arguments);
+  let arguments = (ins Variadic<AnyType>:$operands);
 
-  let assemblyFormat = "($arguments^ `:` type($arguments))? attr-dict";
+  let assemblyFormat = "($operands^ `:` type($operands))? attr-dict";
 
   // Default builder needed for ensureTerminator
   let builders = [OpBuilder<(ins), "build($_builder, $_state, {});">];

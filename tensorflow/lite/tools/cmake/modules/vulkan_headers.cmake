@@ -17,7 +17,7 @@ if(TARGET vulkan_headers OR vulkan_headers_POPULATED)
   return()
 endif()
 
-include(OverridableFetchContent)
+include(FetchContent)
 
 OverridableFetchContent_Declare(
   vulkan_headers

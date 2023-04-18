@@ -125,8 +125,6 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
     explicit Iterator(const Params& params)
         : DatasetIterator<Dataset>(params) {}
 
-    bool SymbolicCheckpointCompatible() const override { return true; }
-
     Status Initialize(IteratorContext* ctx) override {
       TF_RETURN_IF_ERROR(
           dataset()->input_->MakeIterator(ctx, this, prefix(), &input_impl_));
@@ -147,10 +145,8 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
           // We are currently processing a mapped element, so try to get the
           // next subelement.
           bool end_of_element;
-          auto nested_ctx = MakeNestedIteratorContext(ctx);
           TF_RETURN_IF_ERROR(current_element_iterator_->GetNext(
-              &nested_ctx, out_tensors, &end_of_element));
-          ctx->MergeCheckpoint(nested_ctx.checkpoint());
+              MakeNestedIteratorContext(ctx), out_tensors, &end_of_element));
           if (!end_of_element) {
             // Produce the subelement as output.
             *end_of_sequence = false;
@@ -159,7 +155,6 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
 
           // We have reached the end of the current element, so maybe move on
           // to the next element.
-          ctx->PurgeCheckpoint(current_element_iterator_->prefix());
           current_element_iterator_.reset();
         }
 
@@ -228,15 +223,10 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
       TF_RETURN_IF_ERROR(ctx->HandleCheckExternalStateStatus(
           dataset()->captured_func_->CheckExternalState()));
       mutex_lock l(mu_);
-      TF_RETURN_IF_ERROR(writer->WriteScalar(
-          full_name(kExhausted), static_cast<int64_t>(!input_impl_)));
       if (input_impl_) {
         TF_RETURN_IF_ERROR(SaveInput(ctx, writer, input_impl_));
         TF_RETURN_IF_ERROR(
             writer->WriteScalar(full_name(kElementIndex), element_index_));
-        TF_RETURN_IF_ERROR(writer->WriteScalar(
-            full_name(kCurrentElementIteratorUninitialized),
-            static_cast<int64_t>(!current_element_iterator_)));
         if (current_element_iterator_) {
           TF_RETURN_IF_ERROR(
               writer->WriteScalar(full_name(kInputsSize), inputs_.size()));
@@ -245,7 +235,12 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
                 full_name(strings::StrCat(kInputs, "[", i, "]")), inputs_[i]));
           }
           TF_RETURN_IF_ERROR(SaveInput(ctx, writer, current_element_iterator_));
+        } else {
+          TF_RETURN_IF_ERROR(writer->WriteScalar(
+              full_name(kCurrentElementIteratorUninitialized), ""));
         }
+      } else {
+        TF_RETURN_IF_ERROR(writer->WriteScalar(full_name(kExhausted), ""));
       }
       return OkStatus();
     }
@@ -257,10 +252,7 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
       element_index_ = 0;
       current_element_iterator_.reset();
       inputs_.clear();
-      int64_t input_exhausted;
-      TF_RETURN_IF_ERROR(
-          reader->ReadScalar(full_name(kExhausted), &input_exhausted));
-      if (!static_cast<bool>(input_exhausted)) {
+      if (!reader->Contains(full_name(kExhausted))) {
         TF_RETURN_IF_ERROR(
             dataset()->input_->MakeIterator(ctx, this, prefix(), &input_impl_));
         TF_RETURN_IF_ERROR(RestoreInput(ctx, reader, input_impl_));
@@ -270,11 +262,8 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
               reader->ReadScalar(full_name(kElementIndex), &temp));
           element_index_ = temp;
         }
-        int64_t current_element_iterator_uninitialized;
-        TF_RETURN_IF_ERROR(
-            reader->ReadScalar(full_name(kCurrentElementIteratorUninitialized),
-                               &current_element_iterator_uninitialized));
-        if (!static_cast<bool>(current_element_iterator_uninitialized)) {
+        if (!reader->Contains(
+                full_name(kCurrentElementIteratorUninitialized))) {
           size_t inputs_size;
           {
             int64_t temp;
@@ -304,11 +293,17 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
     Status BuildCurrentElementIteratorLocked(IteratorContext* ctx,
                                              bool is_get_next)
         TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
-      // NOTE: We intentionally ignore resource modeling outside GetNext().
-      std::shared_ptr<model::Node> node = is_get_next ? model_node() : nullptr;
-      return MakeIteratorFromInputElement(
-          ctx, this, inputs_, element_index_++, *instantiated_captured_func_,
-          prefix(), &current_element_iterator_, node);
+      if (is_get_next) {
+        return MakeIteratorFromInputElement(
+            ctx, this, inputs_, element_index_++, *instantiated_captured_func_,
+            prefix(), &current_element_iterator_, model_node());
+      } else {
+        // NOTE: We intentionally ignore resource modeling outside GetNext().
+        return MakeIteratorFromInputElement(
+            ctx, this, inputs_, element_index_++, *instantiated_captured_func_,
+            prefix(), &current_element_iterator_,
+            /*node=*/nullptr);
+      }
     }
 
     mutex mu_;

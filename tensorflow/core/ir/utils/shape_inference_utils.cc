@@ -24,7 +24,6 @@ limitations under the License.
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Casting.h"
 #include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
-#include "mlir/IR/BuiltinTypeInterfaces.h"  // from @llvm-project
 #include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
 #include "mlir/IR/Value.h"  // from @llvm-project
@@ -86,19 +85,19 @@ NamedAttrList GetAllAttributesFromOperation(Operation* op) {
 // those where num_elements overflows.
 // TODO(tlongeri): Should num_elements overflow be handled by the MLIR
 // verifier? Are there other cases?
-std::optional<tensorflow::PartialTensorShape> GetShapeFromMlirType(Type t) {
+Optional<tensorflow::PartialTensorShape> GetShapeFromMlirType(Type t) {
   if (auto ranked_type = t.dyn_cast<RankedTensorType>()) {
     tensorflow::PartialTensorShape shape;
     const tensorflow::Status status =
         tensorflow::PartialTensorShape::BuildPartialTensorShape(
-            ConvertMlirShapeToTF(ranked_type.getShape()), &shape);
+            ranked_type.getShape(), &shape);
     if (status.ok()) return shape;
   }
-  return llvm::None;
+  return None;
 }
 
 // Extracts a PartialTensorShape from the MLIR attr.
-std::optional<tensorflow::PartialTensorShape> GetShapeFromMlirAttr(Value v) {
+Optional<tensorflow::PartialTensorShape> GetShapeFromMlirAttr(Value v) {
   // Function arguments may have shape attr to describe its output shape.
   if (auto arg = v.dyn_cast<BlockArgument>()) {
     Operation* parent_op = arg.getOwner()->getParentOp();
@@ -106,7 +105,7 @@ std::optional<tensorflow::PartialTensorShape> GetShapeFromMlirAttr(Value v) {
       int arg_idx = arg.getArgNumber();
       auto attrs =
           func_op.getArgAttrOfType<ArrayAttr>(arg_idx, "tf._output_shapes");
-      if (!attrs || attrs.size() != 1) return llvm::None;
+      if (!attrs || attrs.size() != 1) return None;
 
       // "tf._output_shapes" in certain models may not store the shape as
       // ShapeAttr, ignore them because we don't know how to interpret it.
@@ -115,7 +114,7 @@ std::optional<tensorflow::PartialTensorShape> GetShapeFromMlirAttr(Value v) {
         return tensorflow::PartialTensorShape(shape_attr.getShape());
     }
   }
-  return llvm::None;
+  return None;
 }
 
 // Gets the subtype's shape and data type for `type`. Templated to support both
@@ -157,7 +156,7 @@ GetSubtypes(Type type) {
 }
 
 // Log a shape inference function call failure.
-LogicalResult ReportErrorFromShapeFunction(std::optional<Location> location,
+LogicalResult ReportErrorFromShapeFunction(Optional<Location> location,
                                            llvm::StringRef op_name,
                                            llvm::StringRef error_message) {
   VLOG(3) << "TensorFlow shape inference function errored for op '"
@@ -166,9 +165,9 @@ LogicalResult ReportErrorFromShapeFunction(std::optional<Location> location,
 }
 
 // Extracts shape from a shape handle and inference context.
-std::optional<SmallVector<int64_t, 8>> GetShapeFromHandle(
-    InferenceContext& context, const ShapeHandle& sh) {
-  if (!context.RankKnown(sh)) return llvm::None;
+Optional<SmallVector<int64_t, 8>> GetShapeFromHandle(InferenceContext& context,
+                                                     const ShapeHandle& sh) {
+  if (!context.RankKnown(sh)) return None;
   SmallVector<int64_t, 8> shape;
   for (int dim : llvm::seq<int>(0, context.Rank(sh)))
     shape.push_back(context.Value(context.Dim(sh, dim)));
@@ -180,7 +179,7 @@ TensorType CreateTensorType(InferenceContext& context, const ShapeHandle& sh,
                             Type element_type) {
   auto shape = GetShapeFromHandle(context, sh);
   if (shape.has_value())
-    return GetTypeFromTFTensorShape(shape.value(), element_type, {});
+    return GetTypeFromTFTensorShape(shape.getValue(), element_type, {});
   return UnrankedTensorType::get(element_type);
 }
 
@@ -190,15 +189,30 @@ ShapedTypeComponents CreateShapedTypeComponents(InferenceContext& context,
                                                 Type element_type) {
   auto shape = GetShapeFromHandle(context, sh);
   if (shape.has_value())
-    return ShapedTypeComponents(ConvertTFShapeToMlir(shape.value()),
-                                element_type);
+    return ShapedTypeComponents(shape.getValue(), element_type);
   return ShapedTypeComponents(element_type);
+}
+
+llvm::SmallVector<int64_t> ConvertTFShapeToMlir(
+    llvm::ArrayRef<int64_t> shapes) {
+  return llvm::to_vector(llvm::map_range(shapes, [](int64_t shape) {
+    return shape == InferenceContext::kUnknownDim
+               ? mlir::ShapedType::kDynamicSize
+               : shape;
+  }));
 }
 
 }  // namespace
 
+mlir::RankedTensorType GetTypeFromTFTensorShape(llvm::ArrayRef<int64_t> shape,
+                                                mlir::Type elementType,
+                                                mlir::Attribute encoding) {
+  return mlir::RankedTensorType::get(ConvertTFShapeToMlir(shape), elementType,
+                                     encoding);
+}
+
 LogicalResult InferReturnTypeComponentsForTFOp(
-    std::optional<Location> location, Operation* op, ValueRange operands,
+    Optional<Location> location, Operation* op, ValueRange operands,
     int64_t graph_version, OperandAsConstantFn operand_as_constant_fn,
     OpResultAsShapeFn op_result_as_shape_fn,
     ResultElementTypeFn result_element_type_fn,
@@ -393,7 +407,7 @@ LogicalResult InferReturnTypeComponentsForTFOp(
 }
 
 LogicalResult InferReturnTypeComponentsForTFOp(
-    std::optional<Location> location, Operation* op, ValueRange operands,
+    Optional<Location> location, Operation* op, ValueRange operands,
     int64_t graph_version, OperandAsConstantFn operand_as_constant_fn,
     OpResultAsShapeFn op_result_as_shape_fn,
     ResultElementTypeFn result_element_type_fn,

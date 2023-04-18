@@ -3,10 +3,7 @@
 load("//tensorflow:tensorflow.bzl", "tf_custom_op_library")
 load("//tensorflow:tensorflow.default.bzl", "tf_py_test")
 
-package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    licenses = ["notice"],
-)
+package(licenses = ["notice"])
 
 # Custom op tests
 tf_custom_op_library(

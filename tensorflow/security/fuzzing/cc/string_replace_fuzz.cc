@@ -16,7 +16,7 @@ limitations under the License.
 #include <cstdlib>
 #include <string>
 
-#include "fuzztest/fuzztest.h"
+#include "testing/fuzzing/fuzztest.h"
 #include "tensorflow/core/platform/str_util.h"
 #include "tensorflow/core/platform/stringpiece.h"
 

@@ -52,7 +52,7 @@ StatusOr<std::string> ToJson(const tsl::protobuf::Message& message) {
                                                          json_options);
   if (!status.ok()) {
     return InternalError("MessageToJsonString failed: %s",
-                         std::string{status.message()});
+                         status.error_message().data());
   }
   return json_output;
 }

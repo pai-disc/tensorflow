@@ -15,15 +15,13 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/python/profiler.h"
 
-#include <memory>
-
 #include "pybind11/pybind11.h"
-#include "tensorflow/compiler/xla/python/profiler/internal/traceme_wrapper.h"
 #include "tensorflow/compiler/xla/python/types.h"
 #include "tensorflow/compiler/xla/status.h"
-#include "tensorflow/tsl/profiler/lib/profiler_session.h"
-#include "tensorflow/tsl/profiler/rpc/client/capture_profile.h"
-#include "tensorflow/tsl/profiler/rpc/profiler_server.h"
+#include "tensorflow/core/profiler/lib/profiler_session.h"
+#include "tensorflow/core/profiler/rpc/client/capture_profile.h"
+#include "tensorflow/core/profiler/rpc/profiler_server.h"
+#include "tensorflow/python/profiler/internal/traceme_wrapper.h"
 
 namespace xla {
 
@@ -32,13 +30,14 @@ namespace py = pybind11;
 namespace {
 // Adds a trivial forwarding class so these Python bindings and TensorFlow's
 // bindings of the same thing don't register the same class with pybind11.
-class TraceMeWrapper : public xla::profiler::TraceMeWrapper {
+class TraceMeWrapper : public tensorflow::profiler::TraceMeWrapper {
  public:
-  using xla::profiler::TraceMeWrapper::TraceMeWrapper;
+  using tensorflow::profiler::TraceMeWrapper::TraceMeWrapper;
 };
 
 tensorflow::ProfileOptions DefaultPythonProfileOptions() {
-  tensorflow::ProfileOptions options = tsl::ProfilerSession::DefaultOptions();
+  tensorflow::ProfileOptions options =
+      tensorflow::ProfilerSession::DefaultOptions();
   options.set_python_tracer_level(1);
   options.set_enable_hlo_proto(true);
   return options;
@@ -48,35 +47,36 @@ tensorflow::ProfileOptions DefaultPythonProfileOptions() {
 void BuildProfilerSubmodule(py::module* m) {
   py::module profiler =
       m->def_submodule("profiler", "TensorFlow profiler integration");
-  py::class_<tsl::profiler::ProfilerServer,
-             std::unique_ptr<tsl::profiler::ProfilerServer>>
+  py::class_<tensorflow::profiler::ProfilerServer,
+             std::unique_ptr<tensorflow::profiler::ProfilerServer>>
       profiler_server_class(profiler, "ProfilerServer");
   profiler.def(
       "start_server",
-      [](int port) -> std::unique_ptr<tsl::profiler::ProfilerServer> {
-        auto server = std::make_unique<tsl::profiler::ProfilerServer>();
+      [](int port) -> std::unique_ptr<tensorflow::profiler::ProfilerServer> {
+        auto server = std::make_unique<tensorflow::profiler::ProfilerServer>();
         server->StartProfilerServer(port);
         return server;
       },
       py::arg("port"));
 
-  py::class_<tsl::ProfilerSession> profiler_session_class(profiler,
-                                                          "ProfilerSession");
+  py::class_<tensorflow::ProfilerSession> profiler_session_class(
+      profiler, "ProfilerSession");
   profiler_session_class
       .def(py::init([]() {
-        return tsl::ProfilerSession::Create(DefaultPythonProfileOptions());
+        return tensorflow::ProfilerSession::Create(
+            DefaultPythonProfileOptions());
       }))
       .def(py::init([](const tensorflow::ProfileOptions& options) {
-        return tsl::ProfilerSession::Create(options);
+        return tensorflow::ProfilerSession::Create(options);
       }))
       .def("stop_and_export",
-           [](tsl::ProfilerSession* sess,
+           [](tensorflow::ProfilerSession* sess,
               const std::string& tensorboard_dir) -> xla::Status {
              tensorflow::profiler::XSpace xspace;
              // Disables the ProfilerSession
              TF_RETURN_IF_ERROR(sess->CollectData(&xspace));
-             return tsl::profiler::ExportToTensorBoard(
-                 xspace, tensorboard_dir, /* also_export_trace_json= */ true);
+             return tensorflow::profiler::ExportToTensorBoard(xspace,
+                                                              tensorboard_dir);
            });
 
   py::class_<tensorflow::ProfileOptions> profile_options_class(

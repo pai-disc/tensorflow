@@ -15,7 +15,6 @@
 
 """Functional tests for DepthToSpace op."""
 
-from absl.testing import parameterized
 import numpy as np
 
 from tensorflow.python.client import device_lib
@@ -32,7 +31,7 @@ from tensorflow.python.platform import test
 from tensorflow.python.platform import tf_logging
 
 
-class DepthToSpaceTest(test.TestCase, parameterized.TestCase):
+class DepthToSpaceTest(test.TestCase):
 
   def _testOne(self, inputs, block_size, outputs, dtype=dtypes.float32):
     input_nhwc = math_ops.cast(inputs, dtype)
@@ -64,13 +63,19 @@ class DepthToSpaceTest(test.TestCase, parameterized.TestCase):
         output_nhwc = test_util.NCHWToNHWC(output_nchw)
         self.assertAllEqual(output_nhwc, outputs)
 
-  @parameterized.parameters(dtypes.float32, dtypes.float16, dtypes.bfloat16)
   @test_util.run_deprecated_v1
-  def testBasic(self, dtype):
+  def testBasic(self):
     x_np = [[[[1, 2, 3, 4]]]]
     block_size = 2
     x_out = [[[[1], [2]], [[3], [4]]]]
-    self._testOne(x_np, block_size, x_out, dtype)
+    self._testOne(x_np, block_size, x_out)
+
+  @test_util.run_deprecated_v1
+  def testBasicFloat16(self):
+    x_np = [[[[1, 2, 3, 4]]]]
+    block_size = 2
+    x_out = [[[[1], [2]], [[3], [4]]]]
+    self._testOne(x_np, block_size, x_out, dtype=dtypes.float16)
 
   # Tests for larger input dimensions. To make sure elements are
   # correctly ordered spatially.

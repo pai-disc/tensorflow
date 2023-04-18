@@ -61,7 +61,7 @@ class RemoveTfIfConstArgs
       llvm::SmallVector<unsigned, 2> const_arg_indices;
       // Record the remaining operands that won't be removed.
       llvm::SmallVector<mlir::Value, 2> remaining_args;
-      for (auto iter : llvm::enumerate(if_op.getInput())) {
+      for (auto iter : llvm::enumerate(if_op.input())) {
         mlir::Value operand = iter.value();
         if (auto const_op = operand.getDefiningOp<mlir::TF::ConstOp>()) {
           const_args.push_back(const_op);
@@ -95,10 +95,10 @@ class RemoveTfIfConstArgs
 
     // Change the if_op's argumetns to the new arguments, branches to new
     // branches. Note that the outputs are not changed.
-    if_op.getInputMutable().assign(remaining_args);
-    if_op.setThenBranchAttr(
+    if_op.inputMutable().assign(remaining_args);
+    if_op.then_branchAttr(
         mlir::SymbolRefAttr::get(builder.getContext(), new_then_function_name));
-    if_op.setElseBranchAttr(
+    if_op.else_branchAttr(
         mlir::SymbolRefAttr::get(builder.getContext(), new_else_function_name));
   }
 
@@ -153,8 +153,7 @@ class RemoveTfIfConstArgs
         new_branch.getLoc(), new_branch_type.getResults(), call_args,
         branch.getSymName(), "", "", "");
     // Note that the outputs are not changed.
-    builder.create<mlir::func::ReturnOp>(new_branch.getLoc(),
-                                         call_op.getOutput());
+    builder.create<mlir::func::ReturnOp>(new_branch.getLoc(), call_op.output());
 
     return new_branch.getSymName();
   }

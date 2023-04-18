@@ -16,16 +16,14 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_XLA_SERVICE_GPU_MULTI_OUTPUT_FUSION_H_
 #define TENSORFLOW_COMPILER_XLA_SERVICE_GPU_MULTI_OUTPUT_FUSION_H_
 
-#include <memory>
 #include <queue>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_module.h"
-#include "tensorflow/compiler/xla/service/gpu/gpu_device_info.h"
 #include "tensorflow/compiler/xla/service/gpu/gpu_fusible.h"
 #include "tensorflow/compiler/xla/service/gpu/gpu_hlo_cost_analysis.h"
+#include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_pass_interface.h"
 #include "tensorflow/compiler/xla/service/hlo_reachability.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -92,10 +90,11 @@ namespace gpu {
 //   the fusion kinds must match.
 
 class GpuMultiOutputFusion : public HloModulePass {
+  HloCostAnalysis::ShapeSizeFunction shape_size_function_;
+
  public:
-  explicit GpuMultiOutputFusion(const GpuDeviceInfo& d,
-                                HloCostAnalysis::ShapeSizeFunction f)
-      : device_info_(d), shape_size_function_(f) {}
+  explicit GpuMultiOutputFusion(HloCostAnalysis::ShapeSizeFunction f)
+      : shape_size_function_(f) {}
 
   absl::string_view name() const override { return "multi_output_fusion"; }
 
@@ -121,9 +120,6 @@ class GpuMultiOutputFusion : public HloModulePass {
 
   // The reachability map of current computation.
   std::unique_ptr<HloReachabilityMap> reachability_;
-
-  const GpuDeviceInfo device_info_;
-  HloCostAnalysis::ShapeSizeFunction shape_size_function_;
 };
 
 }  // namespace gpu

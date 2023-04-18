@@ -48,34 +48,39 @@ using xla::runtime::AsyncRuntimeObject;
 using tsl::port::AlignedFree;
 using tsl::port::AlignedMalloc;
 
-struct AsyncToken : public AsyncRuntimeObject {
+class AsyncToken : public AsyncRuntimeObject {
+ public:
   explicit AsyncToken(unsigned ref_count = 1)
       : AsyncRuntimeObject(ref_count),
-        chain(MakeConstructedAsyncValueRef<Chain>(storage)) {}
+        chain_(MakeConstructedAsyncValueRef<Chain>(storage_)) {}
 
-  tsl::AsyncValue* GetAsyncValue() const { return chain.AsPtr().value(); }
+  tsl::AsyncValue* GetAsyncValue() const { return chain_.AsPtr().value(); }
 
-  AsyncValueStorage<Chain> storage;
-  AsyncValueOwningRef<Chain> chain;
+ private:
+  AsyncValueStorage<Chain> storage_;
+  AsyncValueOwningRef<Chain> chain_;
 };
 
-struct AsyncValue : public AsyncRuntimeObject {
+class AsyncValue : public AsyncRuntimeObject {
+ public:
   explicit AsyncValue(size_t size, size_t alignment, unsigned ref_count = 1)
       : AsyncRuntimeObject(ref_count),
-        data_storage(size, alignment),
-        chain(MakeConstructedAsyncValueRef<Chain>(storage)) {
+        data_storage_(size, alignment),
+        chain_(MakeConstructedAsyncValueRef<Chain>(storage_)) {
     // Storage memory will be initialized by the compiled executable.
     ABSL_ANNOTATE_MEMORY_IS_INITIALIZED(GetStorage(), size);
   }
 
-  std::byte* GetStorage() {
+  void* GetStorage() {
     assert(!GetAsyncValue()->IsError() && "unexpected error state");
-    if (data_storage.is_inline) return &data_storage.inline_buffer[0];
-    return data_storage.allocated_buffer;
+    if (data_storage_.is_inline)
+      return reinterpret_cast<void*>(&data_storage_.inline_buffer[0]);
+    return data_storage_.allocated_buffer;
   }
 
-  tsl::AsyncValue* GetAsyncValue() const { return chain.AsPtr().value(); }
+  tsl::AsyncValue* GetAsyncValue() const { return chain_.AsPtr().value(); }
 
+ private:
   // If the requested async value storage is small, use the inlined storage.
   // Fall back on dynamic allocation if the requested storage size is large.
   struct Storage {
@@ -84,9 +89,7 @@ struct AsyncValue : public AsyncRuntimeObject {
 
     Storage(size_t size, size_t alignment)
         : is_inline(CanStoreInline(size, alignment)) {
-      if (!is_inline)
-        allocated_buffer =
-            reinterpret_cast<std::byte*>(AlignedMalloc(size, alignment));
+      if (!is_inline) allocated_buffer = AlignedMalloc(size, alignment);
     }
 
     ~Storage() {
@@ -101,67 +104,69 @@ struct AsyncValue : public AsyncRuntimeObject {
     bool is_inline;
     union {
       alignas(kAlign) std::array<std::byte, kSize> inline_buffer;
-      std::byte* allocated_buffer;
+      void* allocated_buffer;
     };
   };
 
-  Storage data_storage;
+  Storage data_storage_;
 
   // Async value that tracks value readiness. It becomes available when result
   // is written to the data storage and ready for consumption.
-  AsyncValueStorage<Chain> storage;
-  AsyncValueOwningRef<Chain> chain;
+  AsyncValueStorage<Chain> storage_;
+  AsyncValueOwningRef<Chain> chain_;
 };
 
-struct AsyncGroup : public AsyncRuntimeObject {
+class AsyncGroup : public AsyncRuntimeObject {
+ public:
   explicit AsyncGroup(int64_t size, unsigned ref_count = 1)
       : AsyncRuntimeObject(ref_count),
-        size(size),
-        rank(0),
-        pending_tokens(size),
-        num_errors(0),
-        completed(size == 0 ? MakeAvailableAsyncValueRef<Chain>(storage)
-                            : MakeConstructedAsyncValueRef<Chain>(storage)) {
-    assert(size >= 0 && "size can't be negative");
+        size_(size),
+        rank_(0),
+        pending_tokens_(size),
+        num_errors_(0),
+        completed_(size_ == 0 ? MakeAvailableAsyncValueRef<Chain>(storage_)
+                              : MakeConstructedAsyncValueRef<Chain>(storage_)) {
+    assert(size_ >= 0 && "size can't be negative");
   }
 
   size_t AddToken(AsyncToken* token) {
-    size_t token_rank = rank.fetch_add(1, std::memory_order_relaxed);
-    assert(token_rank < size && "can't add more tokens than the group size");
+    size_t rank = rank_.fetch_add(1, std::memory_order_relaxed);
+    assert(rank < size_ && "can't add more tokens than the group size");
 
     // When token becomes available drop the number of pending tokens and maybe
     // make the group completion async value available.
     token->GetAsyncValue()->AndThen([group = this, token]() {
       // Increment the number of errors in the group.
-      if (token->GetAsyncValue()->IsError()) group->num_errors.fetch_add(1);
+      if (token->GetAsyncValue()->IsError()) group->num_errors_.fetch_add(1);
 
       // Pending tokens can't drop below zero.
-      assert(group->pending_tokens > 0 && "wrong group size");
+      assert(group->pending_tokens_ > 0 && "wrong group size");
 
       // We do track group error state with the number of errors, and never
       // set completion async value state to error.
-      if (group->pending_tokens.fetch_sub(1) == 1)
-        group->completed.AsPtr().SetStateConcrete();
+      if (group->pending_tokens_.fetch_sub(1) == 1)
+        group->completed_.AsPtr().SetStateConcrete();
     });
 
-    return token_rank;
+    return rank;
   }
 
   tsl::AsyncValue* GetCompletionAsyncValue() const {
-    return completed.AsPtr().value();
+    return completed_.AsPtr().value();
   }
 
-  bool IsError() const { return num_errors.load() != 0; }
+  bool IsError() const { return num_errors_.load() != 0; }
 
-  int64_t size;
-  std::atomic<int64_t> rank;
-  std::atomic<int64_t> pending_tokens;
-  std::atomic<int64_t> num_errors;
+ private:
+  int64_t size_;
+  std::atomic<int64_t> rank_;
+  std::atomic<int64_t> pending_tokens_;
+  std::atomic<int64_t> num_errors_;
 
   // Async value that keeps track the group completion, it will become available
   // when the number of pending tokens will drop to zero.
-  AsyncValueStorage<Chain> storage;
-  AsyncValueOwningRef<Chain> completed;
+  AsyncValueStorage<Chain> storage_;
+  AsyncValueOwningRef<Chain> completed_;
 };
 
 }  // namespace runtime
@@ -204,7 +209,7 @@ static_assert(sizeof(AsyncRuntime) == 1 * sizeof(void*),
   return async_runtime;
 }
 
-/*static*/ std::byte* AsyncRuntime::GetStorage(Value* value) {
+/*static*/ void* AsyncRuntime::GetStorage(Value* value) {
   return value->GetStorage();
 }
 
@@ -335,21 +340,6 @@ static_assert(sizeof(AsyncRuntime) == 1 * sizeof(void*),
 
 /*static*/ void AsyncRuntime::AwaitGroup(AsyncRuntime::Group* group) {
   Await(group->GetCompletionAsyncValue());
-}
-
-/*static*/ AsyncRuntime::Token* AsyncRuntime::AsToken(
-    tsl::AsyncValueRef<tsl::Chain> chain) {
-  AsyncRuntime::Token* token = CreateToken();
-
-  chain.AndThen([token](absl::StatusOr<tsl::Chain*> status_or) {
-    if (!status_or.ok()) {
-      SetError(token);
-    } else {
-      SetAvailable(token);
-    }
-  });
-
-  return token;
 }
 
 }  // namespace runtime

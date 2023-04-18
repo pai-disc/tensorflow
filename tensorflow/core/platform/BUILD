@@ -17,6 +17,7 @@ load(
     "tf_additional_lib_hdrs",
     "tf_additional_tensor_coding_deps",
     "tf_google_mobile_srcs_only_runtime",
+    "tf_kernel_tests_linkstatic",
     "tf_platform_alias",
     "tf_platform_deps",
     "tf_windows_aware_platform_deps",
@@ -38,10 +39,6 @@ load(
     "tf_cuda_library",
 )
 load(
-    "//tensorflow/tsl/platform/default:cuda_build_defs.bzl",
-    "if_cuda_is_configured",
-)
-load(
     "@local_config_rocm//rocm:build_defs.bzl",
     "if_rocm_is_configured",
 )
@@ -49,7 +46,6 @@ load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("//tensorflow:tensorflow.default.bzl", "filegroup", "get_compatible_with_portable", "tf_cuda_cc_test")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//visibility:public",
     ],
@@ -75,7 +71,6 @@ exports_files(
         "env_time.h",
         "file_system.h",
         "file_system_helper.h",
-        "float8.h",
         "host_info.h",
         "human_readable_json.h",
         "init_main.h",
@@ -127,15 +122,6 @@ cc_library(
     deps = [
         "//tensorflow/core/platform:byte_order",
         "//tensorflow/tsl/platform:bfloat16",
-    ],
-)
-
-cc_library(
-    name = "float8",
-    hdrs = ["float8.h"],
-    compatible_with = get_compatible_with_portable(),
-    deps = [
-        "//tensorflow/tsl/platform:float8",
     ],
 )
 
@@ -206,12 +192,6 @@ cc_library(
         "//tensorflow/tsl/platform:platform_port",
         "@com_google_absl//absl/base",
     ],
-)
-
-# Required to avoid ODR issues in the pybind wrapper.
-cc_library(
-    name = "cpu_feature_guard_hdr",
-    hdrs = ["cpu_feature_guard.h"],
 )
 
 cc_library(
@@ -935,7 +915,6 @@ cc_library(
     compatible_with = get_compatible_with_portable(),
     deps = [
         ":bfloat16",
-        ":float8",
         ":platform",
         ":tstring",
         "//tensorflow/tsl/framework:device_type",
@@ -1033,23 +1012,13 @@ cc_binary(
     ] + if_not_android([":rocm_rocdl_path"]),
 )
 
-cc_library(
-    name = "gpu_all_runtime",
-    visibility = ["//visibility:private"],
-    deps = if_cuda_is_configured(
-        ["//tensorflow/compiler/xla/stream_executor/cuda:all_runtime"],
-    ) + if_rocm_is_configured(
-        ["//tensorflow/compiler/xla/stream_executor/rocm:all_runtime"],
-    ),
-)
-
 # This do-nothing lib should only be used as a dep in cuda_deps in :stream_executor cuda lib because
 # the "+" operator doesn't work for bazel in stream_executor cuda_deps.
 cc_library(
     name = "private_static_dep",
     visibility = ["//visibility:private"],
     deps = if_static(
-        [":gpu_all_runtime"],
+        ["//tensorflow/compiler/xla/stream_executor/cuda:all_runtime"],
     ),
 )
 
@@ -1204,7 +1173,6 @@ tf_cc_tests(
         "//tensorflow/tsl/platform/profile_utils:cpu_utils_test.cc",
     ],
     create_named_test_suite = True,
-    tags = ["no_mac_arm64"],
     deps = [
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
@@ -1313,6 +1281,7 @@ tf_cuda_cc_test(
     name = "rocm_rocdl_path_test",
     size = "small",
     srcs = ["rocm_rocdl_path_test.cc"],
+    linkstatic = tf_kernel_tests_linkstatic(),
     tags = tf_gpu_tests_tags(),
     deps = [
         ":rocm_rocdl_path",
@@ -1379,7 +1348,6 @@ filegroup(
         "file_system.h",
         "file_system_helper.h",
         "fingerprint.h",
-        "float8.h",
         "init_main.h",
         "logger.h",
         "mem.h",
@@ -1462,7 +1430,6 @@ filegroup(
         "byte_order.h",
         "cpu_info.h",
         "dynamic_annotations.h",
-        "float8.h",
         "macros.h",
         "mutex.h",
         "platform.h",
@@ -1481,7 +1448,6 @@ filegroup(
     name = "lib_internal_private_hdrs",
     srcs = [
         "bfloat16.h",
-        "float8.h",
         "raw_coding.h",
         "scanner.h",
         "str_util.h",
@@ -1533,7 +1499,6 @@ filegroup(
     name = "tflite_portable_logging_hdrs",
     srcs = [
         "bfloat16.h",
-        "float8.h",
         "logging.h",
         "macros.h",
         "platform.h",
@@ -1612,7 +1577,6 @@ filegroup(
         "file_statistics.h",
         "file_system.h",
         "file_system_helper.h",
-        "float8.h",
         "hash.h",
         "host_info.h",
         "init_main.h",

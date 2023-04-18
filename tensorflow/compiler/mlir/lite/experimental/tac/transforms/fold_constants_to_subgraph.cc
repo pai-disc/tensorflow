@@ -23,11 +23,9 @@ limitations under the License.
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
-#include "mlir/Dialect/Arith/IR/Arith.h"  // from @llvm-project
 #include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/IR/Builders.h"  // from @llvm-project
 #include "mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "mlir/IR/BuiltinTypeInterfaces.h"  // from @llvm-project
 #include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
 #include "mlir/Pass/Pass.h"  // from @llvm-project
@@ -89,9 +87,8 @@ class FoldConstantsToSubgraphPass
 
 void CopyConstantIntoFunc(int argument_index, Operation* const_op,
                           func::FuncOp func) {
-  assert(
-      (llvm::isa<TFL::ConstOp, TFL::QConstOp, arith::ConstantOp>(const_op)) &&
-      "Expect QConst or Const op.");
+  assert((llvm::isa<TFL::ConstOp, TFL::QConstOp>(const_op)) &&
+         "Expect QConst or Const op.");
   OpBuilder builder(func.getBody());
   auto cloned_const_op = const_op->clone();
   cloned_const_op->setLoc(func.getBody().getLoc());
@@ -102,16 +99,13 @@ void CopyConstantIntoFunc(int argument_index, Operation* const_op,
 }
 
 bool IsConstOrQConstInt(Operation* op) {
-  if (!llvm::isa<TFL::ConstOp, TFL::QConstOp, arith::ConstantOp>(op))
-    return false;
+  if (!llvm::isa<TFL::ConstOp, TFL::QConstOp>(op)) return false;
 
-  if (auto arith_const_op = dyn_cast_or_null<arith::ConstantOp>(op)) {
-    // arith ConstOp path.
-    auto type = arith_const_op.getType().cast<ShapedType>().getElementType();
-    if (!type.isInteger(32) && !type.isInteger(64)) return false;
-  } else if (auto const_op = dyn_cast_or_null<TFL::ConstOp>(op)) {
+  if (auto const_op = dyn_cast_or_null<TFL::ConstOp>(op)) {
     // ConstOp path.
-    auto type = const_op.getType().cast<ShapedType>().getElementType();
+    auto type = const_op.getType()
+                    .dyn_cast_or_null<RankedTensorType>()
+                    .getElementType();
     if (!type.isInteger(32) && !type.isInteger(64)) return false;
   } else {
     // QConstOp path.
@@ -130,8 +124,7 @@ void FoldConstantsToSubgraphPass::runOnOperation() {
 
   for (auto fn : module.getOps<func::FuncOp>()) {
     fn.walk([&](Operation* op) {
-      if (!llvm::isa<TFL::ConstOp, TFL::QConstOp, arith::ConstantOp>(op))
-        return;
+      if (!llvm::isa<TFL::ConstOp, TFL::QConstOp>(op)) return;
 
       // We only fold int32/int64 for Const and i32 for QConst if not specify
       // all constants flag. (Since they're more like "configs" or i32 biases.)

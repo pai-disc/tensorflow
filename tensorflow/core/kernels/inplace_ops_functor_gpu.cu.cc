@@ -69,7 +69,6 @@ Status DoParallelConcat(const Device& d, const Tensor& value, int32 loc,
     CASE(float)
     CASE(double)
     CASE(Eigen::half)
-    CASE(Eigen::bfloat16)
 // Using TF_CALL_GPU_NUMBER_TYPES(CASE) results in the compiler complaining
 // that CASE is not defined...hence the above construction
 #undef CASE
@@ -176,7 +175,6 @@ Status DoInplace(const Device& d, InplaceOpType op, const Tensor& i,
     CASE(float)
     CASE(double)
     CASE(Eigen::half)
-    CASE(Eigen::bfloat16)
     CASE(int64)
 #undef CASE
     default:
@@ -199,7 +197,6 @@ Status DoCopy(const Device& d, const Tensor& x, Tensor* y) {
     CASE(float)
     CASE(double)
     CASE(Eigen::half)
-    CASE(Eigen::bfloat16)
     CASE(complex64)
     CASE(complex128)
     CASE(int64)

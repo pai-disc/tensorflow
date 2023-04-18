@@ -25,10 +25,9 @@ limitations under the License.
 namespace tensorflow {
 namespace {
 
-class SegmentReduce : public XlaOpKernel {
+class UnsortedSegmentReduce : public XlaOpKernel {
  public:
-  explicit SegmentReduce(OpKernelConstruction* ctx, bool indices_are_sorted)
-      : XlaOpKernel(ctx), indices_are_sorted_(indices_are_sorted) {
+  explicit UnsortedSegmentReduce(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {
     DataType dtype;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("T", &dtype));
     OP_REQUIRES_OK(ctx, DataTypeToPrimitiveType(dtype, &type_));
@@ -47,9 +46,7 @@ class SegmentReduce : public XlaOpKernel {
     //    output[i] == 0 if i does not appear in indices
     //
     // Contrast with segment_sum(), which assumes indices are sorted and that
-    // max(indices)+1 is the desired size of the output. Note that
-    // segment_sum_v2 also takes num_segments as an input and can be supported
-    // similarly.
+    // max(indices)+1 is the desired size of the output.
     //
     // The returned output tensor has the same type as data, and the same shape
     // as data with the first indices.rank dimensions are replaced
@@ -121,22 +118,19 @@ class SegmentReduce : public XlaOpKernel {
                            xla::XlaBuilder* builder) { return Combine(a, b); };
 
     auto result = XlaScatter(buffer, /*updates=*/data, indices,
-                             /*indices_are_vectors=*/false, indices_are_sorted_,
-                             combiner, builder);
+                             /*indices_are_vectors=*/false, combiner, builder);
     OP_REQUIRES_OK(ctx, result.status());
     ctx->SetOutput(0, result.value());
   }
 
  protected:
   xla::PrimitiveType type_;
-  bool indices_are_sorted_;
 };
 
-template <bool indices_are_sorted>
-class SegmentSum : public SegmentReduce {
+class UnsortedSegmentSum : public UnsortedSegmentReduce {
  public:
-  explicit SegmentSum(OpKernelConstruction* ctx)
-      : SegmentReduce(ctx, indices_are_sorted) {}
+  explicit UnsortedSegmentSum(OpKernelConstruction* ctx)
+      : UnsortedSegmentReduce(ctx) {}
 
   xla::XlaOp InitialValue(xla::XlaBuilder* builder) override {
     return xla::Zero(builder, type_);
@@ -144,17 +138,14 @@ class SegmentSum : public SegmentReduce {
   xla::XlaOp Combine(xla::XlaOp a, xla::XlaOp b) override { return a + b; };
 };
 
-REGISTER_XLA_OP(Name("SegmentSumV2").CompileTimeConstantInput("num_segments"),
-                SegmentSum</*indices_are_sorted=*/true>);
 REGISTER_XLA_OP(
     Name("UnsortedSegmentSum").CompileTimeConstantInput("num_segments"),
-    SegmentSum</*indices_are_sorted=*/false>);
+    UnsortedSegmentSum);
 
-template <bool indices_are_sorted>
-class SegmentProd : public SegmentReduce {
+class UnsortedSegmentProd : public UnsortedSegmentReduce {
  public:
-  explicit SegmentProd(OpKernelConstruction* ctx)
-      : SegmentReduce(ctx, indices_are_sorted) {}
+  explicit UnsortedSegmentProd(OpKernelConstruction* ctx)
+      : UnsortedSegmentReduce(ctx) {}
 
   xla::XlaOp InitialValue(xla::XlaBuilder* builder) override {
     return xla::One(builder, type_);
@@ -164,14 +155,12 @@ class SegmentProd : public SegmentReduce {
 
 REGISTER_XLA_OP(
     Name("UnsortedSegmentProd").CompileTimeConstantInput("num_segments"),
-    SegmentProd</*indices_are_sorted=*/false>);
-REGISTER_XLA_OP(Name("SegmentProdV2").CompileTimeConstantInput("num_segments"),
-                SegmentProd</*indices_are_sorted=*/true>);
+    UnsortedSegmentProd);
 
-class UnsortedSegmentMin : public SegmentReduce {
+class UnsortedSegmentMin : public UnsortedSegmentReduce {
  public:
   explicit UnsortedSegmentMin(OpKernelConstruction* ctx)
-      : SegmentReduce(ctx, /*indices_are_sorted=*/false) {}
+      : UnsortedSegmentReduce(ctx) {}
 
   xla::XlaOp InitialValue(xla::XlaBuilder* builder) override {
     return xla::MaxFiniteValue(builder, type_);
@@ -185,10 +174,10 @@ REGISTER_XLA_OP(
     Name("UnsortedSegmentMin").CompileTimeConstantInput("num_segments"),
     UnsortedSegmentMin);
 
-class UnsortedSegmentMax : public SegmentReduce {
+class UnsortedSegmentMax : public UnsortedSegmentReduce {
  public:
   explicit UnsortedSegmentMax(OpKernelConstruction* ctx)
-      : SegmentReduce(ctx, /*indices_are_sorted=*/false) {}
+      : UnsortedSegmentReduce(ctx) {}
 
   xla::XlaOp InitialValue(xla::XlaBuilder* builder) override {
     return xla::MinFiniteValue(builder, type_);

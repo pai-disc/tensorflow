@@ -119,7 +119,7 @@ std::vector<float> BasePoolingOpModel<float>::GetOutput() {
   return ExtractVector<float>(output_);
 }
 
-#if GTEST_HAS_DEATH_TEST
+#ifdef GTEST_HAS_DEATH_TEST
 TEST(AveragePoolingOpTest, InvalidDimSize) {
   EXPECT_DEATH(BasePoolingOpModel<float> m(
                    kAverage,

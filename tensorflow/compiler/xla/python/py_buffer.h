@@ -19,15 +19,12 @@ limitations under the License.
 #include <memory>
 #include <optional>
 #include <stdexcept>
-#include <utility>
 #include <vector>
 
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/notification.h"
 #include "pybind11/numpy.h"
 #include "pybind11/pybind11.h"
-#include "tensorflow/compiler/xla/python/ifrt/array.h"
-#include "tensorflow/compiler/xla/python/pjrt_ifrt/pjrt_array.h"
 #include "tensorflow/compiler/xla/python/py_client.h"
 #include "tensorflow/compiler/xla/python/traceback.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -54,7 +51,7 @@ class PyBuffer {
   using object = pyobject;
 
   static object Make(std::shared_ptr<PyClient> client,
-                     tsl::RCReference<ifrt::Array> ifrt_array,
+                     std::shared_ptr<PjRtBuffer> buffer,
                      std::shared_ptr<Traceback> traceback);
 
   // Returns true if `h` is a PyBuffer.
@@ -72,56 +69,14 @@ class PyBuffer {
   ~PyBuffer();
 
   std::shared_ptr<PyClient> client() const { return client_; }
-
-  ifrt::Array* ifrt_array() const { return ifrt_array_.get(); }
-
-  // Short-term escape hatch to get PjRtBuffer from PyBuffer.
-  // TODO(hyeontaek): Migrate all users of this method to be agnostic of PjRt.
-  PjRtBuffer* pjrt_buffer() const {
-    auto* arr =
-        llvm::dyn_cast_or_null<ifrt::PjRtCompatibleArray>(ifrt_array_.get());
-    if (arr == nullptr) {
-      throw XlaRuntimeError(
-          "This operation is implemented for a PjRt-compatible backend only.");
-    }
-    return arr->pjrt_buffers().front().get();
-  }
-
-  // Short-term escape hatch to get PjRtBuffer from PyBuffer.
-  // TODO(hyeontaek): Migrate all users of this method to be agnostic of PjRt.
-  std::shared_ptr<PjRtBuffer> shared_ptr_pjrt_buffer() const {
-    auto* arr =
-        llvm::dyn_cast_or_null<ifrt::PjRtCompatibleArray>(ifrt_array_.get());
-    if (arr == nullptr) {
-      throw XlaRuntimeError(
-          "This operation is implemented for a PjRt-compatible backend only.");
-    }
-    return arr->pjrt_buffers().front();
-  }
-
-  void SetPjRtBuffer(std::shared_ptr<PjRtBuffer> buffer) {
-    auto* client = llvm::dyn_cast_or_null<ifrt::PjRtCompatibleClient>(
-        client_->ifrt_client());
-    if (client == nullptr) {
-      throw XlaRuntimeError(
-          "This operation is implemented for a PjRt-compatible backend only.");
-    }
-    auto ifrt_array = client->CreatePjRtArray(std::move(buffer));
-    TF_CHECK_OK(ifrt_array.status());
-    ifrt_array_ = *std::move(ifrt_array);
-  }
-
-  // Legacy alises.
-  PjRtBuffer* buffer() const { return pjrt_buffer(); }
-  std::shared_ptr<PjRtBuffer> shared_ptr_buffer() const {
-    return shared_ptr_pjrt_buffer();
-  }
+  PjRtBuffer* buffer() const { return buffer_.get(); }
+  std::shared_ptr<PjRtBuffer> shared_ptr_buffer() const { return buffer_; }
 
   ClientAndPtr<PjRtDevice> device() const;
   absl::string_view platform_name() const {
-    return ifrt_array_->client()->platform_name();
+    return buffer_->client()->platform_name();
   }
-  bool is_deleted() const { return ifrt_array_->IsDeleted(); }
+  bool is_deleted() const { return buffer_->IsDeleted(); }
 
   StatusOr<pybind11::object> CopyToDevice(
       const ClientAndPtr<PjRtDevice>& dst_device) const;
@@ -129,12 +84,11 @@ class PyBuffer {
       absl::string_view serialized_descriptor) const;
 
   StatusOr<size_t> OnDeviceSizeInBytes() {
-    return pjrt_buffer()->GetOnDeviceSizeInBytes();
+    return buffer_->GetOnDeviceSizeInBytes();
   }
 
   void Delete() {
-    // TODO(hyeontaek): Return Status.
-    TF_CHECK_OK(ifrt_array_->Delete().Await());
+    buffer_->Delete();
     host_value_ = nullptr;
   }
 
@@ -146,23 +100,23 @@ class PyBuffer {
   // Returns xla::InvalidArgument if the buffer has been deleted.
   // See `PjRtFuture` for the semantics of `IsReady` and `IsKnownReady`.
   StatusOr<bool> IsReady() {
-    if (ifrt_array_->IsDeleted()) {
+    if (buffer_->IsDeleted()) {
       return InvalidArgument("DeviceArray has been deleted.");
     }
-    return ifrt_array_->GetReadyFuture().IsReady();
+    return buffer_->GetReadyFuture().IsReady();
   }
   StatusOr<bool> IsKnownReady() {
-    if (ifrt_array_->IsDeleted()) {
+    if (buffer_->IsDeleted()) {
       return InvalidArgument("DeviceArray has been deleted.");
     }
-    return ifrt_array_->GetReadyFuture().IsKnownReady();
+    return buffer_->GetReadyFuture().IsKnownReady();
   }
 
   // Returns xla::InvalidArgument if the buffer has been deleted.
   Status BlockHostUntilReady();
   Status CopyToHostAsync();
 
-  const Shape& shape() { return pjrt_buffer()->on_device_shape(); }
+  const Shape& shape() { return buffer_->on_device_shape(); }
 
   StatusOr<std::uintptr_t> UnsafeBufferPointer() const;
 
@@ -176,7 +130,7 @@ class PyBuffer {
   StatusOr<int64_t> size();
 
   // Returns the number of dimensions of the (host) numpy array.
-  int ndim() const { return ifrt_array_->shape().dims().size(); }
+  int ndim() const { return buffer()->on_device_shape().dimensions_size(); }
 
   pybind11::tuple python_shape() const;
   pybind11::dtype python_dtype() const;
@@ -186,7 +140,7 @@ class PyBuffer {
 
   Status set_sticky_device(PjRtDevice* sticky_device) {
     TF_RET_CHECK(sticky_device == nullptr ||
-                 sticky_device == ifrt_array_->sharding().devices().front());
+                 sticky_device == buffer_->device());
     sticky_device_ = sticky_device;
     return OkStatus();
   }
@@ -207,8 +161,7 @@ class PyBuffer {
  private:
   // PyBuffer objects must not be allocated directly since they must always live
   // on the Python heap. Use Make() instead.
-  PyBuffer(std::shared_ptr<PyClient> client,
-           tsl::RCReference<ifrt::Array> array,
+  PyBuffer(std::shared_ptr<PyClient> client, std::shared_ptr<PjRtBuffer> buffer,
            std::shared_ptr<Traceback> traceback);
 
   static PyObject* base_type_;
@@ -222,7 +175,7 @@ class PyBuffer {
     std::shared_ptr<xla::Literal> value;
   };
   std::shared_ptr<PyClient> client_;
-  tsl::RCReference<ifrt::Array> ifrt_array_;
+  std::shared_ptr<PjRtBuffer> buffer_;
   std::shared_ptr<Traceback> traceback_;
   std::shared_ptr<HostValue> host_value_;  // Protected by the GIL.
 
@@ -256,10 +209,10 @@ class PyShardedBuffer {
       absl::Span<const PyBuffer::object> py_buffers);
 
   PyShardedBuffer(std::shared_ptr<PyClient> client,
-                  tsl::RCReference<ifrt::Array> ifrt_array,
+                  std::vector<std::shared_ptr<PjRtBuffer>> buffers,
                   std::shared_ptr<Traceback> traceback, bool sticky = false)
       : client_(std::move(client)),
-        ifrt_array_(std::move(ifrt_array)),
+        buffers_(std::move(buffers)),
         traceback_(std::move(traceback)),
         sticky_(sticky) {
     Link();
@@ -271,7 +224,7 @@ class PyShardedBuffer {
   PyShardedBuffer(PyShardedBuffer&& other) {
     other.Unlink();
     client_ = std::move(other.client_);
-    ifrt_array_ = std::move(other.ifrt_array_);
+    buffers_ = std::move(other.buffers_);
     traceback_ = std::move(other.traceback_);
     sticky_ = other.sticky_;
     Link();
@@ -281,7 +234,7 @@ class PyShardedBuffer {
     Unlink();
     other.Unlink();
     client_ = std::move(other.client_);
-    ifrt_array_ = std::move(other.ifrt_array_);
+    buffers_ = std::move(other.buffers_);
     traceback_ = std::move(other.traceback_);
     sticky_ = other.sticky_;
     Link();
@@ -292,16 +245,11 @@ class PyShardedBuffer {
 
   std::vector<PyBuffer::object> GetPyBuffers() const {
     std::vector<PyBuffer::object> results;
-    results.reserve(ifrt_array_->sharding().devices().size());
-    auto ifrt_arrays = ifrt_array_->DisassembleIntoSingleDeviceArrays(
-        ifrt::ArrayCopySemantics::kReuseInput);
-    TF_CHECK_OK(ifrt_arrays.status());
-    for (auto& ifrt_array : *ifrt_arrays) {
-      auto* device = ifrt_array->sharding().devices().front();
-      auto py_buffer =
-          PyBuffer::Make(client_, std::move(ifrt_array), traceback_);
+    results.reserve(buffers_.size());
+    for (const auto& pjrt_buffer : buffers_) {
+      auto py_buffer = PyBuffer::Make(client_, pjrt_buffer, traceback_);
       if (sticky_) {
-        TF_CHECK_OK(py_buffer.buf()->set_sticky_device(device));
+        TF_CHECK_OK(py_buffer.buf()->set_sticky_device(pjrt_buffer->device()));
       }
       results.push_back(std::move(py_buffer));
     }
@@ -309,23 +257,8 @@ class PyShardedBuffer {
   }
 
   PyBuffer::object GetPyBuffer(int device_id) const {
-    // TODO(hyeontaek): Remove this method. This method will not scale well.
-    auto* arr =
-        llvm::dyn_cast_or_null<ifrt::PjRtCompatibleArray>(ifrt_array_.get());
-    if (arr == nullptr) {
-      throw XlaRuntimeError(
-          "This operation is implemented for a PjRt-compatible backend only.");
-    }
-    auto* ifrt_client = llvm::dyn_cast_or_null<ifrt::PjRtCompatibleClient>(
-        client_->ifrt_client());
-    if (ifrt_client == nullptr) {
-      throw XlaRuntimeError(
-          "This operation is implemented for a PjRt-compatible backend only.");
-    }
-    auto& pjrt_buffer = arr->pjrt_buffers().at(device_id);
-    auto py_buffer = PyBuffer::Make(
-        client_, ifrt::PjRtArray::Create(ifrt_client, pjrt_buffer).value(),
-        traceback_);
+    const auto& pjrt_buffer = buffers_.at(device_id);
+    auto py_buffer = PyBuffer::Make(client_, pjrt_buffer, traceback_);
     if (sticky_) {
       TF_CHECK_OK(py_buffer.buf()->set_sticky_device(pjrt_buffer->device()));
     }
@@ -333,30 +266,24 @@ class PyShardedBuffer {
   }
 
   PrimitiveType dtype() const {
-    return *ifrt::ToPrimitiveType(ifrt_array_->dtype());
+    return buffers_.at(0)->on_device_shape().element_type();
   }
 
-  ifrt::Array* ifrt_array() const { return ifrt_array_.get(); }
-
-  // Short-term escape hatch to get PjRtBuffer from PyShardedBuffer.
-  // TODO(hyeontaek): Migrate all users of this method to be agnostic of PjRt.
-  PjRtBuffer* pjrt_buffer(int device_id) const {
-    auto* arr =
-        llvm::dyn_cast_or_null<ifrt::PjRtCompatibleArray>(ifrt_array_.get());
-    if (arr == nullptr) {
-      throw XlaRuntimeError(
-          "This operation is implemented for a PjRt-compatible backend only.");
-    }
-    return arr->pjrt_buffers().at(device_id).get();
+  PjRtBuffer* GetPjRtBuffer(int device_id) const {
+    return buffers_.at(device_id).get();
   }
 
-  int num_devices() const { return ifrt_array_->sharding().devices().size(); }
+  int num_devices() const { return buffers_.size(); }
 
   const std::shared_ptr<Traceback>& traceback() const { return traceback_; }
 
   Status BlockHostUntilReady();
 
-  void Delete() { ifrt_array_->Delete(); }
+  void Delete() {
+    for (auto& pjrt_buffer : buffers_) {
+      pjrt_buffer->Delete();
+    }
+  }
 
  private:
   void Link() {
@@ -389,17 +316,13 @@ class PyShardedBuffer {
   friend class PyClient;
 
   std::shared_ptr<PyClient> client_;
-  tsl::RCReference<ifrt::Array> ifrt_array_;
+  std::vector<std::shared_ptr<PjRtBuffer>> buffers_;
   std::shared_ptr<Traceback> traceback_;
   bool sticky_ = false;
 
   PyShardedBuffer* next_ = nullptr;
   PyShardedBuffer* prev_ = nullptr;
 };
-
-// TODO(hyeontaek): Move the following functions to a separate file.
-StatusOr<ifrt::DType> ToIfRtDType(pybind11::dtype dtype);
-StatusOr<pybind11::dtype> ToPybind11DType(ifrt::DType dtype);
 
 }  // namespace xla
 

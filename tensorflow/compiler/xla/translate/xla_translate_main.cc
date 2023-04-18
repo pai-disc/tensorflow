@@ -28,7 +28,6 @@ limitations under the License.
 #include "mlir/Support/LogicalResult.h"  // from @llvm-project
 #include "mlir/Support/ToolUtilities.h"  // from @llvm-project
 #include "mlir/Tools/mlir-translate/Translation.h"  // from @llvm-project
-#include "tensorflow/tsl/platform/init_main.h"
 
 // NOLINTNEXTLINE
 static llvm::cl::opt<std::string> input_filename(llvm::cl::Positional,
@@ -47,20 +46,11 @@ static llvm::cl::opt<bool> splitInputFile(
                    "independently"),
     llvm::cl::init(false));
 
-// NOLINTNEXTLINE
-static llvm::cl::opt<bool> verifyDiagnostics(
-    "verify-diagnostics",
-    llvm::cl::desc("Check that emitted diagnostics match "
-                   "expected-* lines on the corresponding line"),
-    llvm::cl::init(false));
-
 int main(int argc, char** argv) {
   llvm::InitLLVM y(argc, argv);
-  int dummyArgc = 1;
-  tsl::port::InitMain(argv[0], &dummyArgc, &argv);
 
   // Add flags for all the registered translations.
-  llvm::cl::opt<const mlir::Translation*, false, mlir::TranslationParser>
+  llvm::cl::opt<const mlir::TranslateFunction*, false, mlir::TranslationParser>
       requested_translation("", llvm::cl::desc("Translation to perform"));
   mlir::registerAsmPrinterCLOptions();
   llvm::cl::ParseCommandLineOptions(argc, argv, "XLA translation driver\n");
@@ -81,20 +71,11 @@ int main(int argc, char** argv) {
   // Processes the memory buffer with a new MLIRContext.
   auto processBuffer = [&](std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
                            llvm::raw_ostream& os) {
-    auto sourceMgr = std::make_shared<llvm::SourceMgr>();
-    sourceMgr->AddNewSourceBuffer(std::move(ownedBuffer), llvm::SMLoc());
+    llvm::SourceMgr sourceMgr;
+    sourceMgr.AddNewSourceBuffer(std::move(ownedBuffer), llvm::SMLoc());
     mlir::MLIRContext context;
-
-    if (!verifyDiagnostics) {
-      mlir::SourceMgrDiagnosticHandler diagnostic_handler(*sourceMgr, &context);
-      return (*requested_translation)(sourceMgr, os, &context);
-    }
-
-    context.printOpOnDiagnostic(false);
-    mlir::SourceMgrDiagnosticVerifierHandler diagnostic_handler(*sourceMgr,
-                                                                &context);
-    (void)(*requested_translation)(sourceMgr, os, &context);
-    return diagnostic_handler.verify();
+    mlir::SourceMgrDiagnosticHandler diagnostic_handler(sourceMgr, &context);
+    return (*requested_translation)(sourceMgr, os, &context);
   };
 
   if (splitInputFile) {

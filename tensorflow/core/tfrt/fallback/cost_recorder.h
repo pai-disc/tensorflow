@@ -26,43 +26,29 @@ limitations under the License.
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/thread_annotations.h"
 #include "tensorflow/core/tfrt/fallback/op_cost_map.pb.h"
+#include "tfrt/host_context/shared_context.h"  // from @tf_runtime
+
+namespace tfrt {
+class HostContext;
+}  // namespace tfrt
 
 namespace tensorflow {
 namespace tfrt_stub {
-
-// Thread-safe.
-// Maintains the execution durations by `op_key`. Note that `op_key` is only
-// unique within a model.
-class CostRecorder {
+class CostRecorder : public tfrt::SharedContext {
  public:
-  // Records an execution duration for the op keyed by `op_key`.
-  void RecordCostNanosecond(int64_t op_key, uint64_t execution_time_ns);
+  explicit CostRecorder(tfrt::HostContext* host) {}
 
-  // Returns the average execution duration of the op keyed by `op_key`. If
-  // there is no record for `op_key`, returns the uint32_t::max to avoid stream
-  // merging. Note that we don't use uint64_t::max because otherwise adding op
-  // costs would cause overflow. (See details in go/tfrt-stream-analysis-doc.)
-  uint64_t GetCostNanosecond(int64_t op_key) const;
+  void RecordCost(int64_t op_key, const uint64_t execution_time);
 
-  // Writes the op cost map (in format of `OpCostMapProto`) to a file specified
-  // by the env var name `MesuredCostPathEnvVarName()`.
-  // TODO(b/263837451): Fix the op_key unstableness during serialization.
-  Status WriteToFile() const;
-
-  size_t size() const;
-
-  static const char* MesuredCostPathEnvVarName() {
-    return "TF_TFRT_MEASURED_COST_PATH";
-  }
+  size_t size();
+  Status WriteToFile();
 
  private:
-  mutable tensorflow::mutex op_cost_map_mutex_;
-  // Map op key to {sum of op execution duration in nanoseconds, #occurences of
-  // the op}.
+  tensorflow::mutex op_cost_map_mutex_;
+  // Map op key to {sum of op execution time in microseconds, number of op}.
   absl::flat_hash_map<int64_t, std::pair<uint64_t, uint64_t>> op_cost_map_
       TF_GUARDED_BY(op_cost_map_mutex_);
 };
-
 }  // namespace tfrt_stub
 }  // namespace tensorflow
 

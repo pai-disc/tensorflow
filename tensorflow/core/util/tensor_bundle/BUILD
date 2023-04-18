@@ -12,7 +12,6 @@ load(
 load("//tensorflow:tensorflow.default.bzl", "cc_header_only_library", "filegroup")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )

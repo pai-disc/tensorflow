@@ -17,7 +17,6 @@ import numpy as np
 
 from tensorflow.python.data.benchmarks import benchmark_base
 from tensorflow.python.data.ops import dataset_ops
-from tensorflow.python.data.ops import map_op
 from tensorflow.python.framework import constant_op
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
@@ -35,7 +34,7 @@ class MapBenchmark(benchmark_base.DatasetBenchmarkBase):
                          benchmark_id):
       dataset = dataset_ops.Dataset.range(10000)
       for _ in range(chain_length):
-        dataset = map_op._MapDataset(  # pylint: disable=protected-access
+        dataset = dataset_ops.MapDataset(
             dataset, fn, use_inter_op_parallelism=use_inter_op_parallelism)
       self.run_and_report_benchmark(
           dataset,
@@ -74,7 +73,7 @@ class MapBenchmark(benchmark_base.DatasetBenchmarkBase):
                          benchmark_id):
       dataset = dataset_ops.Dataset.from_tensors(
           tuple(0 for _ in range(fan_out))).repeat(None)
-      dataset = map_op._MapDataset(  # pylint: disable=protected-access
+      dataset = dataset_ops.MapDataset(
           dataset, fn, use_inter_op_parallelism=use_inter_op_parallelism)
       self.run_and_report_benchmark(
           dataset,

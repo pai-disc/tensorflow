@@ -1,7 +1,6 @@
 # Testdata for OVIC benchmarker demo App and tests.
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     licenses = ["notice"],
 )
 

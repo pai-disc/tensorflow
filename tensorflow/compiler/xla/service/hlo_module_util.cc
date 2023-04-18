@@ -95,11 +95,8 @@ StatusOr<std::unique_ptr<HloModuleConfig>> CreateModuleConfig(
     }
     config->set_use_spmd_partitioning(
         execution_options->use_spmd_partitioning());
-    if (!execution_options->allow_spmd_sharding_propagation_to_output()
-             .empty()) {
-      config->set_allow_spmd_sharding_propagation_to_output(
-          execution_options->allow_spmd_sharding_propagation_to_output());
-    }
+    config->set_allow_spmd_sharding_propagation_to_output(
+        execution_options->allow_spmd_sharding_propagation_to_output());
     config->set_use_auto_spmd_partitioning(
         execution_options->use_auto_spmd_partitioning());
     std::vector<int64_t> mesh_shape;
@@ -116,14 +113,6 @@ StatusOr<std::unique_ptr<HloModuleConfig>> CreateModuleConfig(
     config->set_seed(execution_options->seed());
     config->set_launch_id(execution_options->launch_id());
     config->set_debug_options(execution_options->debug_options());
-    if (execution_options->has_device_assignment()) {
-      TF_ASSIGN_OR_RETURN(auto device_assignment,
-                          DeviceAssignment::Deserialize(
-                              execution_options->device_assignment()));
-      config->set_static_device_assignment(*device_assignment);
-    }
-    config->set_alias_passthrough_params(
-        execution_options->alias_passthrough_params());
   } else {
     config->set_replica_count(default_num_replicas);
     config->set_debug_options(GetDebugOptionsFromFlags());
@@ -132,6 +121,16 @@ StatusOr<std::unique_ptr<HloModuleConfig>> CreateModuleConfig(
   if (num_threads.has_value()) {
     config->set_intra_op_parallelism_threads(*num_threads);
   }
+
+  if (execution_options != nullptr &&
+      execution_options->has_device_assignment()) {
+    TF_ASSIGN_OR_RETURN(
+        auto device_assignment,
+        DeviceAssignment::Deserialize(execution_options->device_assignment()));
+    config->set_static_device_assignment(*device_assignment);
+  }
+  config->set_alias_passthrough_params(
+      execution_options->alias_passthrough_params());
 
   if (aot_options != nullptr) {
     config->set_matrix_unit_operand_precision(

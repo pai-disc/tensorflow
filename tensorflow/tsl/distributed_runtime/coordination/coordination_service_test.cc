@@ -351,13 +351,9 @@ TEST(CoordinationServiceTest, TestCoordinatedJobs) {
   // Registering the evaluator task is unexpected
   Status status = coord_service->RegisterTask(evaluator, /*incarnation=*/0);
   EXPECT_TRUE(errors::IsInvalidArgument(status)) << status;
-  EXPECT_TRUE(!status.error_message().empty());
 }
 
-// RegisterTask() may succeed in the service, but the agent response times out.
-// In this case, the agent would retry Connect() and should succeed if it has
-// the same incarnation.
-TEST(CoordinationServiceTest, RegisterTask_AlreadyConnected_Succeeds) {
+TEST(CoordinationServiceTest, RegisterTask_AlreadyConnected_Fails) {
   const CoordinationServiceConfig config =
       GetCoordinationServiceConfig(/*num_tasks=*/1);
   CoordinatedTask task_0;
@@ -370,33 +366,10 @@ TEST(CoordinationServiceTest, RegisterTask_AlreadyConnected_Succeeds) {
   // Task connects to coordination service.
   TF_ASSERT_OK(coord_service->RegisterTask(task_0, /*incarnation=*/0));
 
-  // Registration should succeed since it is the same task.
+  // Registration should fail since task already registered previously.
   const Status status = coord_service->RegisterTask(task_0, /*incarnation=*/0);
 
-  TF_EXPECT_OK(status) << status;
-}
-
-TEST(CoordinationServiceTest,
-     RegisterTask_AlreadyConnectedDifferentIncarnation_Fails) {
-  const CoordinationServiceConfig config =
-      GetCoordinationServiceConfig(/*num_tasks=*/1);
-  CoordinatedTask task_0;
-  task_0.set_job_name("worker");
-  task_0.set_task_id(0);
-  std::unique_ptr<CoordinationServiceInterface> coord_service =
-      CoordinationServiceInterface::EnableCoordinationService(
-          Env::Default(), config,
-          /*cache=*/nullptr);
-  // Task connects to coordination service.
-  TF_ASSERT_OK(coord_service->RegisterTask(task_0, /*incarnation=*/0));
-
-  // Registration should fail since task already registered previously with a
-  // different incarnation. Note that incarnation usually changes if an agent
-  // restarts.
-  const Status status = coord_service->RegisterTask(task_0, /*incarnation=*/1);
-
   EXPECT_TRUE(errors::IsAborted(status)) << status;
-  EXPECT_TRUE(!status.error_message().empty());
 }
 
 TEST(CoordinationServiceTest, RegisterTask_AlreadyInError_Fails) {
@@ -419,7 +392,6 @@ TEST(CoordinationServiceTest, RegisterTask_AlreadyInError_Fails) {
   const Status status = coord_service->RegisterTask(task_0, /*incarnation=*/0);
 
   EXPECT_TRUE(errors::IsAborted(status)) << status;
-  EXPECT_TRUE(!status.error_message().empty());
 }
 
 TEST_F(CoordinateTwoTasksTest, TestTaskHeartbeatTimeout) {

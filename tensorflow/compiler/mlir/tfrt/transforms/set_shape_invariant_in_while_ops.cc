@@ -36,7 +36,7 @@ class SetShapeInvariantInWhileOps
     func_op.walk([&](mlir::TF::WhileOp op) {
       // Skip tf.While op on TPU.
       if (!op->hasAttr("_tpu_replicate")) {
-        op.setShapeInvariantAttr(shape_invariant);
+        op.shape_invariantAttr(shape_invariant);
       }
     });
   }

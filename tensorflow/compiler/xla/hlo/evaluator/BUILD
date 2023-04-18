@@ -2,10 +2,9 @@
 #   XLA evaluator implementation.
 
 load("//tensorflow/tsl/platform:rules_cc.bzl", "cc_library")
-load("//tensorflow/compiler/xla:xla.bzl", "xla_cc_test")
+load("//tensorflow:tensorflow.bzl", "tf_cc_test")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [":friends"],
     licenses = ["notice"],
 )
@@ -28,7 +27,6 @@ cc_library(
         "hlo_evaluator_typed_visitor_complex64.cc",
         "hlo_evaluator_typed_visitor_double.cc",
         "hlo_evaluator_typed_visitor_float.cc",
-        "hlo_evaluator_typed_visitor_float8.cc",
         "hlo_evaluator_typed_visitor_half.cc",
         "hlo_evaluator_typed_visitor_int16.cc",
         "hlo_evaluator_typed_visitor_int32.cc",
@@ -51,15 +49,13 @@ cc_library(
         "//tensorflow/compiler/xla:util",
         "//tensorflow/compiler/xla:window_util",
         "//tensorflow/compiler/xla:xla_data_proto_cc",
-        "//tensorflow/compiler/xla/hlo/ir:hlo",
-        "//tensorflow/compiler/xla/service:call_graph",
-        "//tensorflow/compiler/xla/service:compilation_environments",
         "//tensorflow/compiler/xla/service:dynamic_dimension_inference",
+        "//tensorflow/compiler/xla/service:hlo",
         "//tensorflow/compiler/xla/service:hlo_query",
         "//tensorflow/compiler/xla/service:pattern_matcher",
         "//tensorflow/compiler/xla/service:shape_inference",
-        "//tensorflow/compiler/xla/service:tuple_points_to_analysis",
         "//tensorflow/compiler/xla/service/cpu:runtime_single_threaded_matmul",
+        "//tensorflow/compiler/xla/stream_executor/lib",
         "//tensorflow/tsl/lib/core:bitmap",
         "//tensorflow/tsl/platform:errors",
         "//tensorflow/tsl/platform:logging",
@@ -79,7 +75,7 @@ cc_library(
     ],
 )
 
-xla_cc_test(
+tf_cc_test(
     name = "hlo_evaluator_test",
     srcs = ["hlo_evaluator_test.cc"],
     deps = [
@@ -96,7 +92,7 @@ xla_cc_test(
         "//tensorflow/compiler/xla:util",
         "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/client:xla_builder",
-        "//tensorflow/compiler/xla/hlo/ir:hlo",
+        "//tensorflow/compiler/xla/service:hlo",
         "//tensorflow/compiler/xla/service:hlo_element_type_converter",
         "//tensorflow/compiler/xla/tests:hlo_test_base",
         "//tensorflow/compiler/xla/tests:literal_test_util",

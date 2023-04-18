@@ -120,7 +120,7 @@ class TPUPartitionedCallOp : public AsyncOpKernel {
     if (!status.ok()) {
       autotuner_thresh_ = 0;
     }
-    stream_executor::tpu::OpsApiFn()->TfTpu_GetTpuPartitionedCallParamsFn(
+    tensorflow::tpu::OpsApiFn()->TfTpu_GetTpuPartitionedCallParamsFn(
         &runtime_params_);
   }
 

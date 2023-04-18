@@ -54,14 +54,14 @@ void CreateDTensorLayoutOp(const Layout& layout, mlir::Value input,
       loc, input, mlir::dtensor::LayoutAttr::get(context, layout),
       mlir::TF::ShapeAttr::get(context, type));
   llvm::SmallPtrSet<mlir::Operation*, 4> exception{layout_op};
-  input.replaceAllUsesExcept(layout_op.getOutput(), exception);
+  input.replaceAllUsesExcept(layout_op.output(), exception);
 }
 
 // Adds DTensorLayout op following each Relayout operation to ensure that
 // tensor from `relayout` has fixed layout.
 mlir::LogicalResult PropagateDTensorLayoutForRelayout(
     mlir::MLIRContext& c, mlir::TF::RelayoutOp relayout) {
-  const std::string layout_str = relayout.getLayout().str();
+  const std::string layout_str = relayout.layout().str();
   auto layout_or_status = Layout::FromString(layout_str);
   if (!layout_or_status.ok()) {
     return relayout.emitOpError(
@@ -81,7 +81,7 @@ mlir::LogicalResult PropagateDTensorLayoutForRelayout(
   mlir::TensorType type = relayout.getType().dyn_cast<mlir::TensorType>();
   if (!type) return relayout.emitOpError("type required for Relayout op");
 
-  CreateDTensorLayoutOp(layout, relayout.getOutput(), type, relayout.getLoc(),
+  CreateDTensorLayoutOp(layout, relayout.output(), type, relayout.getLoc(),
                         &builder, &c);
   return mlir::success();
 }
@@ -198,7 +198,7 @@ struct DTensorPropagateDefaultLayout
                   mlir::dtensor::LayoutAttr::get(&context, *layout),
                   mlir::TF::ShapeAttr::get(&context, type));
               llvm::SmallPtrSet<mlir::Operation*, 4> exception{layout_op};
-              op_output.replaceAllUsesExcept(layout_op.getOutput(), exception);
+              op_output.replaceAllUsesExcept(layout_op.output(), exception);
             } else {
               return op->emitOpError()
                      << "type for output " << index << " is not a TensorType";

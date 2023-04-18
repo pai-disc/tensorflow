@@ -15,7 +15,7 @@ limitations under the License.
 #include <stdint.h>
 #include <string.h>
 
-#include "tensorflow/lite/core/c/common.h"
+#include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
 #include "tensorflow/lite/kernels/internal/tensor.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
@@ -89,7 +89,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     TF_LITE_ENSURE_EQ(context, input->params.zero_point, 0);
   }
 
-  if (IsConstantOrPersistentTensor(axis)) {
+  if (IsConstantTensor(axis)) {
     int axis_value;
     TF_LITE_ENSURE_OK(context,
                       GetAxisValueFromTensor(context, *axis, &axis_value));
@@ -118,10 +118,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   if (output->type == kTfLiteString) {
     TfLiteTensorRealloc(input->bytes, output);
   }
-  // Only copy data if input and output do not share a buffer.
-  if (output->data.data != input->data.data) {
-    memcpy(output->data.data, input->data.data, input->bytes);
-  }
+  memcpy(output->data.raw, input->data.raw, input->bytes);
   return kTfLiteOk;
 }
 

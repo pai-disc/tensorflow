@@ -14,11 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/core/distributed_runtime/worker_session.h"
 
-#include <memory>
-#include <unordered_map>
-#include <utility>
-#include <vector>
-
+#include "tensorflow/core/lib/monitoring/collection_registry.h"
 #include "tensorflow/core/lib/monitoring/gauge.h"
 
 namespace tensorflow {
@@ -128,13 +124,12 @@ WorkerSession::WorkerSession(
     const string& session_name, const string& worker_name,
     std::unique_ptr<WorkerCacheInterface> worker_cache,
     std::unique_ptr<DeviceMgr> device_mgr, std::unique_ptr<GraphMgr> graph_mgr,
-    std::unique_ptr<DynamicDeviceMgr> remote_device_mgr,
-    DistributedFunctionLibraryRuntimeCreator cluster_flr_creator)
+    std::unique_ptr<DynamicDeviceMgr> remote_device_mgr)
     : session_name_(session_name),
       worker_name_(worker_name),
       worker_cache_(new WorkerFreeListCache(std::move(worker_cache))),
       graph_mgr_(std::move(graph_mgr)),
-      cluster_flr_(cluster_flr_creator(
+      cluster_flr_(new ClusterFunctionLibraryRuntime(
           this, !session_name.empty(),
           remote_device_mgr ? remote_device_mgr.get() : nullptr)),
       device_mgr_(std::move(device_mgr)),
@@ -166,26 +161,23 @@ std::shared_ptr<WorkerSession> WorkerSession::CreateWithBorrowedDeviceMgr(
     const string& session_name, const string& worker_name,
     std::unique_ptr<WorkerCacheInterface> worker_cache,
     DeviceMgr* borrowed_device_mgr, std::unique_ptr<GraphMgr> graph_mgr,
-    std::unique_ptr<DynamicDeviceMgr> remote_device_mgr,
-    DistributedFunctionLibraryRuntimeCreator cluster_flr_creator) {
+    std::unique_ptr<DynamicDeviceMgr> remote_device_mgr) {
   return std::shared_ptr<WorkerSession>(new WorkerSession(
       session_name, worker_name, std::move(worker_cache), borrowed_device_mgr,
-      std::move(graph_mgr), std::move(remote_device_mgr),
-      std::move(cluster_flr_creator)));
+      std::move(graph_mgr), std::move(remote_device_mgr)));
 }
 
 WorkerSession::WorkerSession(
     const string& session_name, const string& worker_name,
     std::unique_ptr<WorkerCacheInterface> worker_cache,
     DeviceMgr* borrowed_device_mgr, std::unique_ptr<GraphMgr> graph_mgr,
-    std::unique_ptr<DynamicDeviceMgr> remote_device_mgr,
-    DistributedFunctionLibraryRuntimeCreator cluster_flr_creator)
+    std::unique_ptr<DynamicDeviceMgr> remote_device_mgr)
     : session_name_(session_name),
       worker_name_(worker_name),
       worker_cache_(new WorkerFreeListCache(std::move(worker_cache))),
       graph_mgr_(std::move(graph_mgr)),
-      cluster_flr_(cluster_flr_creator(this, !session_name.empty(),
-                                       remote_device_mgr.get())),
+      cluster_flr_(new ClusterFunctionLibraryRuntime(
+          this, !session_name.empty(), remote_device_mgr.get())),
       device_mgr_(nullptr),
       borrowed_device_mgr_(borrowed_device_mgr),
       remote_device_mgr_(std::move(remote_device_mgr)) {

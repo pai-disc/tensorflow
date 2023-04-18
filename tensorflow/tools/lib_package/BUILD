@@ -157,6 +157,7 @@ genrule(
         "@llvm-project//mlir:LICENSE.TXT",
         "@lmdb//:LICENSE",
         "@local_config_tensorrt//:LICENSE",
+        "@nasm//:LICENSE",
         "@nsync//:LICENSE",
         "@png//:LICENSE",
         "@snappy//:COPYING",
@@ -165,8 +166,11 @@ genrule(
         "@tf_runtime//third_party/llvm_derived:LICENSE",
         "@zlib//:zlib.h",
     ] + select({
-        "//tensorflow:linux_aarch64": [],
-        "//conditions:default": ["@nasm//:LICENSE"],
+        "//tensorflow:android": [],
+        "//tensorflow:ios": [],
+        "//tensorflow:linux_s390x": [],
+        "//tensorflow:windows": [],
+        "//conditions:default": [],
     }) + select({
         "//tensorflow:android": [],
         "//tensorflow:ios": [],
@@ -223,6 +227,7 @@ genrule(
         "@llvm-project//mlir:LICENSE.TXT",
         "@lmdb//:LICENSE",
         "@local_config_tensorrt//:LICENSE",
+        "@nasm//:LICENSE",
         "@nsync//:LICENSE",
         "@png//:LICENSE",
         "@snappy//:COPYING",
@@ -231,8 +236,11 @@ genrule(
         "@tf_runtime//third_party/llvm_derived:LICENSE",
         "@zlib//:zlib.h",
     ] + select({
-        "//tensorflow:linux_aarch64": [],
-        "//conditions:default": ["@nasm//:LICENSE"],
+        "//tensorflow:android": [],
+        "//tensorflow:ios": [],
+        "//tensorflow:linux_s390x": [],
+        "//tensorflow:windows": [],
+        "//conditions:default": [],
     }) + select({
         "//tensorflow:android": [],
         "//tensorflow:ios": [],

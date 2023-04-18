@@ -19,11 +19,10 @@ limitations under the License.
 #include <cstdint>
 
 #include "tensorflow/lite/core/api/profiler.h"
-#include "tensorflow/lite/profiling/telemetry/c/profiler.h"
-#include "tensorflow/lite/profiling/telemetry/c/telemetry_setting.h"
+#include "tensorflow/lite/profiling/telemetry/telemetry_settings.h"
 #include "tensorflow/lite/profiling/telemetry/telemetry_status.h"
 
-namespace tflite::telemetry {
+namespace tflite {
 
 // Telemetry profiler interface.
 // When installed, the telemetry profilers accepts profiler events exported from
@@ -58,7 +57,7 @@ class TelemetryProfiler : public Profiler {
   // `settings`'s lifespan is not guaranteed outside the scope of
   // `ReportSettings` call.
   virtual void ReportSettings(const char* setting_name,
-                              const TfLiteTelemetrySettings* settings) = 0;
+                              const TelemetrySettings& settings) = 0;
 
   // Performance measurement events.
 
@@ -76,7 +75,6 @@ class TelemetryProfiler : public Profiler {
 
   // For op / delegate op with built-in performance measurements, they
   // are able to report the elapsed time directly.
-  // `elapsed_time` is in microsecond.
   virtual void ReportOpInvokeEvent(const char* op_name, uint64_t elapsed_time,
                                    int64_t op_idx, int64_t subgraph_idx) = 0;
 
@@ -94,11 +92,6 @@ class TelemetryProfiler : public Profiler {
   void EndEvent(uint32_t event_handle) final;
 };
 
-// Creates a concrete TelemetryProfiler that wraps the
-// `TfLiteTelemetryProfilerStruct` C API.
-TelemetryProfiler* MakeTfLiteTelemetryProfiler(
-    TfLiteTelemetryProfilerStruct* profiler);
-
-}  // namespace tflite::telemetry
+}  // namespace tflite
 
 #endif  // TENSORFLOW_LITE_PROFILING_TELEMETRY_PROFILER_H_

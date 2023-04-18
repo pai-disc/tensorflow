@@ -16,9 +16,6 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_XLA_STREAM_EXECUTOR_TPU_TPU_TRANSFER_MANAGER_H_
 #define TENSORFLOW_COMPILER_XLA_STREAM_EXECUTOR_TPU_TPU_TRANSFER_MANAGER_H_
 
-#include <deque>
-#include <functional>
-
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/service/shaped_buffer.h"
 #include "tensorflow/compiler/xla/service/transfer_manager.h"
@@ -35,38 +32,37 @@ class TpuTransferManager : public xla::TpuTransferManagerInterface {
   TpuTransferManager();
   ~TpuTransferManager() override;
 
+  using Status = stream_executor::port::Status;
   template <typename T>
-  using StatusOr = tsl::StatusOr<T>;
+  using StatusOr = stream_executor::port::StatusOr<T>;
 
   stream_executor::Platform::Id PlatformId() const override;
 
   xla::Shape HostShapeToDeviceShape(
       const xla::Shape& host_shape) const override;
 
-  tsl::Status TransferLiteralToDeviceAsync(
+  Status TransferLiteralToDeviceAsync(
       stream_executor::Stream* stream, const xla::LiteralSlice& literal,
       const xla::ShapedBuffer& device_buffer,
       const TransferMetadata* transfer_metadata) override;
 
   void TransferLiteralFromDevice(
       stream_executor::Stream* stream, const xla::ShapedBuffer& device_buffer,
-      xla::MutableBorrowingLiteral literal,
-      std::function<void(tsl::Status)> done,
+      xla::MutableBorrowingLiteral literal, std::function<void(Status)> done,
       const TransferMetadata* transfer_metadata) override;
 
-  tsl::Status TransferLiteralToInfeed(
-      stream_executor::StreamExecutor* executor,
-      const xla::LiteralSlice& literal) override;
+  Status TransferLiteralToInfeed(stream_executor::StreamExecutor* executor,
+                                 const xla::LiteralSlice& literal) override;
 
-  tsl::Status TransferLiteralFromOutfeed(
+  Status TransferLiteralFromOutfeed(
       stream_executor::StreamExecutor* executor,
       xla::MutableBorrowingLiteral literal) override;
 
-  tsl::Status TransferBuffersToInfeed(
+  Status TransferBuffersToInfeed(
       se::StreamExecutor* executor,
       const std::deque<tensorflow::tpu::NoncopyableBuffer>& buffers) override;
 
-  tsl::Status ResetDevices(
+  Status ResetDevices(
       absl::Span<stream_executor::StreamExecutor* const> executor) override;
 
   int64_t GetByteSizeRequirement(const xla::Shape& shape) const override;
@@ -82,19 +78,18 @@ class TpuTransferManager : public xla::TpuTransferManagerInterface {
       se::StreamExecutor* executor,
       const se::DeviceMemoryBase& device_buffer) const override;
 
-  tsl::Status WriteSingleTupleIndexTable(
+  Status WriteSingleTupleIndexTable(
       stream_executor::Stream* stream,
       absl::Span<const stream_executor::DeviceMemoryBase> elements,
       const xla::Shape& shape,
       stream_executor::DeviceMemoryBase* region) override;
 
-  tsl::Status LinearizeToBuffers(
+  Status LinearizeToBuffers(
       const xla::LiteralSlice& literal,
       std::deque<tensorflow::tpu::NoncopyableBuffer>* buffers) override;
 
-  tsl::Status ReadDynamicShapes(se::Stream* stream,
-                                const xla::ShapedBuffer* device_buffer,
-                                xla::Shape* device_shape) override;
+  Status ReadDynamicShapes(se::Stream* stream, xla::ShapedBuffer* device_buffer,
+                           xla::Shape* device_shape) override;
 
  private:
   XLA_TransferManager* manager_;

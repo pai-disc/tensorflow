@@ -14,7 +14,7 @@
 # ==============================================================================
 """Test configs for depthwiseconv."""
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from tensorflow.lite.testing.zip_test_utils import create_tensor_data
 from tensorflow.lite.testing.zip_test_utils import make_zip_of_tests
 from tensorflow.lite.testing.zip_test_utils import register_make_test_function
@@ -118,10 +118,10 @@ def make_depthwiseconv_tests(options):
       input_tensors = [input_tensor, filter_input]
 
     out = tf.nn.depthwise_conv2d(
-        input=input_tensor,
-        filter=filter_input,
+        input_tensor,
+        filter_input,
         strides=parameters["strides"],
-        dilations=parameters["rate"],
+        rate=parameters["rate"],
         padding=parameters["padding"],
         data_format=parameters["data_format"])
     return input_tensors, [out]

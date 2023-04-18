@@ -108,7 +108,7 @@ bool OpResolverLazyDelegateProxy::MayContainUserDefinedOps() const {
 }
 
 std::unique_ptr<TfLiteDelegate, void (*)(TfLiteDelegate*)>
-OpResolverLazyDelegateProxy::createXNNPackDelegate(TfLiteContext* context) {
+OpResolverLazyDelegateProxy::createXNNPackDelegate(int num_threads) {
   TfLiteDelegate* delegate = nullptr;
   void (*delegate_deleter)(TfLiteDelegate*) = nullptr;
 #if !TFLITE_DISABLE_SELECT_JAVA_APIS
@@ -128,6 +128,9 @@ OpResolverLazyDelegateProxy::createXNNPackDelegate(TfLiteContext* context) {
 
     if (xnnpack_options_default && xnnpack_create && xnnpack_delete) {
       TfLiteXNNPackDelegateOptions options = xnnpack_options_default();
+      if (num_threads > 0) {
+        options.num_threads = num_threads;
+      }
       delegate = xnnpack_create(&options);
       delegate_deleter = xnnpack_delete;
     }
@@ -139,8 +142,8 @@ OpResolverLazyDelegateProxy::createXNNPackDelegate(TfLiteContext* context) {
 
 OpResolver::TfLiteOpaqueDelegatePtr
 OpResolverLazyDelegateProxy::createXNNPackOpaqueDelegate(int num_threads) {
-  TfLiteOpaqueDelegate* delegate = nullptr;
-  void (*delegate_deleter)(TfLiteOpaqueDelegate*) = nullptr;
+  TfLiteOpaqueDelegateStruct* delegate = nullptr;
+  void (*delegate_deleter)(TfLiteOpaqueDelegateStruct*) = nullptr;
 #if TFLITE_DISABLE_SELECT_JAVA_APIS
   // Construct a FlatBuffer containing
   //   TFLiteSettings {

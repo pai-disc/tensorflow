@@ -41,8 +41,9 @@ class TpuPlatform : public ::tensorflow::tpu::TpuPlatformInterface {
 
   static const ::stream_executor::Platform::Id kId;
 
+  using Status = ::stream_executor::port::Status;
   template <typename T>
-  using StatusOr = ::tsl::StatusOr<T>;
+  using StatusOr = ::stream_executor::port::StatusOr<T>;
 
   TpuPlatform();
 
@@ -69,10 +70,10 @@ class TpuPlatform : public ::tensorflow::tpu::TpuPlatformInterface {
 
   bool Initialized() const override;
 
-  tsl::Status Initialize(
+  Status Initialize(
       const std::map<std::string, std::string>& platform_options) override;
 
-  tsl::Status Reset(bool only_tear_down, absl::string_view reason) override {
+  Status Reset(bool only_tear_down, absl::string_view reason) override {
     LOG(FATAL) << "Not yet implemented";
   }
 
@@ -131,10 +132,10 @@ class TpuPlatform : public ::tensorflow::tpu::TpuPlatformInterface {
   SE_Platform* se_platform() const { return platform_; }
 
   // Returns the number of TPUs per host.
-  static tsl::Status TpusPerHost(int* tpus);
+  static Status TpusPerHost(int* tpus);
 
   // Returns the memory capacity of the TPUs on this host.
-  static tsl::Status TpuMemoryLimit(int64_t* memory_limit);
+  static Status TpuMemoryLimit(int64_t* memory_limit);
 
   absl::Mutex& mutex() { return event_map_mu_; }
 

@@ -15,56 +15,51 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/stream_executor/tpu/tpu_node_context.h"
 
-#include <memory>
-
 #include "tensorflow/compiler/xla/stream_executor/tpu/tpu_api.h"
 
 namespace tensorflow {
 namespace tpu {
 
-using tsl::StatusOr;
+using stream_executor::port::Status;
+using stream_executor::port::StatusOr;
 
 /*static*/
 StatusOr<std::unique_ptr<TpuNodeContext>> TpuNodeContext::Create(
     int device_ordinal) {
   StatusHelper status;
   XLA_TpuNodeContext* node_context =
-      stream_executor::tpu::OpsApiFn()->TpuNodeContext_CreateFn(
-          device_ordinal, status.c_status);
+      tpu::OpsApiFn()->TpuNodeContext_CreateFn(device_ordinal, status.c_status);
   if (!status.status().ok()) {
     // TpuNodeContext_CreateFn allocates a new XLA_TpuNodeContext regardless of
     // status. It needs to be freed if it's not given to a TpuNodeContext below.
-    stream_executor::tpu::OpsApiFn()->TpuNodeContext_FreeFn(node_context);
+    tpu::OpsApiFn()->TpuNodeContext_FreeFn(node_context);
     return status.status();
   }
   return std::make_unique<TpuNodeContext>(device_ordinal, node_context);
 }
 
 TpuNodeContext::~TpuNodeContext() {
-  stream_executor::tpu::OpsApiFn()->TpuNodeContext_FreeFn(node_context_);
+  tpu::OpsApiFn()->TpuNodeContext_FreeFn(node_context_);
 }
 
 /* static */
-tsl::Status TpuNodeContext::StopChipHeartbeats() {
+Status TpuNodeContext::StopChipHeartbeats() {
   StatusHelper status;
-  stream_executor::tpu::OpsApiFn()->TpuNodeContext_StopChipHeartbeatsFn(
-      status.c_status);
+  tpu::OpsApiFn()->TpuNodeContext_StopChipHeartbeatsFn(status.c_status);
   return status.status();
 }
 
 /* static */
-tsl::Status TpuNodeContext::CloseTpuHost() {
+Status TpuNodeContext::CloseTpuHost() {
   StatusHelper status;
-  stream_executor::tpu::OpsApiFn()->TpuNodeContext_CloseTpuHostFn(
-      status.c_status);
+  tpu::OpsApiFn()->TpuNodeContext_CloseTpuHostFn(status.c_status);
   return status.status();
 }
 
 /* static */
-tsl::Status TpuNodeContext::Initialize(int device_ordinal) {
+Status TpuNodeContext::Initialize(int device_ordinal) {
   StatusHelper status;
-  stream_executor::tpu::OpsApiFn()->TpuNodeContext_InitializeFn(
-      device_ordinal, status.c_status);
+  tpu::OpsApiFn()->TpuNodeContext_InitializeFn(device_ordinal, status.c_status);
   return status.status();
 }
 
@@ -89,8 +84,7 @@ stream_executor::StreamExecutor* TpuNodeContext::stream_executor() const {
 }
 
 bool TpuNodeContext::CompactionSupported(int device_ordinal) const {
-  return stream_executor::tpu::OpsApiFn()->TpuNodeContext_CompactionSupportedFn(
-      device_ordinal);
+  return tpu::OpsApiFn()->TpuNodeContext_CompactionSupportedFn(device_ordinal);
 }
 
 }  // namespace tpu

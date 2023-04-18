@@ -17,13 +17,13 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/stream_executor/cuda/cuda_gpu_executor.h"
 #include "tensorflow/compiler/xla/stream_executor/cuda/cuda_stream.h"
-#include "tensorflow/tsl/platform/statusor.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/statusor.h"
 
 namespace stream_executor {
 namespace gpu {
 
 Event::Status GpuEvent::PollForStatus() {
-  tsl::StatusOr<CUresult> status =
+  port::StatusOr<CUresult> status =
       GpuDriver::QueryEvent(parent_->gpu_context(), gpu_event_);
   if (!status.ok()) {
     LOG(ERROR) << "Error polling for event status: "

@@ -23,12 +23,12 @@ limitations under the License.
 #include <iterator>
 #include <map>
 #include <numeric>
-#include <optional>
 #include <utility>
 
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
@@ -309,7 +309,7 @@ DenseElementsAttr GetShape(Value output_val) {
       RankedTensorType::get(
           {static_cast<int>(shape.size())},
           mlir::IntegerType::get(output_val.getContext(), 32)),
-      llvm::ArrayRef(shape));
+      llvm::makeArrayRef(shape));
 }
 
 static Type GetShapeStrippedType(TypeAttr type_attr) {
@@ -867,12 +867,11 @@ struct FuseFullyConnectedAndMul : public OpRewritePattern<TFL::MulOp> {
     // TF::MulOp is used to fold the constant.
     // TODO(b/139192933): switch to the TFL constant folding
     auto new_filter =
-        rewriter.create<TF::MulOp>(mul_op.getLoc(), filter, new_const_val)
-            .getZ();
+        rewriter.create<TF::MulOp>(mul_op.getLoc(), filter, new_const_val).z();
     // If bias isn't None, it needs to be multiplied as well.
     if (!bias.getType().isa<NoneType>()) {
-      bias = rewriter.create<TF::MulOp>(mul_op.getLoc(), bias, constant_val)
-                 .getZ();
+      bias =
+          rewriter.create<TF::MulOp>(mul_op.getLoc(), bias, constant_val).z();
     }
 
     auto fc = rewriter.create<TFL::FullyConnectedOp>(
@@ -979,7 +978,7 @@ struct FuseAffinOpAndMulWithQDQs : public OpRewritePattern<TFL::MulOp> {
     // Rewrite filter constant. Since the folder of TFL::MulOp couldn't
     // broadcast the operands, TF::MulOp is used to fold the constant.
     auto new_filter =
-        rewriter.create<TF::MulOp>(loc, filter, broadcasted_gamma).getZ();
+        rewriter.create<TF::MulOp>(loc, filter, broadcasted_gamma).z();
     // Update the scale in the quantize op.
     auto new_qtype = RescaleQtype(q_op.getQtype(), gamma_cst);
     if (!new_qtype) return failure();
@@ -1543,16 +1542,16 @@ struct OptimizeTopK : public OpRewritePattern<TFL::TopKV2Op> {
     auto slice_op =
         llvm::dyn_cast_or_null<TFL::SliceOp>(value.getUses().begin().getUser());
     // We only match for the case where value is used by SliceOp.
-    if (!slice_op) return std::nullopt;
+    if (!slice_op) return llvm::None;
     DenseElementsAttr begin;
     DenseElementsAttr size;
     if (!matchPattern(slice_op->getOperand(1), m_Constant(&begin)) ||
         !matchPattern(slice_op->getOperand(2), m_Constant(&size)))
-      return std::nullopt;
+      return llvm::None;
 
     // Check if "begin" is a zero tensor.
     for (auto begin_idx : begin.getValues<APInt>())
-      if (begin_idx != 0) return std::nullopt;
+      if (begin_idx != 0) return llvm::None;
 
     // Check if "size" is equal to slice_op.input.shape except
     // for last dimension.
@@ -1560,19 +1559,19 @@ struct OptimizeTopK : public OpRewritePattern<TFL::TopKV2Op> {
     // i.e., num_input/input_last_dim = num_result/k
     auto input_ty = value.getType().dyn_cast_or_null<ShapedType>();
     auto result_ty = slice_op.getType().dyn_cast<ShapedType>();
-    if (!input_ty || !result_ty) return std::nullopt;
+    if (!input_ty || !result_ty) return llvm::None;
     if (!input_ty.hasStaticShape() || !result_ty.hasStaticShape())
-      return std::nullopt;
-    if (!input_ty.getRank() || !result_ty.getRank()) return std::nullopt;
+      return llvm::None;
+    if (!input_ty.getRank() || !result_ty.getRank()) return llvm::None;
     int num_input = input_ty.getNumElements();
     int input_last_dim = input_ty.getShape().back();
-    if (input_last_dim < 1) return std::nullopt;
+    if (input_last_dim < 1) return llvm::None;
     int num_result = result_ty.getNumElements();
     auto size_last = *(--size.value_end<APInt>());
     int32_t k = size_last.getSExtValue();
-    if (num_input / input_last_dim * k != num_result) return std::nullopt;
+    if (num_input / input_last_dim * k != num_result) return llvm::None;
     // We don't match sliceOp with last dim size = 0.
-    if (!k) return std::nullopt;
+    if (!k) return llvm::None;
     return k;
   }
 
@@ -1587,8 +1586,8 @@ struct OptimizeTopK : public OpRewritePattern<TFL::TopKV2Op> {
     auto k_values_or = ComputeSliceK(values);
     auto k_indices_or = ComputeSliceK(indices);
     if (!k_values_or.has_value() || !k_indices_or.has_value()) return failure();
-    int32_t k_values = k_values_or.value();
-    int32_t k_indices = k_indices_or.value();
+    int32_t k_values = k_values_or.getValue();
+    int32_t k_indices = k_indices_or.getValue();
     // We don't match two SliceOp with different sizes.
     if (k_values != k_indices && !values.use_empty() && !indices.use_empty())
       return failure();

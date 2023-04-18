@@ -37,10 +37,6 @@ limitations under the License.
 #include "tensorflow/core/protobuf/debug.pb.h"
 #include "tensorflow/core/protobuf/worker.pb.h"
 
-namespace tsl {
-class CoordinationServiceAgent;
-}
-
 namespace tensorflow {
 
 class ExecutorOpts;
@@ -48,6 +44,7 @@ class StepStatsCollector;
 class RendezvousMgrInterface;
 class DeviceMgr;
 class WorkerSession;
+class CoordinationServiceAgent;
 
 // GraphMgr keeps track of a set of graphs that are registered with a
 // TensorFlow worker. Each registered graph is identified by a handle
@@ -97,7 +94,7 @@ class GraphMgr {
                     WorkerSession* session, StepStatsCollector* collector,
                     MutableRunGraphResponseWrapper* response,
                     CancellationManager* cancellation_manager,
-                    tsl::CoordinationServiceAgent* coordination_service_agent,
+                    CoordinationServiceAgent* coordination_service_agent,
                     StatusCallback done);
 
   Status SendInputs(const int64_t step_id, const NamedTensors& in);
@@ -174,7 +171,7 @@ class GraphMgr {
       CollectiveExecutor::Handle* ce_handle, StepStatsCollector* collector,
       CostGraphDef* cost_graph, CancellationManager* cancellation_manager,
       WorkerSession* session, int64_t start_time_usecs,
-      tsl::CoordinationServiceAgent* coordination_service_agent,
+      CoordinationServiceAgent* coordination_service_agent,
       StatusCallback done);
 
   // Don't attempt to process cost models unless explicitly requested for at

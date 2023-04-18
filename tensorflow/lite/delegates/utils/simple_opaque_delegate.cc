@@ -20,10 +20,11 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/lite/builtin_ops.h"
-#include "tensorflow/lite/core/shims/c/c_api.h"
-#include "tensorflow/lite/core/shims/c/c_api_opaque.h"
-#include "tensorflow/lite/core/shims/c/c_api_types.h"
-#include "tensorflow/lite/core/shims/c/common.h"
+#include "tensorflow/lite/c/c_api.h"
+#include "tensorflow/lite/c/c_api_internal.h"
+#include "tensorflow/lite/c/c_api_opaque.h"
+#include "tensorflow/lite/c/c_api_types.h"
+#include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/compatibility.h"
 #include "tensorflow/lite/util.h"
 
@@ -35,9 +36,9 @@ TfLiteRegistrationExternal* GetDelegateKernelRegistration(
       TfLiteRegistrationExternalCreate(kTfLiteBuiltinDelegate, delegate->Name(),
                                        /*version=*/1);
 
-  TfLiteRegistrationExternalSetFree(
-      kernel_registration,
-      [](TfLiteOpaqueContext* context, void* buffer) -> void {
+  tflite::internal::TfLiteRegistrationExternalSetFreeWithData(
+      kernel_registration, kernel_registration,
+      [](void* data, TfLiteOpaqueContext* context, void* buffer) -> void {
         delete reinterpret_cast<SimpleOpaqueDelegateInterface*>(buffer);
       });
 
@@ -83,7 +84,7 @@ TfLiteRegistrationExternal* GetDelegateKernelRegistration(
 }
 
 TfLiteStatus DelegatePrepare(TfLiteOpaqueContext* opaque_context,
-                             TfLiteOpaqueDelegate* opaque_delegate,
+                             struct TfLiteOpaqueDelegateStruct* opaque_delegate,
                              void* data) {
   auto* simple_opaque_delegate =
       reinterpret_cast<SimpleOpaqueDelegateInterface*>(data);
@@ -119,7 +120,8 @@ TfLiteStatus DelegatePrepare(TfLiteOpaqueContext* opaque_context,
 }
 }  // namespace
 
-TfLiteOpaqueDelegate* TfLiteOpaqueDelegateFactory::CreateSimpleDelegate(
+struct TfLiteOpaqueDelegateStruct*
+TfLiteOpaqueDelegateFactory::CreateSimpleDelegate(
     std::unique_ptr<SimpleOpaqueDelegateInterface> simple_delegate,
     int64_t flags) {
   if (simple_delegate == nullptr) {
@@ -135,10 +137,12 @@ TfLiteOpaqueDelegate* TfLiteOpaqueDelegateFactory::CreateSimpleDelegate(
 }
 
 void TfLiteOpaqueDelegateFactory::DeleteSimpleDelegate(
-    TfLiteOpaqueDelegate* opaque_delegate) {
-  if (!opaque_delegate) return;
-  auto* simple_delegate = reinterpret_cast<SimpleOpaqueDelegateInterface*>(
-      TfLiteOpaqueDelegateGetData(opaque_delegate));
+    struct TfLiteOpaqueDelegateStruct* opaque_delegate) {
+  TfLiteDelegate* delegate = reinterpret_cast<TfLiteDelegate*>(opaque_delegate);
+  if (!delegate) return;
+  SimpleOpaqueDelegateInterface* simple_delegate =
+      reinterpret_cast<SimpleOpaqueDelegateInterface*>(
+          delegate->opaque_delegate_builder->data);
   delete simple_delegate;
   TfLiteOpaqueDelegateDelete(opaque_delegate);
 }

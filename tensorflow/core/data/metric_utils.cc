@@ -72,9 +72,7 @@ void IteratorMetricsCollector::RecordStop(absl::Time start_time,
   }
 
   const uint64_t end_time_us = env_.NowMicros();
-  const int64_t latency_micros =
-      safe_sub(end_time_us, absl::ToUnixMicros(start_time));
-  AddLatencySample(latency_micros);
+  AddLatencySample(safe_sub(end_time_us, absl::ToUnixMicros(start_time)));
   IncrementThroughput(GetTotalBytes(output));
   mutex_lock l(mu_);
   metrics::RecordTFDataIteratorLifetime(safe_sub(end_time_us, end_time_us_));

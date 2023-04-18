@@ -14,8 +14,6 @@
 # ==============================================================================
 """Register flops statistics for various TensorFlow operations.
 """
-import numpy as np
-
 from tensorflow.python.framework import graph_util
 from tensorflow.python.framework import ops
 
@@ -35,9 +33,9 @@ IMPLEMENTED_OPS = set([
     "AvgPool", "MaxPool", "AvgPoolGrad", "MaxPoolGrad", "Conv2DBackpropInput",
     "Conv2DBackpropFilter",
     # Other ops
-    "AddN", "MatMul",
+    "AddN",
     # Ops implemented in core tensorflow:
-    "Conv2D", "DepthwiseConv2dNative", "BiasAdd", "Dilation2D",
+    "MatMul", "Conv2D", "DepthwiseConv2dNative", "BiasAdd", "Dilation2D",
 ])
 
 
@@ -443,37 +441,3 @@ def _add_n_flops(graph, node):
   in_shape = graph_util.tensor_shape_from_node_def_name(graph, node.input[0])
   in_shape.assert_is_fully_defined()
   return ops.OpStats("flops", in_shape.num_elements() * (len(node.input) - 1))
-
-
-@ops.RegisterStatistics("MatMul", "flops")
-def _calc_mat_mul_flops(graph, node):
-  """Calculates the compute resources needed for MatMul."""
-  transpose_a = node.attr["transpose_a"].b
-  a_shape = graph_util.tensor_shape_from_node_def_name(graph, node.input[0])
-  a_shape.assert_is_fully_defined()
-  if transpose_a:
-    k = int(a_shape[0])
-  else:
-    k = int(a_shape[1])
-  output_shape = graph_util.tensor_shape_from_node_def_name(graph, node.name)
-  output_shape.assert_is_fully_defined()
-  output_count = np.prod(output_shape.as_list())
-  return ops.OpStats("flops", (k * output_count * 2))
-
-
-@ops.RegisterStatistics("BatchMatMul", "flops")
-@ops.RegisterStatistics("BatchMatMulV2", "flops")
-@ops.RegisterStatistics("BatchMatMulV3", "flops")
-def _calc_batch_mat_mul_flops(graph, node):
-  """Calculates the compute resources needed for BatchMatMul."""
-  transpose_a = node.attr["transpose_a"].b
-  a_shape = graph_util.tensor_shape_from_node_def_name(graph, node.input[0])
-  a_shape.assert_is_fully_defined()
-  if transpose_a:
-    k = int(a_shape[-2])
-  else:
-    k = int(a_shape[-1])
-  output_shape = graph_util.tensor_shape_from_node_def_name(graph, node.name)
-  output_shape.assert_is_fully_defined()
-  output_count = np.prod(output_shape.as_list())
-  return ops.OpStats("flops", (k * output_count * 2))

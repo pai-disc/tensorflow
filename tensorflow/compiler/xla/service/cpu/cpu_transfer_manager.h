@@ -54,8 +54,7 @@ class CpuTransferManager : public GenericTransferManager {
     return true;
   }
 
-  Status ReadDynamicShapes(se::Stream* stream,
-                           const ShapedBuffer* device_buffer,
+  Status ReadDynamicShapes(se::Stream* stream, ShapedBuffer* device_buffer,
                            Shape* device_shape) override;
 
  private:

@@ -5,11 +5,7 @@ licenses(["notice"])
 
 exports_files(["LICENSE.txt"])
 
-load(
-    "@local_config_cuda//cuda:build_defs.bzl",
-    "cuda_library",
-    "if_cuda_clang",
-)
+load("@local_config_cuda//cuda:build_defs.bzl", "cuda_library")
 load(
     "@local_config_nccl//:build_defs.bzl",
     "cuda_rdc_library",
@@ -80,7 +76,10 @@ cc_library(
         "src/transport/coll_net.cc",
         "src/transport/net.cc",
     ],
-    linkopts = ["-lrt"],
+    linkopts = select({
+        "@org_tensorflow//tensorflow:macos": [],
+        "//conditions:default": ["-lrt"],
+    }),
     deps = [
         ":include_hdrs",
         ":src_hdrs",
@@ -100,7 +99,6 @@ cc_library(
             "src/collectives/device/**",
             "src/transport/coll_net.cc",
             "src/transport/net.cc",
-            "src/enqueue.cc",
         ],
     ) + [
         # Required for header inclusion checking (see
@@ -112,35 +110,16 @@ cc_library(
     ],
     hdrs = ["src/nccl.h"],
     include_prefix = "third_party/nccl",
-    linkopts = ["-lrt"],
+    linkopts = select({
+        "@org_tensorflow//tensorflow:macos": [],
+        "//conditions:default": ["-lrt"],
+    }),
     strip_include_prefix = "src",
     visibility = ["//visibility:public"],
     deps = [
         ":device",
-        ":enqueue",
         ":include_hdrs",
         ":net",
-        ":src_hdrs",
-    ],
-)
-
-cc_library(
-    name = "enqueue",
-    srcs = [
-        "src/enqueue.cc",
-    ],
-    hdrs = ["src/nccl.h"],
-    copts = if_cuda_clang([
-        "-x",
-        "cuda",
-    ]),
-    include_prefix = "third_party/nccl",
-    linkopts = ["-lrt"],
-    strip_include_prefix = "src",
-    visibility = ["//visibility:public"],
-    deps = [
-        ":device",
-        ":include_hdrs",
         ":src_hdrs",
     ],
 )

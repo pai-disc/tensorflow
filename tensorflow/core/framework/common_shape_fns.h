@@ -206,7 +206,7 @@ Status UnknownShape(shape_inference::InferenceContext* c);
 Status ReductionShape(shape_inference::InferenceContext* c);
 
 // Shape function for unsorted segment operations.
-Status SegmentReductionWithNumSegmentsShapeFn(InferenceContext* c);
+Status UnsortedSegmentReductionShapeFn(InferenceContext* c);
 
 // Shape function for concat operations.
 // <num_inputs_to_concat> is the number of inputs to concatenate and are taken

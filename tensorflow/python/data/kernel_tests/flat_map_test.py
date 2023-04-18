@@ -22,7 +22,6 @@ from tensorflow.python.client import session
 from tensorflow.python.data.kernel_tests import checkpoint_test_base
 from tensorflow.python.data.kernel_tests import test_base
 from tensorflow.python.data.ops import dataset_ops
-from tensorflow.python.data.ops import options as options_lib
 from tensorflow.python.framework import combinations
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
@@ -184,22 +183,16 @@ class FlatMapCheckpointTest(checkpoint_test_base.CheckpointTestBase,
                             parameterized.TestCase):
 
   @combinations.generate(
-      combinations.times(
-          test_base.default_test_combinations(),
-          checkpoint_test_base.default_test_combinations(),
-          combinations.combine(symbolic_checkpoint=[False, True])))
-  def test(self, verify_fn, symbolic_checkpoint):
+      combinations.times(test_base.default_test_combinations(),
+                         checkpoint_test_base.default_test_combinations()))
+  def test(self, verify_fn):
     # Complicated way of saying range(start, start+25).
     def build_ds(start):
 
       def map_fn(x):
         return dataset_ops.Dataset.range(x, x + 5)
 
-      dataset = dataset_ops.Dataset.range(start, start + 5 * 5, 5)
-      dataset = dataset.flat_map(map_fn)
-      options = options_lib.Options()
-      options.experimental_symbolic_checkpoint = symbolic_checkpoint
-      return dataset.with_options(options)
+      return dataset_ops.Dataset.range(start, start + 5 * 5, 5).flat_map(map_fn)
 
     verify_fn(self, lambda: build_ds(0), num_outputs=25)
 

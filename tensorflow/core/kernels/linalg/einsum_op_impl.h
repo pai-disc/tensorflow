@@ -222,8 +222,7 @@ struct EinsumHelper {
     }
     TensorShape transposed_shape;
     for (int i = 0; i < input.dims(); ++i) {
-      TF_RETURN_IF_ERROR(
-          transposed_shape.AddDimWithStatus(input.dim_size(permutation[i])));
+      transposed_shape.AddDim(input.dim_size(permutation[i]));
     }
     // For empty Tensors, just change the shape. E.g. we may need to transpose
     // from shape [1, 0, 5] to [5, 1, 0].
@@ -383,7 +382,7 @@ struct EinsumHelper {
       int64_t dim = input_deduped.dim_size(label_idx);
       if (label_types[label] == EinsumDimensionType::kBroadcasting ||
           label_types[label] == EinsumDimensionType::kBatch) {
-        TF_RETURN_IF_ERROR(output_shape.AddDimWithStatus(dim));
+        output_shape.AddDim(dim);
       } else if (label_types[label] == EinsumDimensionType::kFree) {
         free_labels->push_back(label);
       }
@@ -392,10 +391,8 @@ struct EinsumHelper {
     if (*swap_free_and_contract)
       std::swap(reshape[EinsumDimensionType::kFree],
                 reshape[EinsumDimensionType::kContract]);
-    TF_RETURN_IF_ERROR(
-        output_shape.AddDimWithStatus(reshape[EinsumDimensionType::kFree]));
-    TF_RETURN_IF_ERROR(
-        output_shape.AddDimWithStatus(reshape[EinsumDimensionType::kContract]));
+    output_shape.AddDim(reshape[EinsumDimensionType::kFree]);
+    output_shape.AddDim(reshape[EinsumDimensionType::kContract]);
 
     if (reshape[EinsumDimensionType::kReduce] ==
         1) {  // No need to actually reduce.
@@ -454,8 +451,7 @@ struct EinsumHelper {
     for (int i = 0; i < inputs.size(); ++i) {
       const int64_t free_axis =
           inputs[i].dims() - (swap_free_and_contract[i] ? 1 : 2);
-      TF_RETURN_IF_ERROR(
-          output_shape.AddDimWithStatus(inputs[i].dim_size(free_axis)));
+      output_shape.AddDim(inputs[i].dim_size(free_axis));
     }
     bool trans_x = swap_free_and_contract[0];
     bool trans_y = !swap_free_and_contract[1];
@@ -550,8 +546,7 @@ class EinsumOp : public OpKernel {
     for (int i = 0; i < num_inputs; ++i) {
       for (int label : free_labels[i]) {
         result_labels.push_back(label);
-        OP_REQUIRES_OK(
-            ctx, result_shape.AddDimWithStatus(label_to_dim_sizes[label]));
+        result_shape.AddDim(label_to_dim_sizes[label]);
       }
     }
 
@@ -654,7 +649,9 @@ namespace functor {
   DECLARE_GPU_SPEC(T, 5);    \
   DECLARE_GPU_SPEC(T, 6);
 
-TF_CALL_GPU_NUMBER_TYPES(DECLARE_GPU_SPECS);
+DECLARE_GPU_SPECS(Eigen::half);
+DECLARE_GPU_SPECS(double);
+DECLARE_GPU_SPECS(float);
 // TODO(rocm): Enable once complex types are supported.
 #if GOOGLE_CUDA
 DECLARE_GPU_SPECS(complex64);

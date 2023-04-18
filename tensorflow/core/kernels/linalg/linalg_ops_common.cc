@@ -133,8 +133,7 @@ void LinearAlgebraOp<InputScalar, OutputScalar>::AnalyzeInputs(
       // dimensions as matrices, and loop over all the other outer ("batch")
       // dimensions to compute the results.
       for (int dim = 0; dim < input_rank - 2; ++dim) {
-        OP_REQUIRES_OK(context,
-                       batch_shape->AddDimWithStatus(in.dim_size(dim)));
+        batch_shape->AddDim(in.dim_size(dim));
       }
     } else {
       // Make sure that all inputs have the same rank and outer dimensions.

@@ -135,15 +135,18 @@ TF_CALL_bfloat16(REGISTER_CPU);
 
 #if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
     (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
-
-#define REGISTER_GPU(T)                                         \
-  REGISTER_KERNEL_BUILDER(Name("SoftmaxCrossEntropyWithLogits") \
-                              .Device(DEVICE_GPU)               \
-                              .TypeConstraint<T>("T"),          \
-                          SoftmaxXentWithLogitsOp<GPUDevice, T>);
-
-TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU);
-
+REGISTER_KERNEL_BUILDER(Name("SoftmaxCrossEntropyWithLogits")
+                            .Device(DEVICE_GPU)
+                            .TypeConstraint<Eigen::half>("T"),
+                        SoftmaxXentWithLogitsOp<GPUDevice, Eigen::half>);
+REGISTER_KERNEL_BUILDER(Name("SoftmaxCrossEntropyWithLogits")
+                            .Device(DEVICE_GPU)
+                            .TypeConstraint<float>("T"),
+                        SoftmaxXentWithLogitsOp<GPUDevice, float>);
+REGISTER_KERNEL_BUILDER(Name("SoftmaxCrossEntropyWithLogits")
+                            .Device(DEVICE_GPU)
+                            .TypeConstraint<double>("T"),
+                        SoftmaxXentWithLogitsOp<GPUDevice, double>);
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 
 }  // namespace tensorflow

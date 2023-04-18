@@ -16,9 +16,7 @@ limitations under the License.
 #include <unistd.h>
 
 #include "absl/base/casts.h"
-#include "absl/functional/any_invocable.h"
 #include "absl/strings/ascii.h"
-#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
@@ -28,9 +26,16 @@ limitations under the License.
 #include "tensorflow/compiler/xla/stream_executor/gpu/gpu_stream.h"
 #include "tensorflow/compiler/xla/stream_executor/gpu/gpu_timer.h"
 #include "tensorflow/compiler/xla/stream_executor/kernel_cache_config.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/env.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/error.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/initialize.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/mathutil.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/numbers.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/path.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/process_state.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/statusor.h"
 #include "tensorflow/compiler/xla/stream_executor/platform.h"
 #include "tensorflow/compiler/xla/stream_executor/platform/dso_loader.h"
-#include "tensorflow/compiler/xla/stream_executor/platform/initialize.h"
 #include "tensorflow/compiler/xla/stream_executor/platform/logging.h"
 #include "tensorflow/compiler/xla/stream_executor/platform/port.h"
 #include "tensorflow/compiler/xla/stream_executor/plugin_registry.h"
@@ -40,8 +45,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/stream_executor/stream_executor_internal.h"
 #include "tensorflow/compiler/xla/stream_executor/stream_executor_pimpl.h"
 #include "tensorflow/compiler/xla/stream_executor/timer.h"
-#include "tensorflow/tsl/platform/env.h"
-#include "tensorflow/tsl/platform/errors.h"
 
 #ifdef PLATFORMS_GPUS_ROCM_DYNAMIC_LIBROCM_DYNAMIC_LIBROCM_H_
 #error \
@@ -112,10 +115,10 @@ bool GpuExecutor::UnloadModule(ModuleHandle module_handle) {
   return UnloadGpuBinary(gpu_binary);
 }
 
-tsl::StatusOr<std::shared_ptr<DeviceMemoryBase>>
+port::StatusOr<std::shared_ptr<DeviceMemoryBase>>
 GpuExecutor::CreateOrShareConstant(Stream* stream,
                                    const std::vector<uint8_t>& content) {
-  return tsl::errors::Unimplemented("Not implemented for ROCm");
+  return port::UnimplementedError("Not implemented for ROCm");
 }
 
 bool GpuExecutor::UnloadGpuBinary(const void* gpu_binary) {
@@ -156,8 +159,8 @@ void GpuExecutor::UnloadKernel(const KernelBase* kernel) {
   kernel_to_gpu_binary_.erase(gpu_binary_it);
 }
 
-tsl::Status GpuExecutor::Init(int device_ordinal,
-                              DeviceOptions device_options) {
+port::Status GpuExecutor::Init(int device_ordinal,
+                               DeviceOptions device_options) {
   device_ordinal_ = device_ordinal;
 
   auto status = GpuDriver::Init();
@@ -196,7 +199,7 @@ bool GpuExecutor::FindOnDiskForISAVersion(absl::string_view filename,
 
   string cc_specific =
       absl::StrCat(filename, ".cc", version_, canonical_suffix);
-  if (tsl::Env::Default()->FileExists(cc_specific).ok()) {
+  if (port::FileExists(cc_specific).ok()) {
     VLOG(2) << "found AMDGPU ISA version-specific file, using that: "
             << cc_specific;
     *found_filename = cc_specific;
@@ -205,7 +208,7 @@ bool GpuExecutor::FindOnDiskForISAVersion(absl::string_view filename,
 
   VLOG(2) << "could not find AMDGPU ISA version-specific file at: "
           << cc_specific;
-  if (tsl::Env::Default()->FileExists(string(filename)).ok()) {
+  if (port::FileExists(string(filename)).ok()) {
     *found_filename = string(filename);
     return true;
   }
@@ -234,8 +237,8 @@ static string GetBinaryDir(bool strip_exe) {
   return exe_path;
 }
 
-tsl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
-                                   KernelBase* kernel) {
+port::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
+                                    KernelBase* kernel) {
   GpuKernel* rocm_kernel = AsGpuKernel(kernel);
   hipModule_t module = nullptr;
   const string* kernelname;
@@ -247,7 +250,7 @@ tsl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
   }
 
   if (on_disk_spec != nullptr) {
-    return tsl::errors::Internal(
+    return port::InternalError(
         "Loading ROCM kernel from disk is not supported");
   } else if (spec.has_cuda_cubin_in_memory()) {
     kernelname = &spec.cuda_cubin_in_memory().kernelname();
@@ -261,13 +264,13 @@ tsl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
     }
     kernel_to_gpu_binary_[kernel] = hsaco;
   } else {
-    return tsl::errors::Internal("No method of loading ROCM kernel provided");
+    return port::InternalError("No method of loading ROCM kernel provided");
   }
 
   VLOG(2) << "getting function " << *kernelname << " from module " << module;
   if (!GpuDriver::GetModuleFunction(context_, module, kernelname->c_str(),
                                     rocm_kernel->gpu_function_ptr())) {
-    return tsl::errors::Internal("Failed getting module function");
+    return port::InternalError("Failed getting module function");
   }
 
   // We have to trust the kernel loader spec arity because there doesn't appear
@@ -281,8 +284,8 @@ tsl::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
   return tsl::OkStatus();
 }
 
-tsl::Status GpuExecutor::GetKernelMetadata(GpuKernel* rocm_kernel,
-                                           KernelMetadata* kernel_metadata) {
+port::Status GpuExecutor::GetKernelMetadata(GpuKernel* rocm_kernel,
+                                            KernelMetadata* kernel_metadata) {
   int value = 0;
   // TODO(ROCm) implement this feature in HIP
   kernel_metadata->set_registers_per_thread(value);
@@ -292,10 +295,10 @@ tsl::Status GpuExecutor::GetKernelMetadata(GpuKernel* rocm_kernel,
   return tsl::OkStatus();
 }
 
-tsl::Status GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
-                                const BlockDim& block_dims,
-                                const KernelBase& kernel,
-                                const KernelArgsArrayBase& args) {
+port::Status GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
+                                 const BlockDim& block_dims,
+                                 const KernelBase& kernel,
+                                 const KernelArgsArrayBase& args) {
   CHECK_EQ(kernel.Arity(), args.number_of_arguments());
   GpuStreamHandle hipstream = AsGpuStreamValue(stream);
   const GpuKernel* rocm_kernel = AsGpuKernel(&kernel);
@@ -364,8 +367,8 @@ int GpuExecutor::CompareOccupancy(int* initial_blocks,
   return 0;
 }
 
-tsl::Status GpuExecutor::LoadModule(const MultiModuleLoaderSpec& spec,
-                                    ModuleHandle* module_handle) {
+port::Status GpuExecutor::LoadModule(const MultiModuleLoaderSpec& spec,
+                                     ModuleHandle* module_handle) {
   // In GpuExecutor we store the pointer to the  HSACO binary  as
   // ModuleHandle::id().
   hipModule_t hip_module = nullptr;
@@ -379,22 +382,22 @@ tsl::Status GpuExecutor::LoadModule(const MultiModuleLoaderSpec& spec,
         static_cast<const void*>(spec.cuda_cubin_in_memory().data())));
     return tsl::OkStatus();
   } else {
-    return tsl::errors::Internal("No HASCO binary found");
+    return port::InternalError("No HASCO binary found");
   }
 }
 
-tsl::Status GpuExecutor::LoadModuleFromCuBin(const char* cubin,
-                                             hipModule_t* module) {
+port::Status GpuExecutor::LoadModuleFromCuBin(const char* cubin,
+                                              hipModule_t* module) {
   LOG(FATAL) << "Feature not supported on ROCM platform (LoadModuleFromCuBin)";
 }
 
-tsl::Status GpuExecutor::LoadModuleFromPtx(const char* ptx,
-                                           hipModule_t* module) {
+port::Status GpuExecutor::LoadModuleFromPtx(const char* ptx,
+                                            hipModule_t* module) {
   LOG(FATAL) << "Feature not supported on ROCM platform (LoadModuleFromPtx)";
 }
 
-tsl::Status GpuExecutor::LoadModuleFromHsaco(const char* hsaco,
-                                             hipModule_t* module) {
+port::Status GpuExecutor::LoadModuleFromHsaco(const char* hsaco,
+                                              hipModule_t* module) {
   uint64_t module_refcount;
   std::tie(*module, module_refcount) = gpu_binary_to_module_[hsaco];
 
@@ -455,8 +458,8 @@ bool GpuExecutor::SynchronizeAllActivity() {
   return GpuDriver::SynchronizeContext(context_);
 }
 
-tsl::Status GpuExecutor::SynchronousMemZero(DeviceMemoryBase* location,
-                                            uint64_t size) {
+port::Status GpuExecutor::SynchronousMemZero(DeviceMemoryBase* location,
+                                             uint64_t size) {
   if (reinterpret_cast<uintptr_t>(location->opaque()) % 4 == 0 &&
       size % 4 == 0) {
     return GpuDriver::SynchronousMemsetUint32(
@@ -466,8 +469,8 @@ tsl::Status GpuExecutor::SynchronousMemZero(DeviceMemoryBase* location,
                                            0x0, size);
 }
 
-tsl::Status GpuExecutor::SynchronousMemSet(DeviceMemoryBase* location,
-                                           int value, uint64_t size) {
+port::Status GpuExecutor::SynchronousMemSet(DeviceMemoryBase* location,
+                                            int value, uint64_t size) {
   if (reinterpret_cast<uintptr_t>(location->opaque()) % 4 == 0 &&
       size % 4 == 0) {
     // hipMemset reinterprets "value" as a uint8.
@@ -481,28 +484,28 @@ tsl::Status GpuExecutor::SynchronousMemSet(DeviceMemoryBase* location,
                                            value, size);
 }
 
-tsl::Status GpuExecutor::SynchronousMemcpy(DeviceMemoryBase* gpu_dst,
-                                           const void* host_src,
-                                           uint64_t size) {
+port::Status GpuExecutor::SynchronousMemcpy(DeviceMemoryBase* gpu_dst,
+                                            const void* host_src,
+                                            uint64_t size) {
   return GpuDriver::SynchronousMemcpyH2D(context_, AsROCmDevicePtr(gpu_dst),
                                          host_src, size);
 }
 
-tsl::Status GpuExecutor::SynchronousMemcpy(void* host_dst,
-                                           const DeviceMemoryBase& gpu_src,
-                                           uint64_t size) {
+port::Status GpuExecutor::SynchronousMemcpy(void* host_dst,
+                                            const DeviceMemoryBase& gpu_src,
+                                            uint64_t size) {
   return GpuDriver::SynchronousMemcpyD2H(context_, host_dst,
                                          AsROCmDevicePtr(gpu_src), size);
 }
 
-tsl::Status GpuExecutor::SynchronousMemcpyDeviceToDevice(
+port::Status GpuExecutor::SynchronousMemcpyDeviceToDevice(
     DeviceMemoryBase* gpu_dst, const DeviceMemoryBase& gpu_src, uint64_t size) {
   return GpuDriver::SynchronousMemcpyD2D(context_, AsROCmDevicePtr(gpu_dst),
                                          AsROCmDevicePtr(gpu_src), size);
 }
 
-tsl::Status GpuExecutor::MemZero(Stream* stream, DeviceMemoryBase* location,
-                                 uint64_t size) {
+port::Status GpuExecutor::MemZero(Stream* stream, DeviceMemoryBase* location,
+                                  uint64_t size) {
   if (reinterpret_cast<uintptr_t>(location->opaque()) % 4 == 0 &&
       size % 4 == 0) {
     return Memset32(stream, location, 0x0, size);
@@ -511,8 +514,8 @@ tsl::Status GpuExecutor::MemZero(Stream* stream, DeviceMemoryBase* location,
   }
 }
 
-tsl::Status GpuExecutor::Memset(Stream* stream, DeviceMemoryBase* location,
-                                uint8 pattern, uint64_t size) {
+port::Status GpuExecutor::Memset(Stream* stream, DeviceMemoryBase* location,
+                                 uint8 pattern, uint64_t size) {
   VLOG(2) << "enqueueing memset8 operation onto stream " << stream
           << " at location " << location << " with size " << size
           << " and pattern " << std::hex << pattern;
@@ -521,8 +524,8 @@ tsl::Status GpuExecutor::Memset(Stream* stream, DeviceMemoryBase* location,
                                             AsGpuStreamValue(stream));
 }
 
-tsl::Status GpuExecutor::Memset32(Stream* stream, DeviceMemoryBase* location,
-                                  uint32 pattern, uint64_t size) {
+port::Status GpuExecutor::Memset32(Stream* stream, DeviceMemoryBase* location,
+                                   uint32 pattern, uint64_t size) {
   VLOG(2) << "enqueueing memset32 operation onto stream " << stream
           << " at location " << location << " with size " << size
           << " and pattern " << std::hex << pattern;
@@ -557,14 +560,13 @@ bool GpuExecutor::MemcpyDeviceToDevice(Stream* stream,
 }
 
 bool GpuExecutor::HostCallback(Stream* stream,
-                               absl::AnyInvocable<tsl::Status() &&> callback) {
-  auto callback_ptr =
-      new absl::AnyInvocable<void() &&>([cb = std::move(callback)]() mutable {
-        tsl::Status s = std::move(cb)();
-        if (!s.ok()) {
-          LOG(WARNING) << "Host callback failed: " << s;
-        }
-      });
+                               std::function<port::Status()> callback) {
+  auto callback_ptr = new std::function<void()>([callback]() {
+    port::Status s = callback();
+    if (!s.ok()) {
+      LOG(WARNING) << "Host callback failed: " << s;
+    }
+  });
   return GpuDriver::AddStreamCallback(context_, AsGpuStreamValue(stream),
                                       InternalHostCallback, callback_ptr);
 }
@@ -572,30 +574,31 @@ bool GpuExecutor::HostCallback(Stream* stream,
 /* static */ void GpuExecutor::InternalHostCallback(GpuStreamHandle stream,
                                                     hipError_t status,
                                                     void* data) {
-  auto* callback = reinterpret_cast<absl::AnyInvocable<void() &&>*>(data);
-  std::move (*callback)();
+  std::function<void()>* callback =
+      reinterpret_cast<std::function<void()>*>(data);
+  (*callback)();
   delete callback;
 }
 
-tsl::Status GpuExecutor::AllocateEvent(Event* event) {
+port::Status GpuExecutor::AllocateEvent(Event* event) {
   return AsGpuEvent(event)->Init();
 }
 
-tsl::Status GpuExecutor::DeallocateEvent(Event* event) {
+port::Status GpuExecutor::DeallocateEvent(Event* event) {
   return AsGpuEvent(event)->Destroy();
 }
 
-tsl::Status GpuExecutor::RecordEvent(Stream* stream, Event* event) {
+port::Status GpuExecutor::RecordEvent(Stream* stream, Event* event) {
   return AsGpuEvent(event)->Record(AsGpuStream(stream));
 }
 
-tsl::Status GpuExecutor::WaitForEvent(Stream* stream, Event* event) {
+port::Status GpuExecutor::WaitForEvent(Stream* stream, Event* event) {
   if (GpuDriver::WaitStreamOnEvent(context_, AsGpuStream(stream)->gpu_stream(),
                                    AsGpuEvent(event)->gpu_event())) {
     return tsl::OkStatus();
   } else {
-    return tsl::Status{
-        tsl::error::INTERNAL,
+    return port::Status{
+        port::error::INTERNAL,
         absl::StrFormat("error recording waiting for ROCM event on stream %p",
                         stream)};
   }
@@ -653,13 +656,13 @@ bool GpuExecutor::StopTimer(Stream* stream, Timer* timer) {
   return AsGpuTimer(timer)->Stop(AsGpuStream(stream));
 }
 
-tsl::Status GpuExecutor::BlockHostUntilDone(Stream* stream) {
+port::Status GpuExecutor::BlockHostUntilDone(Stream* stream) {
   return GpuDriver::SynchronizeStream(context_, AsGpuStreamValue(stream));
 }
 
 blas::BlasSupport* GpuExecutor::CreateBlas() {
   PluginRegistry* registry = PluginRegistry::Instance();
-  tsl::StatusOr<PluginRegistry::BlasFactory> status =
+  port::StatusOr<PluginRegistry::BlasFactory> status =
       registry->GetFactory<PluginRegistry::BlasFactory>(rocm::kROCmPlatformId,
                                                         plugin_config_.blas());
   if (!status.ok()) {
@@ -673,7 +676,7 @@ blas::BlasSupport* GpuExecutor::CreateBlas() {
 
 dnn::DnnSupport* GpuExecutor::CreateDnn() {
   PluginRegistry* registry = PluginRegistry::Instance();
-  tsl::StatusOr<PluginRegistry::DnnFactory> status =
+  port::StatusOr<PluginRegistry::DnnFactory> status =
       registry->GetFactory<PluginRegistry::DnnFactory>(rocm::kROCmPlatformId,
                                                        plugin_config_.dnn());
   if (!status.ok()) {
@@ -687,7 +690,7 @@ dnn::DnnSupport* GpuExecutor::CreateDnn() {
 
 fft::FftSupport* GpuExecutor::CreateFft() {
   PluginRegistry* registry = PluginRegistry::Instance();
-  tsl::StatusOr<PluginRegistry::FftFactory> status =
+  port::StatusOr<PluginRegistry::FftFactory> status =
       registry->GetFactory<PluginRegistry::FftFactory>(rocm::kROCmPlatformId,
                                                        plugin_config_.fft());
   if (!status.ok()) {
@@ -701,7 +704,7 @@ fft::FftSupport* GpuExecutor::CreateFft() {
 
 rng::RngSupport* GpuExecutor::CreateRng() {
   PluginRegistry* registry = PluginRegistry::Instance();
-  tsl::StatusOr<PluginRegistry::RngFactory> status =
+  port::StatusOr<PluginRegistry::RngFactory> status =
       registry->GetFactory<PluginRegistry::RngFactory>(rocm::kROCmPlatformId,
                                                        plugin_config_.rng());
   if (!status.ok()) {
@@ -721,7 +724,7 @@ bool GpuExecutor::CanEnablePeerAccessTo(StreamExecutorInterface* other) {
   return GpuDriver::CanEnablePeerAccess(context_, rocm_other->context_);
 }
 
-tsl::Status GpuExecutor::EnablePeerAccessTo(StreamExecutorInterface* other) {
+port::Status GpuExecutor::EnablePeerAccessTo(StreamExecutorInterface* other) {
   GpuExecutor* rocm_other = static_cast<GpuExecutor*>(other);
   return GpuDriver::EnablePeerAccess(context_, rocm_other->context_);
 }
@@ -836,7 +839,7 @@ static int TryToReadNumaNode(const string& pci_bus_id, int device_ordinal) {
   content = buf;
 
   int32_t value;
-  if (absl::SimpleAtoi(content, &value)) {
+  if (port::safe_strto32(content, &value)) {
     if (value < 0) {  // See http://b/18228951 for details on this path.
       LOG(INFO) << "successful NUMA node read from SysFS had negative value ("
                 << value
@@ -857,7 +860,7 @@ static int TryToReadNumaNode(const string& pci_bus_id, int device_ordinal) {
   return kUnknownNumaNode;
 }
 
-tsl::StatusOr<std::unique_ptr<DeviceDescription>>
+port::StatusOr<std::unique_ptr<DeviceDescription>>
 GpuExecutor::CreateDeviceDescription(int device_ordinal) {
   GpuDeviceHandle device;
   auto status = GpuDriver::GetDevice(device_ordinal, &device);
@@ -926,9 +929,11 @@ GpuExecutor::CreateDeviceDescription(int device_ordinal) {
     builder.set_ecc_enabled(ecc_enabled);
   }
 
-  uint64_t device_memory_size = -1;
-  (void)GpuDriver::GetDeviceTotalMemory(device, &device_memory_size);
-  builder.set_device_memory_size(device_memory_size);
+  {
+    uint64_t device_memory_size = -1;
+    (void)GpuDriver::GetDeviceTotalMemory(device, &device_memory_size);
+    builder.set_device_memory_size(device_memory_size);
+  }
 
   {
     BlockDim block_dim_limit;
@@ -956,8 +961,8 @@ GpuExecutor::CreateDeviceDescription(int device_ordinal) {
       GpuDriver::GetMaxSharedMemoryPerCore(device).value());
   builder.set_shared_memory_per_block(
       GpuDriver::GetMaxSharedMemoryPerBlock(device).value());
-  int core_count = GpuDriver::GetMultiprocessorCount(device).value();
-  builder.set_core_count(core_count);
+  builder.set_core_count(
+      GpuDriver::GetMultiprocessorCount(device).value());
   builder.set_threads_per_core_limit(
       GpuDriver::GetMaxThreadsPerMultiprocessor(device).value());
   builder.set_registers_per_block_limit(
@@ -965,23 +970,6 @@ GpuExecutor::CreateDeviceDescription(int device_ordinal) {
   builder.set_threads_per_warp(
       GpuDriver::GetThreadsPerWarp(device).value());
   builder.set_registers_per_core_limit(64 * 1024);
-
-  int cc_major = 0;
-  int cc_minor = 0;
-  GpuDriver::GetComputeCapability(&cc_major, &cc_minor, device).IgnoreError();
-
-  // It would be better to use the PCI device ID or some other truly unique
-  // identifier for the GPU model.  But getting this requires using NVML or
-  // other hacks, which we don't have access to in OSS TensorFlow.
-  //
-  // Alternatively you might be tempted to use GpuDriver::GetDeviceName as a
-  // unique identifier, but this is not stable across GPU VBIOS versions.
-  //
-  // TODO(jlebar): This really should be more unique.  In CUDA land, we mix in
-  // the clock speed and L2 cache size.
-  builder.set_model_str(absl::StrFormat("cc_%d.%d with %dB RAM, %d cores",
-                                        cc_major, cc_minor, device_memory_size,
-                                        core_count));
 
   return builder.Build();
 }

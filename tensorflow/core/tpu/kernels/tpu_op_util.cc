@@ -89,10 +89,10 @@ std::string GuaranteedConstFingerprint(
   if (fingerprint_in_metadata.empty()) {
     uint64_t fingerprint = 0;
     for (const Tensor& constant : guaranteed_constants) {
-      fingerprint = stream_executor::tpu::OpsApiFn()
-                        ->TpuCompile_CreateGuaranteedConstFingerprintFn(
-                            fingerprint, constant.tensor_data().data(),
-                            constant.tensor_data().size());
+      fingerprint =
+          tpu::OpsApiFn()->TpuCompile_CreateGuaranteedConstFingerprintFn(
+              fingerprint, constant.tensor_data().data(),
+              constant.tensor_data().size());
     }
     return std::to_string(fingerprint);
   } else {
@@ -124,7 +124,7 @@ TpuCompilationCacheKey CreateCompilationCacheKey(
     }
   }
   CompilationCacheKeyResult result =
-      stream_executor::tpu::OpsApiFn()->TpuCompile_CreateCompilationCacheKeyFn(
+      tpu::OpsApiFn()->TpuCompile_CreateCompilationCacheKeyFn(
           CompilationCacheKeyProperty{
               config_prefix.data(), shapes_prefix.data(), function_name.data(),
               mlir_module_fingerprint, flattened_device_ids.data(),
@@ -133,8 +133,7 @@ TpuCompilationCacheKey CreateCompilationCacheKey(
               metadata.num_replicas(), mesh_state.data(), session_id,
               resource_mgr});
   auto buffer_cleanup = gtl::MakeCleanup([result]() {
-    stream_executor::tpu::OpsApiFn()->TpuCompile_DestroyCompilationCacheKeyFn(
-        result);
+    tpu::OpsApiFn()->TpuCompile_DestroyCompilationCacheKeyFn(result);
   });
   TpuCompilationCacheKey key;
   key.prefix = result.key;

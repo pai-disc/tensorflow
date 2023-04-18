@@ -8,7 +8,6 @@
 # both the builtin_ops.h header and the builtin_ops_list.inc file?
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//visibility:public",
     ],

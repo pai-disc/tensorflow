@@ -45,10 +45,12 @@ class CompileOpImplFactory {
  public:
   virtual ~CompileOpImplFactory() = default;
 
-  virtual tsl::StatusOr<std::unique_ptr<TpuCompileOpKernelCommon>>
+  virtual stream_executor::port::StatusOr<
+      std::unique_ptr<TpuCompileOpKernelCommon>>
   CreateNonMlirImpl(OpKernelConstruction* ctx) = 0;
 
-  virtual tsl::StatusOr<std::unique_ptr<TpuCompileOpKernelCommon>>
+  virtual stream_executor::port::StatusOr<
+      std::unique_ptr<TpuCompileOpKernelCommon>>
   CreateMlirImpl(OpKernelConstruction* ctx) = 0;
 
   static CompileOpImplFactory* Get();

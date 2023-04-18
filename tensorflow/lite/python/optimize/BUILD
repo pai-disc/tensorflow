@@ -1,7 +1,6 @@
 load("//tensorflow:tensorflow.default.bzl", "pybind_extension")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
@@ -13,9 +12,9 @@ cc_library(
     deps = [
         "//tensorflow/lite:framework",
         "//tensorflow/lite:shared_library",
-        "//tensorflow/lite/core:framework",
-        "//tensorflow/lite/core/c:common",
-        "//tensorflow/lite/core/kernels:builtin_ops",
+        "//tensorflow/lite/c:common",
+        "//tensorflow/lite/core:headers",
+        "//tensorflow/lite/kernels:builtin_ops",
         "//tensorflow/lite/python/interpreter_wrapper:numpy",
         "//tensorflow/lite/python/interpreter_wrapper:python_error_reporter",
         "//tensorflow/lite/python/interpreter_wrapper:python_utils",

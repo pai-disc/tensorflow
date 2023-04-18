@@ -24,7 +24,6 @@ from tensorflow.python.compiler.xla.experimental import xla_sharding
 from tensorflow.python.distribute import tpu_util
 from tensorflow.python.eager import context
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import tensor_conversion_registry
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import gen_resource_variable_ops
 from tensorflow.python.ops import gen_tpu_partition_ops as tpu_partition_ops
@@ -164,39 +163,16 @@ class TPUReplicatedVariable(variables_lib.Variable):
       return [self._vars[0]]
     return self._vars
 
-  def _export_to_saved_model_graph(self, object_map, tensor_map,
-                                   options, **kwargs):
+  def _map_resources(self, save_options):
     """For implementing `Trackable`."""
     first_var = self._vars[0]
-    resource_list = first_var._export_to_saved_model_graph(  # pylint:disable=protected-access
-        object_map, tensor_map, options, **kwargs)
+    obj_map, resource_map = first_var._map_resources(save_options)  # pylint:disable=protected-access
     for v in self._vars[1:]:
-      object_map[v] = object_map[first_var]
-      tensor_map[v.handle] = tensor_map[first_var.handle]
-      resource_list.append(v.handle)
-    object_map[self] = object_map[first_var]
-    tensor_map[self] = tensor_map[first_var.handle]
-    resource_list.append(self)
-    return resource_list
-
-  def _export_to_saved_model_graph(self, object_map=None,
-                                   tensor_map=None,
-                                   options=None,
-                                   **kwargs):
-    """For implementing `Trackable`."""
-    first_var = self._vars[0]
-    resource_list = first_var._export_to_saved_model_graph(  # pylint:disable=protected-access
-        object_map=object_map,
-        tensor_map=tensor_map,
-        options=options)
-    for v in self._vars[1:]:
-      object_map[v] = object_map[first_var]
-      tensor_map[v.handle] = tensor_map[first_var.handle]
-      resource_list.append(v.handle)
-    object_map[self] = object_map[first_var]
-    tensor_map[self] = tensor_map[first_var.handle]
-    resource_list.append(self)
-    return resource_list
+      obj_map[v] = obj_map[first_var]
+      resource_map[v.handle] = resource_map[first_var.handle]
+    obj_map[self] = obj_map[first_var]
+    resource_map[self] = resource_map[first_var.handle]
+    return obj_map, resource_map
 
   def _gather_saveables_for_saved_model(self):
     return {trackable.VARIABLE_VALUE_KEY: self._vars[0]}
@@ -317,5 +293,5 @@ def _tensor_conversion_tpu_replicated_var(var,
   return var._dense_var_to_tensor(dtype=dtype, name=name, as_ref=as_ref)  # pylint: disable=protected-access
 
 
-tensor_conversion_registry.register_tensor_conversion_function(
-    TPUReplicatedVariable, _tensor_conversion_tpu_replicated_var)
+ops.register_tensor_conversion_function(TPUReplicatedVariable,
+                                        _tensor_conversion_tpu_replicated_var)

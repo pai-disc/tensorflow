@@ -121,8 +121,6 @@ class TensorDatasetOp::Dataset : public DatasetBase {
     explicit Iterator(const Params& params)
         : DatasetIterator<Dataset>(params), produced_(false) {}
 
-    bool SymbolicCheckpointCompatible() const override { return true; }
-
     Status Initialize(IteratorContext* ctx) override {
       if (!ctx->split_providers().empty()) {
         TF_ASSIGN_OR_RETURN(split_provider_,
@@ -163,17 +161,15 @@ class TensorDatasetOp::Dataset : public DatasetBase {
     Status SaveInternal(SerializationContext* ctx,
                         IteratorStateWriter* writer) override {
       mutex_lock l(mu_);
-      TF_RETURN_IF_ERROR(writer->WriteScalar(full_name(kProduced),
-                                             static_cast<int64_t>(produced_)));
+      if (produced_)
+        TF_RETURN_IF_ERROR(writer->WriteScalar(full_name(kProduced), ""));
       return OkStatus();
     }
 
     Status RestoreInternal(IteratorContext* ctx,
                            IteratorStateReader* reader) override {
       mutex_lock l(mu_);
-      int64_t produced;
-      TF_RETURN_IF_ERROR(reader->ReadScalar(full_name(kProduced), &produced));
-      produced_ = static_cast<bool>(produced);
+      produced_ = reader->Contains(full_name(kProduced));
       return OkStatus();
     }
 

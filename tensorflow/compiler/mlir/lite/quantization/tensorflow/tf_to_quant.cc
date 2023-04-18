@@ -93,23 +93,23 @@ struct InsertQuantOpsAfterTFFakeQuantOp
   LogicalResult matchAndRewrite(TFFakeQuantOp tf_op,
                                 PatternRewriter &rewriter) const override {
     // We don't want to insert quantize/dequantize if the quantize op exists.
-    auto res = tf_op.getOutputs();
+    auto res = tf_op.outputs();
     if (!res.hasOneUse() || isa<quantfork::QuantizeCastOp>(*res.user_begin()))
       return failure();
 
     // Extract the min/max constant values from the operands. We also consider
     // a special case that there are tf.Identity ops between the min/max
     // constants and the tf.FakeQuantWithMinMaxVarsOp.
-    Value min = tf_op.getMin(), max = tf_op.getMax();
+    Value min = tf_op.min(), max = tf_op.max();
     DenseFPElementsAttr min_value, max_value;
     if (auto id1 = dyn_cast_or_null<TF::IdentityOp>(min.getDefiningOp())) {
-      id1.replaceAllUsesWith(id1.getInput());
-      min = tf_op.getMin();
+      id1.replaceAllUsesWith(id1.input());
+      min = tf_op.min();
       rewriter.eraseOp(id1);
     }
     if (auto id2 = dyn_cast_or_null<TF::IdentityOp>(max.getDefiningOp())) {
-      id2.replaceAllUsesWith(id2.getInput());
-      max = tf_op.getMax();
+      id2.replaceAllUsesWith(id2.input());
+      max = tf_op.max();
       rewriter.eraseOp(id2);
     }
     if (!matchPattern(min, m_Constant(&min_value))) return failure();
@@ -124,8 +124,8 @@ struct InsertQuantOpsAfterTFFakeQuantOp
     // Use the min/max from the operands and the num_bits and narrow_range
     // attribute to create the quantization parameter for the new quantize op.
     rewriter.setInsertionPointAfter(tf_op.getOperation());
-    IntegerAttr num_bits = rewriter.getI64IntegerAttr(tf_op.getNumBits());
-    BoolAttr narrow_range = rewriter.getBoolAttr(tf_op.getNarrowRange());
+    IntegerAttr num_bits = rewriter.getI64IntegerAttr(tf_op.num_bits());
+    BoolAttr narrow_range = rewriter.getBoolAttr(tf_op.narrow_range());
     Type res_type = tf_op.getType();
     TypeAttr qtype = quant::GetQuantizedTypeAttr(
         rewriter, res_type, min_value, max_value, quant_dim, num_bits,
@@ -135,7 +135,7 @@ struct InsertQuantOpsAfterTFFakeQuantOp
     // Finally, use the quantization parameter to create the quantize and
     // dequantize ops, and insert them between the tf.FakeQuantWithMinMaxVarsOp
     // and its users.
-    Value value = tf_op.getOutputs();
+    Value value = tf_op.outputs();
     auto quantize = rewriter.create<quantfork::QuantizeCastOp>(
         tf_op.getLoc(), qtype.getValue(), value);
     auto dequantize = rewriter.create<quantfork::DequantizeCastOp>(

@@ -15,7 +15,6 @@ limitations under the License.
 #include "tensorflow/core/tfrt/eager/function_cache.h"
 
 #include <memory>
-#include <utility>
 
 #include "absl/types/span.h"
 #include "tensorflow/c/eager/abstract_tensor_handle.h"
@@ -33,7 +32,6 @@ limitations under the License.
 #include "tensorflow/core/platform/refcount.h"
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/test.h"
-#include "tensorflow/core/runtime_fallback/kernel/kernel_fallback_execute_compat.h"
 #include "tensorflow/core/tfrt/eager/c_api_tfrt.h"
 
 namespace tfrt {
@@ -228,27 +226,19 @@ TEST_P(CppTests, TestFunctionCacheWithAdd) {
   for (auto d : device_mgr->ListDevices()) dev_set.AddDevice(d);
   auto& device = corert->GetHostContext()->GetHostDevice();
   const Device* input_devices[2] = {&device, &device};
-  tfrt::ResourceContext resource_context;
-  RequestContextBuilder req_ctx_builder(corert->GetHostContext(),
-                                        &resource_context);
-  TF_ASSERT_OK(tensorflow::tfd::SetUpKernelFallbackCompatRequestContext(
-      &req_ctx_builder, /*runner_table=*/nullptr, tfrt_ctx->GetEagerContext(),
-      /*user_intra_op_threadpool=*/nullptr, /*model_metadata=*/std::nullopt));
-  auto req_ctx = std::move(req_ctx_builder).build();
+  auto req_ctx = RequestContextBuilder(corert->GetHostContext(),
+                                       /*resource_context=*/nullptr)
+                     .build();
   ExecutionContext exec_ctx(std::move(*req_ctx));
 
   auto request_ctx_fn =
-      [host = corert->GetHostContext(),
-       eager_context = tfrt_ctx->GetEagerContext(), &resource_context](
+      [host = corert->GetHostContext()](
           tensorflow::tfrt_stub::OpKernelRunnerTable* runner_table,
           RCReference<RequestContext>* request_ctx) {
-        RequestContextBuilder req_ctx_builder(host, &resource_context);
-        TF_RETURN_IF_ERROR(
-            tensorflow::tfd::SetUpKernelFallbackCompatRequestContext(
-                &req_ctx_builder, runner_table, eager_context,
-                /*user_intra_op_threadpool=*/nullptr,
-                /*model_metadata=*/std::nullopt));
-        *request_ctx = *std::move(req_ctx_builder).build();
+        *request_ctx =
+            std::move(*RequestContextBuilder(host,
+                                             /*resource_context=*/nullptr)
+                           .build());
         return ::tensorflow::OkStatus();
       };
 

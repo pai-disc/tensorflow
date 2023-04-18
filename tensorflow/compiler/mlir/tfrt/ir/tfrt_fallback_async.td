@@ -33,7 +33,8 @@ def FallbackAsync_Dialect : Dialect {
   }];
 
   let cppNamespace = "::tfrt::fallback_async";
-  let useFoldAPI = kEmitFoldAdaptorFolder;
+
+  let emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 }
 
 class FallbackAsync_Op<string mnemonic, list<Trait> traits = []> :

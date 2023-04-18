@@ -12,7 +12,6 @@ load(
 )
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     licenses = ["notice"],
 )
 
@@ -56,6 +55,7 @@ cc_library(
         "//tensorflow/core/util:managed_stack_trace",
         "//tensorflow/python:ndarray_tensor",
         "//tensorflow/python:ndarray_tensor_bridge",
+        "//tensorflow/python:numpy_lib",
         "//tensorflow/python:py_exception_registry",
         "//tensorflow/python:pybind11_status",
         "//tensorflow/python/lib/core:py_seq_tensor",
@@ -64,7 +64,6 @@ cc_library(
         "//tensorflow/python/lib/core:safe_pyobject_ptr",
         "//tensorflow/python/util:cpp_python_util",
         "//tensorflow/python/util:stack_trace",
-        "//tensorflow/tsl/python/lib/core:numpy",
         "//third_party/py/numpy:headers",
         "//third_party/python_runtime:headers",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -154,6 +153,7 @@ py_library(
     srcs_version = "PY3",
     visibility = ["//tensorflow:internal"],
     deps = [
+        ":context",
         "//tensorflow/python:errors",
         "//tensorflow/python:pywrap_tfe",
     ],
@@ -194,10 +194,7 @@ py_library(
     name = "context",
     srcs = ["context.py"],
     srcs_version = "PY3",
-    visibility = [
-        "//tensorflow:internal",
-        "//third_party/py/jax_tpu_embedding:__subpackages__",
-    ],
+    visibility = ["//tensorflow:internal"],
     deps = [
         ":executor",
         ":monitoring",
@@ -382,7 +379,6 @@ cuda_py_test(
     ],
     deps = [
         ":backprop",
-        ":backprop_util",
         ":context",
         ":test",
         "//tensorflow/python:array_ops",
@@ -441,6 +437,7 @@ py_library(
     srcs_version = "PY3",
     visibility = ["//tensorflow:internal"],
     deps = [
+        ":core",
         "//tensorflow/python:client_testlib",
         "//tensorflow/python:framework_ops",
     ],
@@ -536,6 +533,7 @@ py_library(
         "//tensorflow/python:tensor_shape",
         "//tensorflow/python:unconnected_gradients",
         "//tensorflow/python:util",
+        "//tensorflow/python/ops/numpy_ops:numpy",
         "//tensorflow/python/ops/parallel_for:control_flow_ops",
     ],
 )
@@ -561,6 +559,7 @@ py_library(
         "//tensorflow/python:platform",
         "//tensorflow/python:pywrap_tfe",
         "//tensorflow/python:util",
+        "//tensorflow/python/ops/numpy_ops:numpy",
         "//tensorflow/python/ops/parallel_for:control_flow_ops",
     ],
 )
@@ -782,10 +781,10 @@ tf_py_test(
     python_version = "PY3",
     deps = [
         "lift_to_graph",
-        ":test",
         "//tensorflow/python:framework_ops",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:util",
+        "//tensorflow/python/eager:test",
     ],
 )
 
@@ -887,12 +886,12 @@ cuda_py_test(
         "no_oss",  # This test launches local server
     ],
     deps = [
-        ":remote",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:client",
         "//tensorflow/python:constant_op",
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
+        "//tensorflow/python/eager:remote",
         "@absl_py//absl/testing:parameterized",
     ],
 )
@@ -977,7 +976,10 @@ py_library(
 py_binary(
     name = "gen_gradient_input_output_exclusions",
     srcs = ["gen_gradient_input_output_exclusions.py"],
-    deps = [":gradient_input_output_exclusions"],
+    deps = [
+        ":gradient_input_output_exclusions",
+        "//tensorflow:tensorflow_py",
+    ],
 )
 
 # Needed for the test below.
@@ -989,7 +991,7 @@ py_test(
     name = "gradient_input_output_exclusions_test",
     srcs = ["gradient_input_output_exclusions_test.py"],
     data = [
-        ":pywrap_gradient_exclusions.cc",
+        "//tensorflow/python/eager:pywrap_gradient_exclusions.cc",
     ],
     python_version = "PY3",
     srcs_version = "PY3",

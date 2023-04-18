@@ -30,8 +30,13 @@ from tensorflow.python.ops import variables
 from tensorflow.python.saved_model import revived_types
 from tensorflow.python.trackable import base
 from tensorflow.python.trackable import layer_utils
+from tensorflow.python.util import lazy_loader
 from tensorflow.python.util.compat import collections_abc
 from tensorflow.python.util.tf_export import tf_export
+
+
+module = lazy_loader.LazyLoader(
+    "module", globals(), "tensorflow.python.module.module")
 
 
 class NoDependency:
@@ -240,8 +245,7 @@ class TrackableDataStructure(base.Trackable):
       return []
     trainable_variables = []
     for obj in self._values:
-      if isinstance(obj, base.Trackable) and hasattr(
-          obj, "trainable_variables"):
+      if isinstance(obj, (TrackableDataStructure, module.Module)):
         trainable_variables += obj.trainable_variables
     trainable_extra_variables = [
         v for v in self._self_extra_variables if v.trainable
@@ -258,16 +262,14 @@ class TrackableDataStructure(base.Trackable):
     ]
     non_trainable_variables = []
     for obj in self._values:
-      if isinstance(obj, base.Trackable) and hasattr(
-          obj, "non_trainable_variables"):
+      if isinstance(obj, (TrackableDataStructure, module.Module)):
         non_trainable_variables += obj.non_trainable_variables
 
     if not self._self_trainable:
       # Return order is all trainable vars, then all non-trainable vars.
       trainable_variables = []
       for obj in self._values:
-        if isinstance(obj, base.Trackable) and hasattr(
-            obj, "trainable_variables"):
+        if isinstance(obj, (TrackableDataStructure, module.Module)):
           trainable_variables += obj.trainable_variables
 
       non_trainable_variables = (

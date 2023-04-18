@@ -69,25 +69,7 @@ class GraphPartitionHelper {
   // replaced with one delegate kernel (i.e. a kTfLiteBuiltinDelegate op).
   // If 'unsupported_nodes_info' is provided, it will be populated with
   // information about all different unsupported nodes.
-  virtual TfLiteStatus Partition(
-      std::set<std::string>* unsupported_nodes_info) {
-    return PartitionImpl(unsupported_nodes_info, 0,
-                         std::numeric_limits<int>::max());
-  }
-
-#ifdef TFLITE_DEBUG_DELEGATE
-  // Partition the graph into node subsets such that each subset could be
-  // replaced with one delegate kernel (i.e. a kTfLiteBuiltinDelegate op).
-  // If 'unsupported_nodes_info' is provided, it will be populated with
-  // information about all different unsupported nodes.
-  // The 'start_node_index' and 'end_node_index' define the range of nodes
-  // that could be delegated.
-  virtual TfLiteStatus Partition(std::set<std::string>* unsupported_nodes_info,
-                                 int start_node_index, int end_node_index) {
-    return PartitionImpl(unsupported_nodes_info, start_node_index,
-                         end_node_index);
-  }
-#endif  // TFLITE_DEBUG_DELEGATE
+  virtual TfLiteStatus Partition(std::set<std::string>* unsupported_nodes_info);
 
   // Returns the first n largest partitions or all if #partitions is less than
   // 'n' and each parition has at least (>=) 'min_nodes_per_partition' nodes.
@@ -122,9 +104,6 @@ class GraphPartitionHelper {
   }
   virtual std::vector<int> GetNodesOfFirstNLargestPartitionsImpl(
       int n, int min_nodes_per_partition);
-  virtual TfLiteStatus PartitionImpl(
-      std::set<std::string>* unsupported_nodes_info, int start_node_index,
-      int end_node_index);
 
   TfLiteContext* const context_ = nullptr;
 
@@ -143,12 +122,8 @@ class GraphPartitionHelper {
   // associated w/ 'context_').
   // If 'unsupported_nodes_info' is provided, it will be populated with
   // information about all different unsupported nodes.
-  // The 'start_node_index' and 'end_node_index' define the range of nodes that
-  // could be delegated.
   TfLiteStatus PrepareSupportedNodes(
-      std::set<std::string>* unsupported_nodes_info = nullptr,
-      int start_node_index = 0,
-      int end_node_index = std::numeric_limits<int>::max());
+      std::set<std::string>* unsupported_nodes_info = nullptr);
 
   // The number of total nodes passed in for partitioning (i.e. the
   // execution_plan size associated w/ 'context_')

@@ -13,7 +13,6 @@ load(
 )
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     licenses = ["notice"],
 )
 
@@ -73,7 +72,6 @@ cc_library(
     deps = [
         ":utils",
         "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/hash",
         "@com_google_absl//absl/types:optional",
         "//tensorflow/core/grappler/utils:functions",
         "//tensorflow/core/grappler/utils:topological_sort",

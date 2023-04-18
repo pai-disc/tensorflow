@@ -168,10 +168,7 @@ struct ExecuteAssignOp {
 // Common utilities.
 // -------------------------------------------------------------------------- //
 
-static constexpr int64_t kDynSize = mlir::ShapedType::kDynamic;
-
-llvm::SmallVector<int64_t> GetTensorTypeShape(
-    llvm::ArrayRef<int64_t> shape, llvm::ArrayRef<bool> dynamic_dims);
+static constexpr int64_t kDynSize = mlir::ShapedType::kDynamicSize;
 
 // Prints an MLIR tensor type, i.e. for `shape` {1, kDynSize} and `element_type`
 // "f32" the output is "tensor<1x?xf32>".

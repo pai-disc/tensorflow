@@ -37,8 +37,7 @@ class TpuEmbeddingEngineStateInterface : public ResourceBase {
 
   ~TpuEmbeddingEngineStateInterface() override {
     if (engine_state_ != nullptr) {
-      stream_executor::tpu::OpsApiFn()->TpuEmbeddingEngineState_FreeFn(
-          engine_state_);
+      OpsApiFn()->TpuEmbeddingEngineState_FreeFn(engine_state_);
     }
   }
 
@@ -47,16 +46,13 @@ class TpuEmbeddingEngineStateInterface : public ResourceBase {
       return nullptr;
     }
     return static_cast<tensorflow::TpuEmbeddingEngineState*>(
-        stream_executor::tpu::OpsApiFn()->TpuEmbeddingEngineState_GetStateFn(
-            engine_state_));
+        OpsApiFn()->TpuEmbeddingEngineState_GetStateFn(engine_state_));
   }
 
   static TpuEmbeddingEngineStateInterface* Create() {
     XLA_TpuEmbeddingEngineState* state = nullptr;
-    if (stream_executor::tpu::OpsApiFn()->TpuEmbeddingEngineState_CreateFn !=
-        nullptr) {
-      state =
-          stream_executor::tpu::OpsApiFn()->TpuEmbeddingEngineState_CreateFn();
+    if (OpsApiFn()->TpuEmbeddingEngineState_CreateFn != nullptr) {
+      state = OpsApiFn()->TpuEmbeddingEngineState_CreateFn();
     }
     return new TpuEmbeddingEngineStateInterface(state);
   }

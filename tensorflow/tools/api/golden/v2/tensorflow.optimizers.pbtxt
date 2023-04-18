@@ -5,19 +5,11 @@ tf_module {
     mtype: "<type \'type\'>"
   }
   member {
-    name: "Adafactor"
-    mtype: "<type \'type\'>"
-  }
-  member {
     name: "Adagrad"
     mtype: "<type \'type\'>"
   }
   member {
     name: "Adam"
-    mtype: "<type \'type\'>"
-  }
-  member {
-    name: "AdamW"
     mtype: "<type \'type\'>"
   }
   member {
@@ -58,7 +50,7 @@ tf_module {
   }
   member_method {
     name: "deserialize"
-    argspec: "args=[\'config\', \'custom_objects\', \'use_legacy_format\'], varargs=None, keywords=kwargs, defaults=[\'None\', \'False\'], "
+    argspec: "args=[\'config\', \'custom_objects\'], varargs=None, keywords=kwargs, defaults=[\'None\'], "
   }
   member_method {
     name: "get"
@@ -66,6 +58,6 @@ tf_module {
   }
   member_method {
     name: "serialize"
-    argspec: "args=[\'optimizer\', \'use_legacy_format\'], varargs=None, keywords=None, defaults=[\'False\'], "
+    argspec: "args=[\'optimizer\'], varargs=None, keywords=None, defaults=None"
   }
 }

@@ -20,9 +20,7 @@ limitations under the License.
 #include <vector>
 
 #include <gtest/gtest.h>
-#include "tensorflow/lite/core/c/common.h"
-#include "tensorflow/lite/interpreter.h"
-#include "tensorflow/lite/schema/schema_generated.h"
+#include "tensorflow/lite/c/common.h"
 
 namespace tflite {
 namespace xnnpack {
@@ -69,14 +67,10 @@ class ReshapeTester {
 
   inline bool OutputShapeAsInput() const { return shape_as_input_; }
 
-  template <class T>
-  void Test(TensorType tensor_type, Interpreter* delegate_interpreter,
-            Interpreter* default_interpreter) const;
-
-  void Test(TensorType tensor_type, TfLiteDelegate* delegate) const;
+  void Test(TfLiteDelegate* delegate) const;
 
  private:
-  std::vector<char> CreateTfLiteModel(TensorType tensor_type) const;
+  std::vector<char> CreateTfLiteModel() const;
 
   static int32_t ComputeSize(const std::vector<int32_t>& shape);
 

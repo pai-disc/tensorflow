@@ -25,9 +25,7 @@ DEFINE_UNARY6(inverse, Eigen::half, float, double, int64, complex64,
               complex128);
 #endif
 
-DEFINE_UNARY1(inverse, Eigen::bfloat16);
-
-DEFINE_SIMPLE_BINARY4(inverse_grad, Eigen::half, bfloat16, float, double);
+DEFINE_SIMPLE_BINARY3(inverse_grad, Eigen::half, float, double);
 }  // namespace functor
 }  // namespace tensorflow
 

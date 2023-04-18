@@ -244,13 +244,6 @@ Status XlaOpKernelContext::ConstantInputAsIntScalar(
   return ConstantInputAsIntScalar(index, out, mode);
 }
 
-StatusOr<int64_t> XlaOpKernelContext::ConstantInputAsIntScalar(
-    absl::string_view name, xla::ValueInferenceMode mode) {
-  int64_t out;
-  TF_RETURN_IF_ERROR(ConstantInputAsIntScalar(name, &out, mode));
-  return out;
-}
-
 Status XlaOpKernelContext::ConstantInputAsFloatScalar(
     int index, double* out, xla::ValueInferenceMode mode) {
   xla::Literal literal;
@@ -277,7 +270,8 @@ static Status LiteralToPredVector(const xla::LiteralSlice& literal,
 Status XlaOpKernelContext::ResolveInputDynamismIntoPred(int index, bool* out) {
   xla::Literal literal;
   XlaExpression e = InputExpression(index);
-  StatusOr<Tensor> dynamism_or_status = e.ResolveDynamism();
+  auto* client = compiler() ? compiler()->client() : nullptr;
+  StatusOr<Tensor> dynamism_or_status = e.ResolveDynamism(client);
   if (!dynamism_or_status.ok()) {
     // When failed to resolve dynamism, conservatively consider the value
     // dynamic. This could happen if the input depends on some ops like
@@ -319,7 +313,8 @@ Status XlaOpKernelContext::ResolveInputDynamismReshaped(
     int index, absl::Span<const int64_t> new_dims,
     xla::Literal* dynamism_literal) {
   XlaExpression e = InputExpression(index);
-  StatusOr<Tensor> dynamism_or_status = e.ResolveDynamism();
+  auto* client = compiler() ? compiler()->client() : nullptr;
+  StatusOr<Tensor> dynamism_or_status = e.ResolveDynamism(client);
   if (!dynamism_or_status.ok()) {
     xla::Literal true_literal = xla::LiteralUtil::CreateR0<bool>(true);
     // When failed to resolve dynamism, conservatively consider the value

@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/lite/delegates/utils/dummy_delegate/dummy_delegate.h"
 
-#include <memory>
 #include <utility>
 
 #include "tensorflow/lite/delegates/utils/simple_delegate.h"

@@ -18,12 +18,12 @@ limitations under the License.
 
 #include <cstdint>
 
-#include "tensorflow/lite/core/c/c_api_types.h"
-#include "tensorflow/lite/core/c/common.h"
-#include "tensorflow/lite/profiling/telemetry/c/telemetry_setting.h"
+#include "tensorflow/lite/c/c_api_types.h"
+#include "tensorflow/lite/c/common.h"
+#include "tensorflow/lite/profiling/telemetry/telemetry_settings.h"
 #include "tensorflow/lite/profiling/telemetry/telemetry_status.h"
 
-namespace tflite::telemetry {
+namespace tflite {
 
 // Methods for instrumenting TFLite runtime to export telemetry events to
 // profilers.
@@ -57,9 +57,8 @@ void TelemetryReportDelegateOpEvent(TfLiteContext* context, const char* op_name,
 
 // Reports model and interpreter level settings.
 // `setting_name` indicates the name of the setting.
-void TelemetryReportSettings(
-    TfLiteContext* context, const char* setting_name,
-    const TfLiteTelemetryInterpreterSettings* settings);
+void TelemetryReportSettings(TfLiteContext* context, const char* setting_name,
+                             const TelemetryInterpreterSettings& settings);
 
 // Reports delegate settings.
 // `setting_name` indicates the name of the setting.
@@ -70,6 +69,6 @@ void TelemetryReportDelegateSettings(TfLiteContext* context,
                                      TelemetrySource source,
                                      const void* settings);
 
-}  // namespace tflite::telemetry
+}  // namespace tflite
 
 #endif  // TENSORFLOW_LITE_PROFILING_TELEMETRY_TELEMETRY_H_

@@ -93,13 +93,10 @@ LogicalResult ApplyPatternsLocallyUntilConverged(
     changed = false;
     auto walk_result =
         op_with_regions->walk([&patterns, &changed](Operation* operation) {
-          GreedyRewriteConfig config;
-          config.strictMode = mlir::GreedyRewriteStrictness::ExistingOps;
-          bool op_erased;
-          if (failed(applyOpPatternsAndFold(operation, patterns, config,
-                                            &op_erased)))
+          bool op_changed;
+          if (failed(applyOpPatternsAndFold(operation, patterns, &op_changed)))
             return WalkResult::interrupt();
-          changed |= op_erased;
+          changed |= op_changed;
           return WalkResult::advance();
         });
     if (walk_result.wasInterrupted()) return failure();

@@ -155,7 +155,7 @@ void TransposeOp::Compute(OpKernelContext* ctx) {
         errors::InvalidArgument(d, " is out of range [0 .. ", dims, ")"));
     bits[d] = true;
     const auto dim_size = input.dim_size(d);
-    OP_REQUIRES_OK(ctx, shape.AddDimWithStatus(dim_size));
+    shape.AddDim(dim_size);
     if (d != i) {
       is_identity = false;
     }

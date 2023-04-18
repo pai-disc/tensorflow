@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_JIT_DEADNESS_ANALYSIS_H_
 #define TENSORFLOW_COMPILER_JIT_DEADNESS_ANALYSIS_H_
 
+#include "tensorflow/compiler/xla/stream_executor/lib/statusor.h"
 #include "tensorflow/core/graph/graph.h"
 
 namespace tensorflow {
@@ -73,8 +74,8 @@ class DeadnessAnalysis {
     friend class DeadnessAnalysis;
   };
 
-  virtual tsl::StatusOr<DeadnessPredicate> GetPredicateFor(Node* n,
-                                                           int oidx) const = 0;
+  virtual se::port::StatusOr<DeadnessPredicate> GetPredicateFor(
+      Node* n, int oidx) const = 0;
 
   // Prints out the internal state of this instance.  For debugging purposes
   // only.

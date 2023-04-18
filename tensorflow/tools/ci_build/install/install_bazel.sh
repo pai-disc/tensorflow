@@ -14,7 +14,8 @@
 # limitations under the License.
 # ==============================================================================
 
-BAZEL_VERSION="5.3.0"
+# Select bazel version.
+BAZEL_VERSION="5.1.1"
 
 set +e
 local_bazel_ver=$(bazel version 2>&1 | grep -i label | awk '{print $3}')

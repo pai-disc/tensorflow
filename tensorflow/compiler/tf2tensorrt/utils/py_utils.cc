@@ -35,7 +35,10 @@ bool IsGoogleTensorRTEnabled() {
 #else   // TF_USE_TENSORRT_STATIC
   auto handle_or = se::internal::DsoLoader::TryDlopenTensorRTLibraries();
   if (!handle_or.ok()) {
-    LOG_WARNING_WITH_PREFIX << "Could not find TensorRT";
+    LOG_WARNING_WITH_PREFIX
+        << "Cannot dlopen some TensorRT libraries. If you would like "
+           "to use Nvidia GPU with TensorRT, please make sure the "
+           "missing libraries mentioned above are installed properly.";
   }
   return handle_or.ok();
 #endif  // TF_USE_TENSORRT_STATIC

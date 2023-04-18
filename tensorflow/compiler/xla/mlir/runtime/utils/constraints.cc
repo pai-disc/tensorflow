@@ -21,7 +21,6 @@ limitations under the License.
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "llvm/ADT/SmallVector.h"
-#include "mlir/IR/FunctionInterfaces.h"  // from @llvm-project
 #include "mlir/Support/DebugStringHelper.h"  // from @llvm-project
 
 namespace xla {
@@ -36,7 +35,7 @@ using absl::StrCat;
 using llvm::SmallVector;
 
 StatusOr<SmallVector<ArgumentConstraint>> GetArgumentsConstraints(
-    FunctionOpInterface func) {
+    func::FuncOp func) {
   llvm::SmallVector<ArgumentConstraint> constraints;
   constraints.reserve(func.getNumArguments());
 
@@ -53,8 +52,7 @@ StatusOr<SmallVector<ArgumentConstraint>> GetArgumentsConstraints(
   };
 
   for (int i = 0; i < func.getNumArguments(); ++i) {
-    auto arg_type =
-        llvm::cast<FunctionType>(func.getFunctionType()).getInput(i);
+    auto arg_type = func.getFunctionType().getInput(i);
 
     auto constraint = parse(func.getArgAttr(i, kArgumentConstraintAttrName));
     if (!constraint.ok()) return constraint.status();

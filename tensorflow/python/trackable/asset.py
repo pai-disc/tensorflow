@@ -18,13 +18,19 @@ import os
 from tensorflow.python.eager import context
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import tensor_conversion_registry
 from tensorflow.python.lib.io import file_io
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import resource_variable_ops
-from tensorflow.python.saved_model import path_helpers
 from tensorflow.python.trackable import base
+from tensorflow.python.util import lazy_loader
 from tensorflow.python.util.tf_export import tf_export
+
+
+# TODO(b/205183809): Remove once nested_structure_coder no longer adds
+# dependency cycles.
+saved_model_utils = lazy_loader.LazyLoader(
+    "saved_model_utils", globals(),
+    "tensorflow.python.saved_model.utils_impl")
 
 
 @tf_export("saved_model.Asset")
@@ -87,7 +93,7 @@ class Asset(base.Trackable):
                               **unused_kwargs):
     proto = object_proto.asset
     filename = file_io.join(
-        path_helpers.get_assets_dir(export_dir),
+        saved_model_utils.get_assets_dir(export_dir),
         asset_file_def[proto.asset_file_def_index].filename)
     asset = cls(filename)
     if not context.executing_eagerly():
@@ -112,5 +118,5 @@ class Asset(base.Trackable):
     return [self.asset_path]
 
 
-tensor_conversion_registry.register_tensor_conversion_function(
+ops.register_tensor_conversion_function(
     Asset, lambda asset, **kw: ops.convert_to_tensor(asset.asset_path, **kw))

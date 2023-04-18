@@ -9,7 +9,6 @@
 # ":grpc_debug_server": Server interface for grpc:// debug URLs.
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//tensorflow:internal"],
     licenses = ["notice"],
 )

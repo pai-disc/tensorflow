@@ -28,45 +28,45 @@ namespace tpu {
 
 class TpuStream : public tensorflow::tpu::TpuStreamInterface {
  public:
+  using Status = stream_executor::port::Status;
+
   explicit TpuStream(SE_Stream* stream) : stream_(stream) {}
   ~TpuStream() override {
-    stream_executor::tpu::ExecutorApiFn()->TpuStream_FreeFn(stream_);
+    tensorflow::tpu::ExecutorApiFn()->TpuStream_FreeFn(stream_);
   }
 
   bool IsSameSharedMemoryLocation(
       tensorflow::tpu::TpuStreamInterface* other) override {
-    return stream_executor::tpu::ExecutorApiFn()
+    return tensorflow::tpu::ExecutorApiFn()
         ->TpuStream_IsSameSharedMemoryLocationFn(
             stream_, static_cast<TpuStream*>(other)->stream_);
   }
 
-  tsl::Status EnqueueTransferHostToDevice(
+  Status EnqueueTransferHostToDevice(
       stream_executor::DeviceMemoryBase device_dst, const void* host_src,
       uint64_t size) {
     StatusHelper status;
-    stream_executor::tpu::ExecutorApiFn()
-        ->TpuStream_EnqueueTransferHostToDeviceFn(
-            stream_, ApiConverter::ToC(device_dst), const_cast<void*>(host_src),
-            size, status.c_status);
+    tensorflow::tpu::ExecutorApiFn()->TpuStream_EnqueueTransferHostToDeviceFn(
+        stream_, ApiConverter::ToC(device_dst), const_cast<void*>(host_src),
+        size, status.c_status);
     return status.status();
   }
 
-  tsl::Status EnqueueTransferDeviceToHost(
+  Status EnqueueTransferDeviceToHost(
       stream_executor::DeviceMemoryBase device_src, void* host_dst,
       uint64_t size) {
     StatusHelper status;
-    stream_executor::tpu::ExecutorApiFn()
-        ->TpuStream_EnqueueTransferDeviceToHostFn(
-            stream_, ApiConverter::ToC(device_src), host_dst, size,
-            status.c_status);
+    tensorflow::tpu::ExecutorApiFn()->TpuStream_EnqueueTransferDeviceToHostFn(
+        stream_, ApiConverter::ToC(device_src), host_dst, size,
+        status.c_status);
     return status.status();
   }
 
-  tsl::Status EnqueueOnTpuDeviceSendRecvLocal(
+  Status EnqueueOnTpuDeviceSendRecvLocal(
       stream_executor::DeviceMemoryBase send_buffer,
       stream_executor::DeviceMemoryBase recv_buffer) override {
     StatusHelper status;
-    stream_executor::tpu::ExecutorApiFn()
+    tensorflow::tpu::ExecutorApiFn()
         ->TpuStream_TpuEnqueueOnDeviceSendRecvLocalFn(
             stream_, ApiConverter::ToC(send_buffer),
             ApiConverter::ToC(recv_buffer), status.c_status);

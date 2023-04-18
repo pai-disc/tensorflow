@@ -41,6 +41,9 @@ namespace cuda {
 // Opaque and unique identifier for the cuBLAS plugin.
 extern const PluginId kCuBlasPlugin;
 
+template <typename T>
+using DeviceMemorySlice = port::ArraySlice<DeviceMemory<T> *>;  // non-absl ok
+
 // BLAS plugin for CUDA platform via cuBLAS library.
 //
 // This satisfies the platform-agnostic BlasSupport interface.
@@ -86,9 +89,9 @@ class CUDABlas : public blas::BlasSupport {
   //                     (true) or device (false).
   // args:               Arguments of cuBLAS function.
   template <typename FuncT, typename... Args>
-  tsl::Status DoBlasInternalImpl(FuncT cublas_func, Stream *stream,
-                                 bool pointer_mode_host, cublasMath_t math_type,
-                                 Args... args);
+  port::Status DoBlasInternalImpl(FuncT cublas_func, Stream *stream,
+                                  bool pointer_mode_host,
+                                  cublasMath_t math_type, Args... args);
 
   // Convenience functions that call DoBlasInternalImpl with err_on_failure=true
   // and math_type=CUBLAS_DEFAULT_MATH.
@@ -103,7 +106,7 @@ class CUDABlas : public blas::BlasSupport {
   // A helper function to implement DoBlasGemmBatched interfaces for generic
   // types.
   template <typename T, typename Scalar, typename FuncT>
-  tsl::Status DoBlasGemmBatchedInternal(
+  port::Status DoBlasGemmBatchedInternal(
       FuncT cublas_func, Stream *stream, blas::Transpose transa,
       blas::Transpose transb, uint64_t m, uint64 n, uint64 k, Scalar alpha,
       const DeviceMemorySlice<T> &a_array, int lda,

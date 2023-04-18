@@ -3,10 +3,7 @@
 
 load("//tensorflow:tensorflow.default.bzl", "filegroup")
 
-package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    licenses = ["notice"],
-)
+package(licenses = ["notice"])
 
 filegroup(
     name = "python_api_def",

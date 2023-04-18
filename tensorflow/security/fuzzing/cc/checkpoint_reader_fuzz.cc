@@ -18,7 +18,7 @@ limitations under the License.
 #include <set>
 #include <string>
 
-#include "fuzztest/fuzztest.h"
+#include "testing/fuzzing/fuzztest.h"
 #include "tensorflow/c/checkpoint_reader.h"
 #include "tensorflow/c/tf_status.h"
 #include "tensorflow/c/tf_status_helper.h"

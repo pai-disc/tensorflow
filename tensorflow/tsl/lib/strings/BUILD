@@ -4,8 +4,6 @@ load(
     "cc_library",
 )
 
-# copybara:uncomment package(default_applicable_licenses = ["//tensorflow:license"])
-
 cc_library(
     name = "proto_serialization",
     srcs = ["proto_serialization.cc"],

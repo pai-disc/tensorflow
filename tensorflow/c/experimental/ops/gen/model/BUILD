@@ -1,5 +1,4 @@
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//tensorflow/c/experimental/ops/gen:__subpackages__"],
     licenses = ["notice"],
 )

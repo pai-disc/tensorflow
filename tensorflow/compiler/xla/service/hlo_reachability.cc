@@ -17,34 +17,36 @@ limitations under the License.
 
 #include <queue>
 
-#include "absl/algorithm/container.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_opcode.h"
 
 namespace xla {
 
 HloReachabilityMap::HloReachabilityMap(
     absl::Span<const HloInstruction* const> instructions)
-    : bit_sets_(instructions.size(), BitSet(instructions.size())) {
-  for (size_t i = 0; i < instructions.size(); ++i) {
-    bit_sets_[i].Set(i);  // Instructions are reachable from themselves.
-    indices_[GetKey(instructions[i])] = i;
+    : size_(instructions.size()) {
+  bit_vectors_.reserve(size_);
+  for (const HloInstruction* hlo : instructions) {
+    indices_[GetKey(hlo)] = bit_vectors_.size();
+    bit_vectors_.emplace_back(size_);
   }
+  CHECK_EQ(size_, indices_.size());  // instructions should be unique
 }
 
 bool HloReachabilityMap::SetReachabilityToUnion(
     absl::Span<const HloInstruction* const> inputs,
     const HloInstruction* instruction) {
   Index index = GetIndex(instruction);
-  BitSet& bit_set = bit_sets_[index];
-  tmp_bit_set_ = bit_set;
+  BitVector& bit_vector = GetBitVector(index);
+  tmp_bit_vector_ = bit_vector;
   SetReachabilityToUnionHelper(inputs, index);
-  return bit_set != tmp_bit_set_;
+  return bit_vector != tmp_bit_vector_;
 }
 
 void HloReachabilityMap::FastSetReachabilityToUnion(
     absl::Span<const HloInstruction* const> inputs,
     const HloInstruction* instruction) {
-  SetReachabilityToUnionHelper(inputs, GetIndex(instruction));
+  Index index = GetIndex(instruction);
+  SetReachabilityToUnionHelper(inputs, index);
 }
 
 void HloReachabilityMap::FastSetReachabilityToUnion(
@@ -64,25 +66,30 @@ void HloReachabilityMap::SetReachabilityToUnionHelper(
 
 void HloReachabilityMap::SetReachabilityToUnionHelper(
     absl::Span<const Index> input_indices, Index index) {
-  BitSet& bit_set = bit_sets_[index];
-  // If instruction is part of inputs, don't reset the bit-set.
+  BitVector& bit_vector = GetBitVector(index);
+  // If instruction is part of inputs, don't reset the bit_vector.
   if (!absl::c_linear_search(input_indices, index)) {
-    bit_set.SetToZero();
+    bit_vector.SetToZero();
   }
-  bit_set.Set(index);
+  bit_vector.Set(index.v);
   for (Index input_index : input_indices) {
     if (input_index != index) {
-      bit_set |= bit_sets_[input_index];
+      bit_vector.OrWith(GetBitVector(input_index));
     }
   }
 }
 
 void HloReachabilityMap::Replace(const HloInstruction* original,
                                  const HloInstruction* replacement) {
-  if (GetKey(original) != GetKey(replacement)) {
-    indices_[GetKey(replacement)] = GetIndex(original);
-    indices_.erase(GetKey(original));
+  if (GetKey(original) == GetKey(replacement)) {
+    return;
   }
+  indices_[GetKey(replacement)] = GetIndex(original).v;
+  indices_.erase(GetKey(original));
+}
+
+void HloReachabilityMap::SetReachable(Index a, Index b) {
+  GetBitVector(b).Set(a.v);
 }
 
 std::unique_ptr<HloReachabilityMap> HloReachabilityMap::BuildWithRestrictions(
@@ -104,36 +111,67 @@ std::unique_ptr<HloReachabilityMap> HloReachabilityMap::BuildWithRestrictions(
 
 std::unique_ptr<HloReachabilityMap> HloReachabilityMap::Build(
     const HloComputation* computation) {
-  HloComputation::ChannelDependencies channel_dependencies =
-      computation->ComputeChannelDependencies();
-  std::vector<HloInstruction*> instructions =
-      computation->MakeInstructionPostOrder(channel_dependencies);
-  auto result = std::make_unique<HloReachabilityMap>(instructions);
+  const auto& all = computation->MakeInstructionPostOrder();
+  auto result = std::make_unique<HloReachabilityMap>(all);
+  auto channel_group = computation->ComputeChannelDependencies();
 
-  auto get_bit_set = [&](const HloInstruction* instruction) -> BitSet& {
-    return result->bit_sets_[result->GetIndex(instruction)];
+  std::vector<HloInstruction*> inputs;
+
+  const auto add_input = [&channel_group, &inputs](HloInstruction* input) {
+    inputs.push_back(input);
+    if ((input->opcode() == HloOpcode::kAllReduce ||
+         input->opcode() == HloOpcode::kReduceScatter) &&
+        input->channel_id()) {
+      auto it = channel_group.find(*input->channel_id());
+      if (it != channel_group.end()) {
+        inputs.insert(inputs.end(), it->second.begin(), it->second.end());
+      }
+    }
   };
 
-  for (const HloInstruction* instruction : instructions) {
-    BitSet& bit_set = get_bit_set(instruction);
-
-    auto add_dependencies = [&](const HloInstruction* instruction) {
-      for (const HloInstruction* operand : instruction->operands()) {
-        bit_set |= get_bit_set(operand);
-      }
-      for (const HloInstruction* predecessor :
-           instruction->control_predecessors()) {
-        bit_set |= get_bit_set(predecessor);
-      }
-    };
-
-    add_dependencies(instruction);
-
-    // If an instruction has channel depencencies, they are also reachable.
-    auto it = channel_dependencies.find(instruction);
-    if (it != channel_dependencies.end()) {
-      absl::c_for_each(it->second, add_dependencies);
+  const auto add_dependencies = [&add_input](const HloInstruction* hlo) {
+    for (HloInstruction* operand : hlo->operands()) {
+      add_input(operand);
     }
+    for (HloInstruction* predecessor : hlo->control_predecessors()) {
+      add_input(predecessor);
+    }
+  };
+
+  for (const HloInstruction* hlo : all) {
+    inputs.clear();
+    add_dependencies(hlo);
+
+    switch (hlo->opcode()) {
+      case HloOpcode::kRecvDone: {
+        auto it = channel_group.find(*hlo->channel_id());
+        if (it != channel_group.end()) {
+          for (HloInstruction* channel : it->second) {
+            if (channel->opcode() == HloOpcode::kSend) {
+              add_input(channel);
+            }
+          }
+        }
+        break;
+      }
+      case HloOpcode::kAllReduce:
+      case HloOpcode::kReduceScatter: {
+        auto channel_id = hlo->channel_id();
+        if (channel_id) {
+          auto it = channel_group.find(channel_id.value());
+          if (it != channel_group.end()) {
+            for (HloInstruction* all_reduce : it->second) {
+              add_dependencies(all_reduce);
+            }
+          }
+        }
+        break;
+      }
+      default:
+        break;
+    }
+
+    result->FastSetReachabilityToUnion(inputs, hlo);
   }
   return result;
 }

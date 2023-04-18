@@ -17,7 +17,6 @@
 import warnings
 
 from tensorflow.python.data.ops import dataset_ops
-from tensorflow.python.data.ops import debug_mode
 from tensorflow.python.data.util import nest
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -25,21 +24,21 @@ from tensorflow.python.framework import tensor_util
 from tensorflow.python.ops import gen_dataset_ops
 
 
-def _batch(input_dataset,
-           batch_size,
-           drop_remainder=False,
-           num_parallel_calls=None,
-           deterministic=None,
-           name=None):
+def batch(self,
+          batch_size,
+          drop_remainder=False,
+          num_parallel_calls=None,
+          deterministic=None,
+          name=None):
   """See `Dataset.batch` for details."""
-  if num_parallel_calls is None or debug_mode.DEBUG_MODE:
-    if deterministic is not None and not debug_mode.DEBUG_MODE:
+  if num_parallel_calls is None or dataset_ops.DEBUG_MODE:
+    if deterministic is not None and not dataset_ops.DEBUG_MODE:
       warnings.warn("The `deterministic` argument has no effect unless the "
                     "`num_parallel_calls` argument is specified.")
-    return _BatchDataset(input_dataset, batch_size, drop_remainder, name=name)
+    return BatchDataset(self, batch_size, drop_remainder, name=name)
   else:
-    return _ParallelBatchDataset(
-        input_dataset,
+    return ParallelBatchDataset(
+        self,
         batch_size,
         drop_remainder,
         num_parallel_calls,
@@ -47,7 +46,7 @@ def _batch(input_dataset,
         name=name)
 
 
-class _BatchDataset(dataset_ops.UnaryDataset):
+class BatchDataset(dataset_ops.UnaryDataset):
   """A `Dataset` that batches contiguous elements from its input."""
 
   def __init__(self, input_dataset, batch_size, drop_remainder, name=None):
@@ -79,14 +78,14 @@ class _BatchDataset(dataset_ops.UnaryDataset):
         batch_size=self._batch_size,
         drop_remainder=self._drop_remainder,
         **self._common_args)
-    super().__init__(input_dataset, variant_tensor)
+    super(BatchDataset, self).__init__(input_dataset, variant_tensor)
 
   @property
   def element_spec(self):
     return self._structure
 
 
-class _ParallelBatchDataset(dataset_ops.UnaryDataset):
+class ParallelBatchDataset(dataset_ops.UnaryDataset):
   """A `Dataset` that batches contiguous elements from its input in parallel."""
 
   def __init__(self,
@@ -135,7 +134,7 @@ class _ParallelBatchDataset(dataset_ops.UnaryDataset):
         deterministic=self._deterministic,
         **self._common_args)
 
-    super().__init__(input_dataset, variant_tensor)
+    super(ParallelBatchDataset, self).__init__(input_dataset, variant_tensor)
 
   @property
   def element_spec(self):

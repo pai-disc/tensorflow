@@ -36,13 +36,11 @@ Padding2D& Padding2D::operator=(const Padding2D& value) {
   return *this;
 }
 
-bool Padding2D::operator==(const Padding2D& value) const {
+bool Padding2D::operator==(const Padding2D& value) {
   return this->prepended == value.prepended && this->appended == value.appended;
 }
 
-bool Padding2D::operator!=(const Padding2D& value) const {
-  return !(*this == value);
-}
+bool Padding2D::operator!=(const Padding2D& value) { return !(*this == value); }
 
 Padding2D& Padding2D::operator-(const Padding2D& value) {
   prepended.h -= value.prepended.h;
@@ -142,8 +140,6 @@ std::string ToString(enum OperationType op) {
       return "less_equal";
     case OperationType::LOG:
       return "log";
-    case OperationType::LOGICAL_AND:
-      return "logical_and";
     case OperationType::LSTM:
       return "lstm";
     case OperationType::MAXIMUM:
@@ -261,7 +257,6 @@ OperationType OperationTypeFromString(const std::string& name) {
           {"less", OperationType::LESS},
           {"less_equal", OperationType::LESS_EQUAL},
           {"log", OperationType::LOG},
-          {"logical_and", OperationType::LOGICAL_AND},
           {"lstm", OperationType::LSTM},
           {"maximum", OperationType::MAXIMUM},
           {"max_unpooling", OperationType::MAX_UNPOOLING_2D},

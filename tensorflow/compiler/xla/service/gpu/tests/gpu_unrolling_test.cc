@@ -41,11 +41,29 @@ const char *const kAddModule = R"(
       ROOT fusion = f32[20000,20000]{1,0} fusion(p0, p1), kind=kLoop, calls=fused_computation
     })";
 
+TEST_F(GpuUnrollingTest, DoNotUnroll) {
+  HloModuleConfig config;
+  auto debug_options = HloTestBase::GetDebugOptionsForTest();
+  debug_options.set_xla_gpu_enable_mlir_lowering(false);
+  debug_options.set_xla_gpu_max_kernel_unroll_factor(1);
+  config.set_debug_options(debug_options);
+  auto hlo_module = ParseAndReturnVerifiedModule(kAddModule, config).value();
+
+  CompileAndVerifyIr(std::move(hlo_module),
+                     R"(
+; CHECK-LABEL: @fusion
+; CHECK: fadd
+; CHECK-NOT: fadd
+; CHECK: }
+      )",
+                     /*match_optimized_ir=*/false);
+}
+
+
 TEST_F(GpuUnrollingTest, UnrollDefaultTimes) {
   // The default unrolling factor is 4.
   HloModuleConfig config;
   auto debug_options = GetDebugOptionsFromFlags();
-  debug_options.set_xla_gpu_enable_softmax_fusion(false);
   debug_options.set_xla_gpu_enable_mlir_lowering(false);
   config.set_debug_options(debug_options);
   auto hlo_module = ParseAndReturnVerifiedModule(kAddModule, config).value();
@@ -78,7 +96,7 @@ TEST_F(GpuUnrollingTest, UnrollDefaultTimes) {
 TEST_F(GpuUnrollingTest, UnrollUnfusedAdd) {
   HloModuleConfig config;
   auto debug_options = HloTestBase::GetDebugOptionsForTest();
-  debug_options.set_xla_gpu_enable_softmax_fusion(false);
+  debug_options.set_xla_gpu_max_kernel_unroll_factor(4);
   debug_options.set_xla_gpu_enable_mlir_lowering(false);
   config.set_debug_options(debug_options);
 
@@ -120,6 +138,7 @@ TEST_F(GpuUnrollingTest, UnrollUnfusedAdd) {
 TEST_F(GpuUnrollingTest, DisabledUnrollUnfusedSine) {
   HloModuleConfig config;
   auto debug_options = HloTestBase::GetDebugOptionsForTest();
+  debug_options.set_xla_gpu_max_kernel_unroll_factor(4);
   config.set_debug_options(debug_options);
 
   const char *const kUnfusedAddModule = R"(
@@ -143,6 +162,7 @@ TEST_F(GpuUnrollingTest, DisabledUnrollUnfusedSine) {
 TEST_F(GpuUnrollingTest, DisabledUnrollUnfusedCosine) {
   HloModuleConfig config;
   auto debug_options = HloTestBase::GetDebugOptionsForTest();
+  debug_options.set_xla_gpu_max_kernel_unroll_factor(4);
   config.set_debug_options(debug_options);
 
   const char *const kUnfusedAddModule = R"(
@@ -166,6 +186,7 @@ TEST_F(GpuUnrollingTest, DisabledUnrollUnfusedCosine) {
 TEST_F(GpuUnrollingTest, DisabledUnrollUnfusedPower) {
   HloModuleConfig config;
   auto debug_options = HloTestBase::GetDebugOptionsForTest();
+  debug_options.set_xla_gpu_max_kernel_unroll_factor(4);
   config.set_debug_options(debug_options);
 
   const char *const kUnfusedAddModule = R"(
@@ -190,6 +211,7 @@ TEST_F(GpuUnrollingTest, DisabledUnrollUnfusedPower) {
 TEST_F(GpuUnrollingTest, DisabledUnrollUnfusedAtan2) {
   HloModuleConfig config;
   auto debug_options = HloTestBase::GetDebugOptionsForTest();
+  debug_options.set_xla_gpu_max_kernel_unroll_factor(4);
   config.set_debug_options(debug_options);
 
   const char *const kUnfusedAddModule = R"(
@@ -214,6 +236,7 @@ TEST_F(GpuUnrollingTest, DisabledUnrollUnfusedAtan2) {
 TEST_F(GpuUnrollingTest, UnrollMultiOutputFusion) {
   HloModuleConfig config;
   auto debug_options = HloTestBase::GetDebugOptionsForTest();
+  debug_options.set_xla_gpu_max_kernel_unroll_factor(2);
   // Disable layout assignment for this test.  Layout assignment does not expect
   // fusions to be present, and so it does the wrong thing.
   debug_options.add_xla_disable_hlo_passes("layout-assignment");
@@ -270,6 +293,8 @@ TEST_F(GpuUnrollingTest, UnrollMultiOutputFusion) {
 ; CHECK: store float
 ; CHECK-NOT: store float
 ; CHECK-NOT: store float
+; CHECK-NOT: fadd
+; CHECK-NOT: fmul
 ; CHECK: }
       )",
                      /*match_optimized_ir=*/false);

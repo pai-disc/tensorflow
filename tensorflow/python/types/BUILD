@@ -1,7 +1,6 @@
 load("//tensorflow:pytype.default.bzl", "pytype_strict_library")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     licenses = ["notice"],
 )
 
@@ -24,7 +23,6 @@ pytype_strict_library(
     srcs = [
         "__init__.py",
         "core.py",
-        "data.py",
         "distribute.py",
         "internal.py",
         "trace.py",
@@ -32,7 +30,7 @@ pytype_strict_library(
     srcs_version = "PY3",
     visibility = [
         "//tensorflow:__subpackages__",
-        "//tensorflow:types_allowlist",
+        "//tensorflow:types_whitelist",
     ],
     deps = [
         ":doc_typealias",

@@ -143,8 +143,8 @@ struct NcclCliqueState {
   ncclUniqueId unique_id;
   int64_t run_id = -1;
 
-  // `mu` guards `communicators` and `status` during initialization.
-  // Once `ready` has been notified, the communicators may be accessed without
+  // mu guards ready, status, and communicators during initialization.
+  // Once 'ready' has been notified, the communicators may be accessed without
   // synchronization.
   absl::Mutex mu;
   absl::Notification ready;
@@ -235,9 +235,8 @@ StatusOr<const NcclUniqueIdCallback*> GetNcclUniqueIdCallback(
       << "If non-local devices are taking part of a collective API on "
          "GPU, the nccl_unique_id_callback must be provided by the client.";
 
-  static auto* local_callback =
-      new NcclUniqueIdCallback(LocalNcclUniqueIdCallback);
-  return local_callback;
+  static NcclUniqueIdCallback local_callback(LocalNcclUniqueIdCallback);
+  return &local_callback;
 }
 
 StatusOr<NcclComm::Lock> AcquireNcclComm(
@@ -251,6 +250,7 @@ StatusOr<NcclComm::Lock> AcquireNcclComm(
       run_id, op_id, clique_key, unique_id_callback, num_local_participants);
 
   if (!clique->ok()) return clique->status();
+  NcclCliqueState& state = ***clique;
 
   struct AllCommunicators {
     absl::Mutex mu;
@@ -273,39 +273,45 @@ StatusOr<NcclComm::Lock> AcquireNcclComm(
       });
   (void)check_async_error_thread;  // Silence unused variable warning.
 
-  NcclCliqueState& state = ***clique;
-  if (!state.ready.HasBeenNotified()) {
+  NcclComm::Lock comm;
+  if (state.ready.HasBeenNotified()) {
+    comm = state.communicators[rank]->Acquire();
+  } else {
+    auto comm_ptr = std::make_unique<NcclComm>();
+    comm = comm_ptr->Acquire();
     int nranks = clique_key.devices().size();
     const ncclUniqueId& id = state.unique_id;
+    Status status =
+        XLA_CUDA_STATUS(ncclCommInitRank(comm.get(), nranks, id, rank));
 
-    ncclComm_t comm = nullptr;
-    Status status = XLA_CUDA_STATUS(ncclCommInitRank(&comm, nranks, id, rank));
+    // Add the communicator to the all_communicators list.
+    {
+      absl::MutexLock lock(&all_communicators.mu);
+      all_communicators.communicators.push_back(comm_ptr.get());
+    }
 
-    size_t num_initialized = [&] {
-      absl::MutexLock lock(&state.mu);
-      state.status.Update(status);
-      state.communicators[rank] = std::make_unique<NcclComm>(comm);
-      return state.communicators.size();
-    }();
+    absl::MutexLock lock(&state.mu);
+    state.status.Update(status);
+    state.communicators[rank] = std::move(comm_ptr);
 
     // Wait for all communicators to initialize before allowing any progress.
     // Otherwise we may get deadlocks, because ncclCommInitRank may allocate,
     // which may block on the completion of device activity on a peer device,
     // which may depend on the completion of this collective if we do not have a
     // barrier to prevent it.
-    if (num_initialized == num_local_participants) {
+    auto all_initialized = [&]() ABSL_EXCLUSIVE_LOCKS_REQUIRED(state.mu) {
+      return state.communicators.size() == num_local_participants;
+    };
+    state.mu.Await(absl::Condition(&all_initialized));
+    status = state.status;
+    if (!state.ready.HasBeenNotified()) {
       state.ready.Notify();
-    } else {
-      TF_RETURN_IF_ERROR(status);
-      state.ready.WaitForNotification();
     }
-
-    absl::MutexLock lock(&all_communicators.mu);
-    all_communicators.communicators.push_back(state.communicators[rank].get());
   }
-
-  TF_RETURN_IF_ERROR(state.status);
-  return state.communicators[rank]->Acquire();
+  if (!state.status.ok()) {
+    return state.status;
+  }
+  return comm;
 }
 }  // namespace gpu
 }  // namespace xla

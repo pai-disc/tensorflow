@@ -25,7 +25,6 @@ limitations under the License.
 
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/core/data/service/client/common.h"
-#include "tensorflow/core/data/service/common.h"
 #include "tensorflow/core/data/service/common.pb.h"
 #include "tensorflow/core/data/service/dispatcher.pb.h"
 #include "tensorflow/core/data/service/dispatcher_client.h"

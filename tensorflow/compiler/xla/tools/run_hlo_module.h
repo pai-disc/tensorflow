@@ -20,7 +20,7 @@ limitations under the License.
 #include <random>
 #include <string>
 
-#include "tensorflow/compiler/xla/hlo/ir/hlo_module.h"
+#include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_runner.h"
 #include "tensorflow/compiler/xla/tools/run_hlo_module.pb.h"
 #include "tensorflow/tsl/platform/status.h"
@@ -47,8 +47,7 @@ struct RunHloModuleOptions {
         input_module(""),
         iterations(1),
         output_literals_file(""),
-        input_literals_file(""),
-        random_init_input_literals(true) {}
+        input_literals_file("") {}
   std::string platform;
   std::string reference_platform;
   bool print_literals;
@@ -64,7 +63,6 @@ struct RunHloModuleOptions {
   int iterations;
   std::string output_literals_file;
   std::string input_literals_file;
-  bool random_init_input_literals;
 };
 
 // Runs test_module on the platform with the name

@@ -17,15 +17,12 @@ limitations under the License.
 #define TENSORFLOW_COMPILER_XLA_PJRT_PJRT_COMPILER_H_
 
 #include <memory>
-#include <optional>
 
 #include "mlir/IR/BuiltinOps.h"  // from @llvm-project
 #include "tensorflow/compiler/xla/pjrt/pjrt_client.h"
 #include "tensorflow/compiler/xla/pjrt/pjrt_executable.h"
 
 namespace xla {
-
-class PjRtCompiler;
 
 // TODO(b/240299401): Move CompileOptions to this file.
 
@@ -43,9 +40,6 @@ class PjRtDeviceTopology {
   // Returns a string containing human-readable, platform-specific version info
   // (e.g. the CUDA version on GPU or libtpu version on Cloud TPU).
   virtual absl::string_view platform_version() const = 0;
-
-  // If non-null, overrides the compiler for this topology.
-  virtual std::optional<PjRtCompiler*> compiler() const { return std::nullopt; }
 };
 
 // Abstract interface that all registered compilers must implement.
@@ -75,8 +69,6 @@ void PjRtRegisterCompiler(absl::string_view platform_name,
 // Compiles a 'computation' and generates a 'PjRtExecutable' using the compiler
 // registered for the platform using PjRtRegisterCompiler. The returned
 // PjRtExecutable must be loaded by a compatible client before execution.
-//
-// The actual compiler used may be overriden by Topology::compiler().
 //
 // Returns error::NotFound if a compiler has not been registered for the
 // platform. Forwards errors returned from the registered compiler in case of a

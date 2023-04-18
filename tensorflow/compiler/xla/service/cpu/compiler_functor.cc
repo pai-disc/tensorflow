@@ -128,7 +128,7 @@ llvm::Expected<std::unique_ptr<llvm::MemoryBuffer>> CompilerFunctor::operator()(
   llvm::ModuleAnalysisManager mam;
 
   llvm::PassInstrumentationCallbacks pic;
-  llvm::StandardInstrumentations si(module.getContext(), false);
+  llvm::StandardInstrumentations si(false);
   si.registerCallbacks(pic, &fam);
 
   llvm::PassBuilder pb(target_machine_, pto, {}, &pic);

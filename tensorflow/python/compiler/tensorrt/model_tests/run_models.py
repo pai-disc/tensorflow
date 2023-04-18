@@ -18,7 +18,6 @@ import functools
 import os
 import tempfile
 from typing import Callable, Iterable, Sequence
-from collections import namedtuple
 
 from absl import app
 from absl import flags
@@ -66,33 +65,12 @@ flags.DEFINE_enum("numerics_baseline", "CPU", ["CPU", "GPU"],
                   "The baseline version for numerical difference analysis.")
 
 flags.DEFINE_float(
-    "fp32_speedup_tolerance", 0.90,
-    "Log errors whenever mean TensorRT fp32 speedup is lower than the tolerance."
-)
+    "speedup_tolerance", 0.95,
+    "Log errors whenever mean TensorRT speedup is lower than the tolerance.")
 
 flags.DEFINE_float(
-    "fp16_speedup_tolerance", 0.90,
-    "Log errors whenever mean TensorRT fp16 speedup is lower than the tolerance."
-)
-
-flags.DEFINE_float(
-    "int8_speedup_tolerance", 0.90,
-    "Log errors whenever mean TensorRT int8 speedup is lower than the tolerance."
-)
-
-flags.DEFINE_float(
-    "fp32_abs_tolerance", 1e-05,
-    "Log errors whenever mean TensorRT fp32 absolute difference is larger than "
-    "the tolerance.")
-
-flags.DEFINE_float(
-    "fp16_abs_tolerance", 5e-02,
-    "Log errors whenever mean TensorRT fp16 absolute difference is larger than "
-    "the tolerance.")
-
-flags.DEFINE_float(
-    "int8_abs_tolerance", 5e-01,
-    "Log errors whenever mean TensorRT int8 absolute difference is larger than "
+    "diff_tolerance", 0.05,
+    "Log errors whenever mean TensorRT relative difference is larger than "
     "the tolerance.")
 
 flags.DEFINE_integer(
@@ -181,7 +159,7 @@ class SampleRunner(object):
       test_results = manager.run(inputs)
 
       # Analyzes the latency and numerical results.
-      analysis_result_df, _, acc_hist = self._analyzer.analysis(test_results)
+      analysis_result_df, _ = self._analyzer.analysis(test_results)
 
       # Outputs the analysis results
       model_name = os.path.split(manager.model_config.saved_model_dir)[-1]
@@ -192,9 +170,6 @@ class SampleRunner(object):
       with gfile.Open(
           os.path.join(test_dir, "default_tensorrt_params.txt"), "w") as f:
         f.write(repr(default_trt_converter_params))
-      with gfile.Open(os.path.join(test_dir, "accuracy_histograms.txt"),
-                      "w") as f:
-        [f.write(h) for h in acc_hist]
       self._write_analysis_result(analysis_result_df, test_dir)
 
   def run_trt_precision_tests(self) -> None:
@@ -238,37 +213,19 @@ def main(argv):
   if FLAGS.gpu_memory_limit_mb:
     set_up_gpu_memory_limit(FLAGS.gpu_memory_limit_mb)
 
-  tol = namedtuple("tol", "perf acc")
-  tolerances = {
-      trt.TrtPrecisionMode.FP32:
-          tol(perf=float(FLAGS.fp32_speedup_tolerance),
-              acc=float(FLAGS.fp32_abs_tolerance)),
-      trt.TrtPrecisionMode.FP16:
-          tol(perf=float(FLAGS.fp16_speedup_tolerance),
-              acc=float(FLAGS.fp16_abs_tolerance)),
-      trt.TrtPrecisionMode.INT8:
-          tol(perf=float(FLAGS.int8_speedup_tolerance),
-              acc=float(FLAGS.int8_abs_tolerance)),
-  }
-
   analyzer = result_analyzer.ResultAnalyzer(
       use_cpu_latency_baseline=FLAGS.latency_baseline == "CPU",
       use_cpu_numerics_baseline=FLAGS.numerics_baseline == "CPU",
-      perf_checkers={
-          precision: functools.partial(
+      checkers=[
+          functools.partial(
               result_analyzer.check_column,
               name="speedup",
-              fn=lambda x: x > tol.perf)
-          for precision, tol in tolerances.items()
-      },
-      acc_checkers={
-          precision: functools.partial(
+              fn=lambda x: x > FLAGS.speedup_tolerance),
+          functools.partial(
               result_analyzer.check_column,
-              name="abs_diff_mean",
-              fn=lambda x: all(v < tol.acc for v in x.values()))
-          for precision, tol in tolerances.items()
-      })
-
+              name="rel_diff_mean",
+              fn=lambda x: all(v < FLAGS.diff_tolerance for v in x.values()))
+      ])
   runner = SampleRunner(
       saved_model_dir=FLAGS.saved_model_dir,
       saved_model_tags=FLAGS.saved_model_tags,

@@ -27,10 +27,9 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/tfrt/jit/opdefs/tf_jitrt_ops.h"
 #include "tensorflow/compiler/mlir/tfrt/jit/transforms/tf_jitrt_passes.h"
 #include "tensorflow/compiler/mlir/tfrt/jit/transforms/tf_jitrt_test_passes.h"
-#include "tensorflow/compiler/mlir/tfrt/transforms/gpu_passes.h"
 #include "tensorflow/compiler/mlir/tfrt/transforms/passes.h"
-#include "tensorflow/compiler/xla/mlir_hlo/gml_st/IR/gml_st_ops.h"
-#include "tensorflow/compiler/xla/mlir_hlo/gml_st/transforms/passes.h"
+#include "tensorflow/compiler/xla/mlir_hlo/include/mlir-hlo/Dialect/gml_st/IR/gml_st_ops.h"
+#include "tensorflow/compiler/xla/mlir_hlo/include/mlir-hlo/Dialect/gml_st/transforms/passes.h"
 #include "tensorflow/core/platform/init_main.h"
 #include "tfrt/init_tfrt_dialects.h"  // from @tf_runtime
 
@@ -57,7 +56,6 @@ int main(int argc, char **argv) {
   registry.insert<tfrt::fallback_async::FallbackAsyncDialect>();
   registry.insert<tfrt::fallback_sync::FallbackSyncDialect>();
   tensorflow::RegisterTPUDialects(&registry);
-  tensorflow::RegisterGpuDialects(&registry);
 
   tfrt::RegisterTFRTDialects(registry);
   return failed(

@@ -22,12 +22,9 @@ limitations under the License.
 #include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/protobuf/tensorflow_server.pb.h"
 
-namespace tsl {
-class CoordinationServiceAgent;
-}  // namespace tsl
-
 namespace tensorflow {
 
+class CoordinationServiceAgent;
 class DeviceMgr;
 class EagerContext;
 class WorkerEnv;
@@ -80,7 +77,7 @@ class ServerInterface {
       const tensorflow::uint64 context_id, EagerContext* context) = 0;
   // Set coordination service agent instance to coordination service RPC handler
   virtual Status SetCoordinationServiceAgentInstance(
-      tsl::CoordinationServiceAgent* agent) = 0;
+      CoordinationServiceAgent* agent) = 0;
   // TODO(hanyangtay): Remove this method once gRPC server clean shutdown is
   // supported.
   virtual Status StopCoordinationService() = 0;

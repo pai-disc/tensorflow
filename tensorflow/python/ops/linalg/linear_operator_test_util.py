@@ -380,7 +380,6 @@ def _test_log_abs_det(use_placeholder, shapes_info, dtype):
   return test_log_abs_det
 
 
-@test_util.run_without_tensor_float_32("Use FP32 in matmul")
 def _test_operator_matmul_with_same_type(use_placeholder, shapes_info, dtype):
   """op_a.matmul(op_b), in the case where the same type is returned."""
   def test_operator_matmul_with_same_type(self):
@@ -492,7 +491,6 @@ def _test_matmul_base(
     self.assertAC(op_matmul_v, mat_matmul_v)
 
 
-@test_util.run_without_tensor_float_32("Use FP32 in matmul")
 def _test_matmul(
     use_placeholder,
     shapes_info,
@@ -513,7 +511,6 @@ def _test_matmul(
   return test_matmul
 
 
-@test_util.run_without_tensor_float_32("Use FP32 in matmul")
 def _test_matmul_with_broadcast(
     use_placeholder,
     shapes_info,
@@ -813,7 +810,6 @@ def _test_diag_part(use_placeholder, shapes_info, dtype):
   return test_diag_part
 
 
-@test_util.run_without_tensor_float_32("Use FP32 in matmul")
 def _test_composite_tensor(use_placeholder, shapes_info, dtype):
   def test_composite_tensor(self):
     with self.session(graph=ops.Graph()) as sess:
@@ -854,7 +850,6 @@ def _test_composite_tensor(use_placeholder, shapes_info, dtype):
   return test_composite_tensor
 
 
-@test_util.run_without_tensor_float_32("Use FP32 in matmul")
 def _test_saved_model(use_placeholder, shapes_info, dtype):
   def test_saved_model(self):
     with self.session(graph=ops.Graph()) as sess:

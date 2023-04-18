@@ -39,12 +39,12 @@ StatusOr<mlir::Operation*> ExpandDimsExpander::ExpandOp(mlir::Operation* op) {
 
   TF_ASSIGN_OR_RETURN(
       llvm::ArrayRef<int64_t> global_output_shape,
-      GetGlobalShapeOfValueFromDTensorLayout(expand_dims_op.getOutput()));
+      GetGlobalShapeOfValueFromDTensorLayout(expand_dims_op.output()));
 
   // Compute current output layout (just input layout with unsharded on the
   // new dim);
   TF_ASSIGN_OR_RETURN(int64_t dim,
-                      ExtractConstIntFromValue(expand_dims_op.getDim()));
+                      ExtractConstIntFromValue(expand_dims_op.dim()));
 
   if (dim < 0) dim += global_output_shape.size();
   std::vector<ShardingSpec> sharding_specs(global_output_shape.size());
@@ -63,11 +63,10 @@ StatusOr<mlir::Operation*> ExpandDimsExpander::ExpandOp(mlir::Operation* op) {
 
   TF_ASSIGN_OR_RETURN(
       mlir::Value output_value,
-      EmitRelayout(expand_dims_op.getOutput(), current_output_layout,
+      EmitRelayout(expand_dims_op.output(), current_output_layout,
                    *output_layout, &newly_created_ops));
 
-  expand_dims_op.getOutput().replaceAllUsesExcept(output_value,
-                                                  newly_created_ops);
+  expand_dims_op.output().replaceAllUsesExcept(output_value, newly_created_ops);
 
   return output_value.getDefiningOp();
 }
@@ -79,7 +78,7 @@ StatusOr<llvm::DenseMap<int, Layout>> ExpandDimsExpander::ComputeLayoutForward(
   auto expand_dims_op = mlir::cast<mlir::TF::ExpandDimsOp>(op);
 
   TF_ASSIGN_OR_RETURN(int64_t dim,
-                      ExtractConstIntFromValue(expand_dims_op.getDim()));
+                      ExtractConstIntFromValue(expand_dims_op.dim()));
 
   // Do not infer any output layout if no operand layout is present.
   if (input_layouts.find(0) == input_layouts.end())
@@ -111,7 +110,7 @@ StatusOr<llvm::DenseMap<int, Layout>> ExpandDimsExpander::ComputeLayoutBackward(
   auto expand_dims_op = mlir::cast<mlir::TF::ExpandDimsOp>(op);
 
   TF_ASSIGN_OR_RETURN(int64_t dim,
-                      ExtractConstIntFromValue(expand_dims_op.getDim()));
+                      ExtractConstIntFromValue(expand_dims_op.dim()));
 
   if (dim < 0) dim += output_layout.rank();
 

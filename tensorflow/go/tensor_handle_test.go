@@ -28,12 +28,8 @@ func TestNewTensorHandle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	th, err := NewTensorHandle(tensor)
-	if err != nil {
+	if _, err = NewTensorHandle(tensor); err != nil {
 		t.Fatal(err)
-	}
-	if th == nil {
-		t.Errorf("expected non-nil tensor handle; got: %v", th)
 	}
 }
 
@@ -125,9 +121,6 @@ func TestTensorHandleToTensor(t *testing.T) {
 	}
 
 	tensor, err := th.ToTensor()
-	if err != nil {
-		t.Fatal(err)
-	}
 	if v := tensor.Value().([][]float32); !reflect.DeepEqual(v, initialVals) {
 		t.Errorf("Got %#v, want %#v", v, initialVals)
 	}

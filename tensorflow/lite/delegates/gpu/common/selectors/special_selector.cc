@@ -57,7 +57,8 @@ absl::Status GPUSubgraphFromGraph(
           .ok()) {
     return absl::OkStatus();
   }
-  if (TryFusedPointwiseConv(graph, first_node_id, precision, tensor_descriptors,
+  if (hints.Check(ModelHints::kAllowSpecialKernels) &&
+      TryFusedPointwiseConv(graph, first_node_id, precision, tensor_descriptors,
                             consumed_nodes, gpu_subgraph)
           .ok()) {
     gpu_subgraph->operations[0].name = "slice_mul_mean_concat";

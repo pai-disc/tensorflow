@@ -1,10 +1,7 @@
 load("//tensorflow:tensorflow.default.bzl", "filegroup")
 load("//tensorflow/compiler/mlir:glob_lit_test.bzl", "glob_lit_tests")
 
-package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    licenses = ["notice"],
-)
+package(licenses = ["notice"])
 
 glob_lit_tests(
     data = [":test_utilities"],
@@ -17,7 +14,6 @@ filegroup(
     name = "test_utilities",
     testonly = True,
     data = [
-        "//tensorflow/compiler/mlir/lite/experimental/common:outline_operations",
         "//tensorflow/compiler/mlir/lite/experimental/tac:tac-opt-all-backends",
         "@llvm-project//llvm:FileCheck",
         "@llvm-project//llvm:not",

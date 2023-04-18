@@ -22,14 +22,15 @@ limitations under the License.
 #include "tensorflow/compiler/xla/stream_executor/gpu/gpu_executor.h"
 #include "tensorflow/compiler/xla/stream_executor/gpu/gpu_helpers.h"
 #include "tensorflow/compiler/xla/stream_executor/gpu/gpu_stream.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/env.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/initialize.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/status.h"
 #include "tensorflow/compiler/xla/stream_executor/platform/dso_loader.h"
-#include "tensorflow/compiler/xla/stream_executor/platform/initialize.h"
 #include "tensorflow/compiler/xla/stream_executor/platform/logging.h"
 #include "tensorflow/compiler/xla/stream_executor/platform/port.h"
 #include "tensorflow/compiler/xla/stream_executor/plugin_registry.h"
 #include "tensorflow/compiler/xla/stream_executor/rocm/rocm_platform_id.h"
 #include "tensorflow/compiler/xla/stream_executor/stream_executor_internal.h"
-#include "tensorflow/tsl/platform/env.h"
 
 namespace stream_executor {
 namespace gpu {
@@ -55,32 +56,32 @@ namespace wrap {
 
 #else
 
-#define STREAM_EXECUTOR_ROCFFT_WRAP(__name)                              \
-  struct DynLoadShim__##__name {                                         \
-    static const char *kName;                                            \
-    using FuncPtrT = std::add_pointer<decltype(::__name)>::type;         \
-    static void *GetDsoHandle() {                                        \
-      auto s = internal::CachedDsoLoader::GetHipfftDsoHandle();          \
-      return s.value();                                                  \
-    }                                                                    \
-    static FuncPtrT LoadOrDie() {                                        \
-      void *f;                                                           \
-      auto s = tsl::Env::Default()->GetSymbolFromLibrary(GetDsoHandle(), \
-                                                         kName, &f);     \
-      CHECK(s.ok()) << "could not find " << kName                        \
-                    << " in rocfft DSO; dlerror: " << s.error_message(); \
-      return reinterpret_cast<FuncPtrT>(f);                              \
-    }                                                                    \
-    static FuncPtrT DynLoad() {                                          \
-      static FuncPtrT f = LoadOrDie();                                   \
-      return f;                                                          \
-    }                                                                    \
-    template <typename... Args>                                          \
-    hipfftResult operator()(GpuExecutor *parent, Args... args) {         \
-      gpu::ScopedActivateExecutorContext sac{parent};                    \
-      return DynLoad()(args...);                                         \
-    }                                                                    \
-  } __name;                                                              \
+#define STREAM_EXECUTOR_ROCFFT_WRAP(__name)                               \
+  struct DynLoadShim__##__name {                                          \
+    static const char *kName;                                             \
+    using FuncPtrT = std::add_pointer<decltype(::__name)>::type;          \
+    static void *GetDsoHandle() {                                         \
+      auto s = internal::CachedDsoLoader::GetHipfftDsoHandle();           \
+      return s.value();                                              \
+    }                                                                     \
+    static FuncPtrT LoadOrDie() {                                         \
+      void *f;                                                            \
+      auto s = port::Env::Default()->GetSymbolFromLibrary(GetDsoHandle(), \
+                                                          kName, &f);     \
+      CHECK(s.ok()) << "could not find " << kName                         \
+                    << " in rocfft DSO; dlerror: " << s.error_message();  \
+      return reinterpret_cast<FuncPtrT>(f);                               \
+    }                                                                     \
+    static FuncPtrT DynLoad() {                                           \
+      static FuncPtrT f = LoadOrDie();                                    \
+      return f;                                                           \
+    }                                                                     \
+    template <typename... Args>                                           \
+    hipfftResult operator()(GpuExecutor *parent, Args... args) {          \
+      gpu::ScopedActivateExecutorContext sac{parent};                     \
+      return DynLoad()(args...);                                          \
+    }                                                                     \
+  } __name;                                                               \
   const char *DynLoadShim__##__name::kName = #__name;
 
 #endif
@@ -153,7 +154,7 @@ bool SetStream(GpuExecutor *parent, hipfftHandle plan, Stream *stream) {
 
 }  // namespace
 
-tsl::Status ROCMFftPlan::Initialize(
+port::Status ROCMFftPlan::Initialize(
     GpuExecutor *parent, Stream *stream, int rank, uint64_t *elem_count,
     uint64_t *input_embed, uint64 input_stride, uint64 input_distance,
     uint64_t *output_embed, uint64 output_stride, uint64 output_distance,
@@ -185,8 +186,8 @@ tsl::Status ROCMFftPlan::Initialize(
                                    ROCMFftType(type), 1 /* = batch */);
           if (ret != HIPFFT_SUCCESS) {
             LOG(ERROR) << "failed to create rocFFT 1d plan:" << ret;
-            return tsl::Status{tsl::error::INTERNAL,
-                               "Failed to create rocFFT 1d plan."};
+            return port::Status{port::error::INTERNAL,
+                                "Failed to create rocFFT 1d plan."};
           }
           return tsl::OkStatus();
         case 2:
@@ -195,8 +196,8 @@ tsl::Status ROCMFftPlan::Initialize(
                                    elem_count_[1], ROCMFftType(type));
           if (ret != HIPFFT_SUCCESS) {
             LOG(ERROR) << "failed to create rocFFT 2d plan:" << ret;
-            return tsl::Status{tsl::error::INTERNAL,
-                               "Failed to create rocFFT 2d plan."};
+            return port::Status{port::error::INTERNAL,
+                                "Failed to create rocFFT 2d plan."};
           }
           return tsl::OkStatus();
         case 3:
@@ -206,29 +207,29 @@ tsl::Status ROCMFftPlan::Initialize(
                                  elem_count_[2], ROCMFftType(type));
           if (ret != HIPFFT_SUCCESS) {
             LOG(ERROR) << "failed to create rocFFT 3d plan:" << ret;
-            return tsl::Status{tsl::error::INTERNAL,
-                               "Failed to create rocFFT 3d plan."};
+            return port::Status{port::error::INTERNAL,
+                                "Failed to create rocFFT 3d plan."};
           }
           return tsl::OkStatus();
         default:
           LOG(ERROR) << "Invalid rank value for hipfftPlan. "
                         "Requested 1, 2, or 3, given: "
                      << rank;
-          return tsl::Status{tsl::error::INVALID_ARGUMENT,
-                             "hipfftPlan only takes rank 1, 2, or 3."};
+          return port::Status{port::error::INVALID_ARGUMENT,
+                              "hipfftPlan only takes rank 1, 2, or 3."};
       }
     } else {
       ret = wrap::hipfftCreate(parent, &plan_);
       if (ret != HIPFFT_SUCCESS) {
         LOG(ERROR) << "failed to create rocFFT plan:" << ret;
-        return tsl::Status{tsl::error::INTERNAL,
-                           "Failed to create rocFFT plan."};
+        return port::Status{port::error::INTERNAL,
+                            "Failed to create rocFFT plan."};
       }
       ret = wrap::hipfftSetAutoAllocation(parent, plan_, 0);
       if (ret != HIPFFT_SUCCESS) {
         LOG(ERROR) << "failed to set auto allocation for rocFFT plan:" << ret;
-        return tsl::Status{tsl::error::INTERNAL,
-                           "Failed to set auto allocation for rocFFT plan."};
+        return port::Status{port::error::INTERNAL,
+                            "Failed to set auto allocation for rocFFT plan."};
       }
       switch (rank) {
         case 1:
@@ -237,8 +238,8 @@ tsl::Status ROCMFftPlan::Initialize(
                                        &scratch_size_bytes_);
           if (ret != HIPFFT_SUCCESS) {
             LOG(ERROR) << "failed to make rocFFT 1d plan:" << ret;
-            return tsl::Status{tsl::error::INTERNAL,
-                               "Failed to make rocFFT 1d plan."};
+            return port::Status{port::error::INTERNAL,
+                                "Failed to make rocFFT 1d plan."};
           }
           break;
         case 2:
@@ -247,8 +248,8 @@ tsl::Status ROCMFftPlan::Initialize(
                                        &scratch_size_bytes_);
           if (ret != HIPFFT_SUCCESS) {
             LOG(ERROR) << "failed to make rocFFT 2d plan:" << ret;
-            return tsl::Status{tsl::error::INTERNAL,
-                               "Failed to make rocFFT 2d plan."};
+            return port::Status{port::error::INTERNAL,
+                                "Failed to make rocFFT 2d plan."};
           }
           break;
         case 3:
@@ -257,16 +258,16 @@ tsl::Status ROCMFftPlan::Initialize(
                                        ROCMFftType(type), &scratch_size_bytes_);
           if (ret != HIPFFT_SUCCESS) {
             LOG(ERROR) << "failed to make rocFFT 3d plan:" << ret;
-            return tsl::Status{tsl::error::INTERNAL,
-                               "Failed to make rocFFT 3d plan."};
+            return port::Status{port::error::INTERNAL,
+                                "Failed to make rocFFT 3d plan."};
           }
           break;
         default:
           LOG(ERROR) << "Invalid rank value for hipfftPlan. "
                         "Requested 1, 2, or 3, given: "
                      << rank;
-          return tsl::Status{tsl::error::INVALID_ARGUMENT,
-                             "hipfftPlan only takes rank 1, 2, or 3."};
+          return port::Status{port::error::INVALID_ARGUMENT,
+                              "hipfftPlan only takes rank 1, 2, or 3."};
       }
       return UpdateScratchAllocator(stream, scratch_allocator);
     }
@@ -280,22 +281,22 @@ tsl::Status ROCMFftPlan::Initialize(
           output_distance, ROCMFftType(type), batch_count);
       if (ret != HIPFFT_SUCCESS) {
         LOG(ERROR) << "failed to create rocFFT batched plan:" << ret;
-        return tsl::Status{tsl::error::INTERNAL,
-                           "Failed to create rocFFT batched plan."};
+        return port::Status{port::error::INTERNAL,
+                            "Failed to create rocFFT batched plan."};
       }
     } else {
       auto ret = wrap::hipfftCreate(parent, &plan_);
       if (ret != HIPFFT_SUCCESS) {
         LOG(ERROR) << "failed to create rocFFT batched plan:" << ret;
-        return tsl::Status{tsl::error::INTERNAL,
-                           "Failed to create rocFFT batched plan."};
+        return port::Status{port::error::INTERNAL,
+                            "Failed to create rocFFT batched plan."};
       }
       ret = wrap::hipfftSetAutoAllocation(parent, plan_, 0);
       if (ret != HIPFFT_SUCCESS) {
         LOG(ERROR) << "failed to set auto allocation for rocFFT batched plan:"
                    << ret;
-        return tsl::Status{
-            tsl::error::INTERNAL,
+        return port::Status{
+            port::error::INTERNAL,
             "Failed to set auto allocation for rocFFT batched plan."};
       }
       ret = wrap::hipfftMakePlanMany(
@@ -306,8 +307,8 @@ tsl::Status ROCMFftPlan::Initialize(
           &scratch_size_bytes_);
       if (ret != HIPFFT_SUCCESS) {
         LOG(ERROR) << "failed to make rocFFT batched plan:" << ret;
-        return tsl::Status{tsl::error::INTERNAL,
-                           "Failed to make rocFFT batched plan."};
+        return port::Status{port::error::INTERNAL,
+                            "Failed to make rocFFT batched plan."};
       }
       return UpdateScratchAllocator(stream, scratch_allocator);
     }
@@ -315,10 +316,10 @@ tsl::Status ROCMFftPlan::Initialize(
   return tsl::OkStatus();
 }
 
-tsl::Status ROCMFftPlan::Initialize(GpuExecutor *parent, Stream *stream,
-                                    int rank, uint64_t *elem_count,
-                                    fft::Type type,
-                                    ScratchAllocator *scratch_allocator) {
+port::Status ROCMFftPlan::Initialize(GpuExecutor *parent, Stream *stream,
+                                     int rank, uint64_t *elem_count,
+                                     fft::Type type,
+                                     ScratchAllocator *scratch_allocator) {
   return Initialize(parent_, stream, rank, elem_count,
                     /*input_embed=*/nullptr, /*input_stride=*/0,
                     /*input_distance=*/0,
@@ -326,7 +327,7 @@ tsl::Status ROCMFftPlan::Initialize(GpuExecutor *parent, Stream *stream,
                     /*output_distance=*/0, type, 1, scratch_allocator);
 }
 
-tsl::Status ROCMFftPlan::UpdateScratchAllocator(
+port::Status ROCMFftPlan::UpdateScratchAllocator(
     Stream *stream, ScratchAllocator *scratch_allocator) {
   scratch_allocator_ = scratch_allocator;
   if (scratch_size_bytes_ != 0) {
@@ -340,8 +341,8 @@ tsl::Status ROCMFftPlan::UpdateScratchAllocator(
   auto ret = wrap::hipfftSetWorkArea(parent_, plan_, scratch_.opaque());
   if (ret != HIPFFT_SUCCESS) {
     LOG(ERROR) << "failed to set work area for rocFFT plan:" << ret;
-    return tsl::Status(tsl::error::INTERNAL,
-                       "Failed to set work area for rocFFT plan.");
+    return port::Status(port::error::INTERNAL,
+                        "Failed to set work area for rocFFT plan.");
   }
   return tsl::OkStatus();
 }
@@ -374,9 +375,8 @@ std::unique_ptr<fft::Plan> ROCMFft::Create1dPlan(Stream *stream, uint64_t num_x,
                                                  bool in_place_fft) {
   std::unique_ptr<ROCMFftPlan> fft_plan_ptr{new ROCMFftPlan()};
   uint64_t elem_count[1] = {num_x};
-  tsl::Status status =
-      fft_plan_ptr->Initialize(parent_, stream, 1, elem_count, type,
-                               /*scratch_allocator=*/nullptr);
+  port::Status status = fft_plan_ptr->Initialize(
+      parent_, stream, 1, elem_count, type, /*scratch_allocator=*/nullptr);
   // TODO(yangzihao): In the future, send error msg back to TensorFlow
   // so it can fail gracefully,
   if (!status.ok()) {
@@ -391,8 +391,8 @@ std::unique_ptr<fft::Plan> ROCMFft::Create1dPlanWithScratchAllocator(
     ScratchAllocator *scratch_allocator) {
   std::unique_ptr<ROCMFftPlan> fft_plan_ptr{new ROCMFftPlan()};
   uint64_t elem_count[1] = {num_x};
-  tsl::Status status = fft_plan_ptr->Initialize(parent_, stream, 1, elem_count,
-                                                type, scratch_allocator);
+  port::Status status = fft_plan_ptr->Initialize(parent_, stream, 1, elem_count,
+                                                 type, scratch_allocator);
   if (!status.ok()) {
     LOG(FATAL)
         << "failed to initialize hipfft 1d plan with customized allocator: "
@@ -406,9 +406,8 @@ std::unique_ptr<fft::Plan> ROCMFft::Create2dPlan(Stream *stream, uint64_t num_x,
                                                  bool in_place_fft) {
   std::unique_ptr<ROCMFftPlan> fft_plan_ptr{new ROCMFftPlan()};
   uint64_t elem_count[2] = {num_x, num_y};
-  tsl::Status status =
-      fft_plan_ptr->Initialize(parent_, stream, 1, elem_count, type,
-                               /*scratch_allocator=*/nullptr);
+  port::Status status = fft_plan_ptr->Initialize(
+      parent_, stream, 1, elem_count, type, /*scratch_allocator=*/nullptr);
   if (!status.ok()) {
     LOG(FATAL) << "failed to initialize hipfft 2d plan: "
                << status.error_message();
@@ -421,8 +420,8 @@ std::unique_ptr<fft::Plan> ROCMFft::Create2dPlanWithScratchAllocator(
     bool in_place_fft, ScratchAllocator *scratch_allocator) {
   std::unique_ptr<ROCMFftPlan> fft_plan_ptr{new ROCMFftPlan()};
   uint64_t elem_count[2] = {num_x, num_y};
-  tsl::Status status = fft_plan_ptr->Initialize(parent_, stream, 2, elem_count,
-                                                type, scratch_allocator);
+  port::Status status = fft_plan_ptr->Initialize(parent_, stream, 2, elem_count,
+                                                 type, scratch_allocator);
   if (!status.ok()) {
     LOG(FATAL)
         << "failed to initialize hipfft 2d plan with customized allocator: "
@@ -437,9 +436,8 @@ std::unique_ptr<fft::Plan> ROCMFft::Create3dPlan(Stream *stream, uint64_t num_x,
                                                  bool in_place_fft) {
   std::unique_ptr<ROCMFftPlan> fft_plan_ptr{new ROCMFftPlan()};
   uint64_t elem_count[3] = {num_x, num_y, num_z};
-  tsl::Status status =
-      fft_plan_ptr->Initialize(parent_, stream, 3, elem_count, type,
-                               /*scratch_allocator=*/nullptr);
+  port::Status status = fft_plan_ptr->Initialize(
+      parent_, stream, 3, elem_count, type, /*scratch_allocator=*/nullptr);
   if (!status.ok()) {
     LOG(FATAL) << "failed to initialize hipfft 3d plan: "
                << status.error_message();
@@ -452,8 +450,8 @@ std::unique_ptr<fft::Plan> ROCMFft::Create3dPlanWithScratchAllocator(
     bool in_place_fft, ScratchAllocator *scratch_allocator) {
   std::unique_ptr<ROCMFftPlan> fft_plan_ptr{new ROCMFftPlan()};
   uint64_t elem_count[3] = {num_x, num_y, num_z};
-  tsl::Status status = fft_plan_ptr->Initialize(parent_, stream, 3, elem_count,
-                                                type, scratch_allocator);
+  port::Status status = fft_plan_ptr->Initialize(parent_, stream, 3, elem_count,
+                                                 type, scratch_allocator);
   if (!status.ok()) {
     LOG(FATAL)
         << "failed to initialize hipfft 3d plan with customized allocator: "
@@ -468,7 +466,7 @@ std::unique_ptr<fft::Plan> ROCMFft::CreateBatchedPlan(
     uint64_t output_stride, uint64 output_distance, fft::Type type,
     bool in_place_fft, int batch_count) {
   std::unique_ptr<ROCMFftPlan> fft_plan_ptr{new ROCMFftPlan()};
-  tsl::Status status = fft_plan_ptr->Initialize(
+  port::Status status = fft_plan_ptr->Initialize(
       parent_, stream, rank, elem_count, input_embed, input_stride,
       input_distance, output_embed, output_stride, output_distance, type,
       batch_count, /*scratch_allocator=*/nullptr);
@@ -486,7 +484,7 @@ std::unique_ptr<fft::Plan> ROCMFft::CreateBatchedPlanWithScratchAllocator(
     uint64_t output_stride, uint64 output_distance, fft::Type type,
     bool in_place_fft, int batch_count, ScratchAllocator *scratch_allocator) {
   std::unique_ptr<ROCMFftPlan> fft_plan_ptr{new ROCMFftPlan()};
-  tsl::Status status = fft_plan_ptr->Initialize(
+  port::Status status = fft_plan_ptr->Initialize(
       parent_, stream, rank, elem_count, input_embed, input_stride,
       input_distance, output_embed, output_stride, output_distance, type,
       batch_count, scratch_allocator);
@@ -501,7 +499,7 @@ std::unique_ptr<fft::Plan> ROCMFft::CreateBatchedPlanWithScratchAllocator(
 void ROCMFft::UpdatePlanWithScratchAllocator(
     Stream *stream, fft::Plan *plan, ScratchAllocator *scratch_allocator) {
   ROCMFftPlan *rocm_fft_plan = dynamic_cast<ROCMFftPlan *>(plan);
-  tsl::Status status =
+  port::Status status =
       rocm_fft_plan->UpdateScratchAllocator(stream, scratch_allocator);
   if (!status.ok()) {
     LOG(FATAL) << "failed to update custom allocator for hipfft plan: "
@@ -621,7 +619,7 @@ void initialize_rocfft() {
       rocm::kROCmPlatformId, PluginKind::kFft, gpu::kRocFftPlugin);
 
   if (!rocFftAlreadyRegistered) {
-    tsl::Status status =
+    port::Status status =
         PluginRegistry::Instance()->RegisterFactory<PluginRegistry::FftFactory>(
             rocm::kROCmPlatformId, gpu::kRocFftPlugin, "rocFFT",
             [](internal::StreamExecutorInterface *parent) -> fft::FftSupport * {

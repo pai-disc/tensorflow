@@ -66,7 +66,6 @@ WorkerStateExport GrpcWorkerImpl::ExportState() const {
 HANDLER(ProcessTask);
 HANDLER(GetElement);
 HANDLER(GetWorkerTasks);
-HANDLER(GetSnapshotTaskProgresses);
 #undef HANDLER
 
 }  // namespace data

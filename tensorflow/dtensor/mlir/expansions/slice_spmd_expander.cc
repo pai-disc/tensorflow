@@ -41,13 +41,11 @@ Status GetSliceOpArguments(mlir::TF::SliceOp slice_op,
                            llvm::SmallVector<int64_t, 4>& begins,
                            bool& dynamic_begins,
                            llvm::SmallVector<int64_t, 4>& sizes) {
-  Status begins_result =
-      ExtractConstVectorFromValue(slice_op.getBegin(), &begins);
+  Status begins_result = ExtractConstVectorFromValue(slice_op.begin(), &begins);
   dynamic_begins = !begins_result.ok();
 
-  TF_RETURN_WITH_CONTEXT(
-      ExtractConstVectorFromValue(slice_op.getSize(), &sizes),
-      "expected constant argument for SliceOp::size()");
+  TF_RETURN_WITH_CONTEXT(ExtractConstVectorFromValue(slice_op.size(), &sizes),
+                         "expected constant argument for SliceOp::size()");
 
   return OkStatus();
 }
@@ -150,7 +148,7 @@ Status GetInputOrientedData(T strided_slice,
   llvm::SmallVector<int64_t, 4> spec_strides;
 
   TF_ASSIGN_OR_RETURN(llvm::ArrayRef<int64_t> strides_shape,
-                      GetShapeOfValue(strided_slice.getStrides(),
+                      GetShapeOfValue(strided_slice.strides(),
                                       /*fail_on_dynamic=*/true));
   if (strides_shape.size() != 1)
     return errors::InvalidArgument(
@@ -159,27 +157,26 @@ Status GetInputOrientedData(T strided_slice,
   int64_t spec_rank = strides_shape[0];
   spec_to_input->resize(spec_rank, -1);
 
-  if (!ExtractConstVectorFromValue(strided_slice.getStrides(), &spec_strides)
-           .ok())
+  if (!ExtractConstVectorFromValue(strided_slice.strides(), &spec_strides).ok())
     spec_strides.resize(spec_rank, 0);
 
-  if (ExtractConstVectorFromValue(strided_slice.getBegin(), &spec_begin).ok())
+  if (ExtractConstVectorFromValue(strided_slice.begin(), &spec_begin).ok())
     if (spec_begin.size() != spec_rank)
       return errors::InvalidArgument(
           "rank of begin input to strided operation does not equal rank of "
           "strides input");
 
-  if (ExtractConstVectorFromValue(strided_slice.getEnd(), &spec_end).ok())
+  if (ExtractConstVectorFromValue(strided_slice.end(), &spec_end).ok())
     if (spec_end.size() != spec_rank)
       return errors::InvalidArgument(
           "rank of end input to strided operation does not equal rank of "
           "strides input");
 
-  const uint64_t new_axis_mask = strided_slice.getNewAxisMask();
-  const uint64_t shink_axis_mask = strided_slice.getShrinkAxisMask();
-  const uint64_t spec_begin_mask = strided_slice.getBeginMask();
-  const uint64_t spec_end_mask = strided_slice.getEndMask();
-  uint64_t ellipsis_mask = strided_slice.getEllipsisMask();
+  const uint64_t new_axis_mask = strided_slice.new_axis_mask();
+  const uint64_t shink_axis_mask = strided_slice.shrink_axis_mask();
+  const uint64_t spec_begin_mask = strided_slice.begin_mask();
+  const uint64_t spec_end_mask = strided_slice.end_mask();
+  uint64_t ellipsis_mask = strided_slice.ellipsis_mask();
 
   int64_t input_rank;
   if (mlir::isa<mlir::TF::StridedSliceOp>(strided_slice) ||
@@ -392,9 +389,9 @@ StatusOr<Layout> ApplyNewAndShrinkMasksToLayout(SliceOpT slice_op,
                                                 const Direction direction) {
   // Calculate bit mask for shrunk dimensions/newly added dimensions.
   const llvm::SmallVector<int64_t, 4> new_axis_mask =
-      CalculateBitVector(slice_op.getNewAxisMask());
+      CalculateBitVector(slice_op.new_axis_mask());
   const llvm::SmallVector<int64_t, 4> shrink_axis_mask =
-      CalculateBitVector(slice_op.getShrinkAxisMask());
+      CalculateBitVector(slice_op.shrink_axis_mask());
 
   std::vector<std::string> sharding_spec;
   int input_dim_index = 0;
@@ -452,7 +449,7 @@ mlir::Value IntConstWithMatchingType(mlir::OpBuilder& builder,
 StatusOr<mlir::Operation*> SliceSPMDExpander::ExpandOp(mlir::Operation* op) {
   auto slice_op = mlir::cast<mlir::TF::SliceOp>(op);
   TF_ASSIGN_OR_RETURN(auto input_layout,
-                      ExtractLayoutFromOperand(slice_op.getInput()));
+                      ExtractLayoutFromOperand(slice_op.input()));
   TF_ASSIGN_OR_RETURN(auto output_layout, ExtractSingleLayoutFromOp(op));
 
   if (!output_layout || !input_layout)
@@ -462,7 +459,7 @@ StatusOr<mlir::Operation*> SliceSPMDExpander::ExpandOp(mlir::Operation* op) {
   // The dyn_cast will never be nullptr as it is checked in
   // GetLayoutFromOperands.
   auto input_type =
-      slice_op.getInput().getType().dyn_cast<mlir::RankedTensorType>();
+      slice_op.input().getType().dyn_cast<mlir::RankedTensorType>();
   if (!input_type)
     return errors::InvalidArgument(
         "rank of input tensor must be statically known for slice op.");
@@ -480,7 +477,7 @@ StatusOr<mlir::Operation*> SliceSPMDExpander::ExpandOp(mlir::Operation* op) {
       GetSliceOpArguments(slice_op, begins, dynamic_begins, sizes));
 
   TF_ASSIGN_OR_RETURN(auto proposed_layout,
-                      VerifySliceLayout(slice_op, slice_op.getInput(),
+                      VerifySliceLayout(slice_op, slice_op.input(),
                                         *input_layout, &global_shape));
 
   llvm::SmallPtrSet<mlir::Operation*, 4> newly_created_ops;
@@ -518,21 +515,20 @@ StatusOr<mlir::Operation*> SliceSPMDExpander::ExpandOp(mlir::Operation* op) {
   auto loc = op->getLoc();
   // Both begin and size need to be the same type, so we must match the new
   // size input with the type of begin.
-  if (!slice_op.getBegin().getType().isa<mlir::ShapedType>())
+  if (!slice_op.begin().getType().isa<mlir::ShapedType>())
     return errors::Internal("type of begin is not a ShapedType");
-  mlir::ShapedType type =
-      slice_op.getBegin().getType().cast<mlir::ShapedType>();
+  mlir::ShapedType type = slice_op.begin().getType().cast<mlir::ShapedType>();
   if (type.getElementType().isInteger(32))
     new_size = IntConst(
         builder, loc, llvm::SmallVector<int32, 4>(sizes.begin(), sizes.end()));
   else
     new_size = Int64Const(builder, loc, sizes);
 
-  auto new_op = builder
-                    .create<mlir::TF::SliceOp>(
-                        loc, slice_op.getOutput().getType(), relayout_input,
-                        slice_op.getBegin(), new_size)
-                    .getOperation();
+  auto new_op =
+      builder
+          .create<mlir::TF::SliceOp>(loc, slice_op.output().getType(),
+                                     relayout_input, slice_op.begin(), new_size)
+          .getOperation();
   new_op = InferSPMDExpandedLocalShape(new_op);
 
   TF_ASSIGN_OR_RETURN(auto relayout_output,
@@ -555,7 +551,7 @@ StatusOr<llvm::DenseMap<int, Layout>> SliceSPMDExpander::ComputeLayoutForward(
   const Layout& input_layout = input_layouts.lookup(0);
   TF_ASSIGN_OR_RETURN(
       auto proposed_layout,
-      VerifySliceLayout(slice_op, slice_op.getInput(), input_layout));
+      VerifySliceLayout(slice_op, slice_op.input(), input_layout));
   return llvm::DenseMap<int, Layout>({{0, proposed_layout}});
 }
 
@@ -574,7 +570,7 @@ StatusOr<llvm::DenseMap<int, Layout>> SliceSPMDExpander::ComputeLayoutBackward(
     const Layout& output_layout = output_layouts.lookup(0);
     TF_ASSIGN_OR_RETURN(
         auto proposed_layout,
-        VerifySliceLayout(slice_op, slice_op.getOutput(), output_layout));
+        VerifySliceLayout(slice_op, slice_op.output(), output_layout));
     input_layouts[0] = proposed_layout;
   }
 
@@ -585,12 +581,12 @@ StatusOr<mlir::Operation*> StridedSliceSPMDExpander::ExpandOp(
     mlir::Operation* op) {
   auto strided_slice_op = mlir::cast<mlir::TF::StridedSliceOp>(op);
   TF_ASSIGN_OR_RETURN(Layout input_layout, ExtractRequiredLayoutFromOperand(
-                                               strided_slice_op.getInput()));
+                                               strided_slice_op.input()));
   TF_ASSIGN_OR_RETURN(Layout output_layout,
                       ExtractRequiredSingleLayoutFromOp(op));
   TF_ASSIGN_OR_RETURN(
       const llvm::ArrayRef<int64_t> global_input_shape,
-      GetGlobalShapeOfValueFromDTensorLayout(strided_slice_op.getInput()));
+      GetGlobalShapeOfValueFromDTensorLayout(strided_slice_op.input()));
 
   llvm::SmallVector<int64_t, 4> end;
   TF_ASSIGN_OR_RETURN(
@@ -599,31 +595,31 @@ StatusOr<mlir::Operation*> StridedSliceSPMDExpander::ExpandOp(
                                         global_input_shape, &end));
 
   TF_ASSIGN_OR_RETURN(mlir::Value new_input,
-                      EmitRelayout(strided_slice_op.getInput(), input_layout,
+                      EmitRelayout(strided_slice_op.input(), input_layout,
                                    intermediate_input_layout));
 
-  strided_slice_op.getInputMutable().assign(new_input);
+  strided_slice_op.inputMutable().assign(new_input);
 
   mlir::OpBuilder builder(op);
 
   if (!end.empty()) {
     mlir::Value new_end =
         IntConstWithMatchingType(builder, strided_slice_op.getLoc(), end,
-                                 strided_slice_op.getBegin().getType());
-    strided_slice_op.getEndMutable().assign(new_end);
+                                 strided_slice_op.begin().getType());
+    strided_slice_op.endMutable().assign(new_end);
   }
 
   op = InferSPMDExpandedLocalShape(op);
 
   // Compute the layout of the output after the local StridedSlice takes place.
   const int input_rank = global_input_shape.size();
-  const int output_rank = ValueRank(strided_slice_op.getOutput());
+  const int output_rank = ValueRank(strided_slice_op.output());
 
   // Calculate bit mask for shrinked dimensions/newly added dimensions.
   const llvm::SmallVector<int64_t, 4> new_axis_mask =
-      CalculateBitVector(strided_slice_op.getNewAxisMask());
+      CalculateBitVector(strided_slice_op.new_axis_mask());
   const llvm::SmallVector<int64_t, 4> shrink_axis_mask =
-      CalculateBitVector(strided_slice_op.getShrinkAxisMask());
+      CalculateBitVector(strided_slice_op.shrink_axis_mask());
 
   TF_ASSIGN_OR_RETURN(
       Layout intermediate_output_layout,
@@ -636,10 +632,10 @@ StatusOr<mlir::Operation*> StridedSliceSPMDExpander::ExpandOp(
 
   TF_ASSIGN_OR_RETURN(
       mlir::Value output,
-      EmitRelayout(strided_slice_op.getOutput(), intermediate_output_layout,
+      EmitRelayout(strided_slice_op.output(), intermediate_output_layout,
                    output_layout, &newly_created_ops));
 
-  strided_slice_op.getOutput().replaceAllUsesExcept(output, newly_created_ops);
+  strided_slice_op.output().replaceAllUsesExcept(output, newly_created_ops);
 
   return output.getDefiningOp();
 }
@@ -654,10 +650,10 @@ StridedSliceSPMDExpander::ComputeLayoutForward(
   mlir::TF::StridedSliceOp strided_slice_op =
       mlir::cast<mlir::TF::StridedSliceOp>(op);
   TF_ASSIGN_OR_RETURN(const llvm::ArrayRef<int64_t> global_input_shape,
-                      GetShapeOfValue(strided_slice_op.getInput(),
+                      GetShapeOfValue(strided_slice_op.input(),
                                       /*fail_on_dynamic=*/true));
   const int input_rank = global_input_shape.size();
-  const int output_rank = ValueRank(strided_slice_op.getOutput());
+  const int output_rank = ValueRank(strided_slice_op.output());
 
   const Layout& input_layout = input_layouts.lookup(0);
   TF_ASSIGN_OR_RETURN(Layout proposed_layout,
@@ -680,10 +676,10 @@ StridedSliceSPMDExpander::ComputeLayoutBackward(
   TF_ASSIGN_OR_RETURN(const Mesh mesh, ExtractDeviceMeshEnclosingCluster(op));
 
   TF_ASSIGN_OR_RETURN(const llvm::ArrayRef<int64_t> global_input_shape,
-                      GetShapeOfValue(strided_slice_op.getInput(),
+                      GetShapeOfValue(strided_slice_op.input(),
                                       /*fail_on_dynamic=*/true));
   const int input_rank = global_input_shape.size();
-  const int output_rank = ValueRank(strided_slice_op.getOutput());
+  const int output_rank = ValueRank(strided_slice_op.output());
 
   llvm::DenseMap<int, Layout> input_layouts(strided_slice_op.getNumOperands());
   // Set replicated layout for begin, end, and strides operands.
@@ -716,19 +712,19 @@ StatusOr<mlir::Operation*> TensorStridedSliceUpdateSPMDExpander::ExpandOp(
       llvm::cast<mlir::TF::TensorStridedSliceUpdateOp>(op);
   TF_ASSIGN_OR_RETURN(
       const Layout input_layout,
-      ExtractRequiredLayoutFromOperand(strided_slice_op.getInput()));
+      ExtractRequiredLayoutFromOperand(strided_slice_op.input()));
   TF_ASSIGN_OR_RETURN(
       const Layout value_layout,
-      ExtractRequiredLayoutFromOperand(strided_slice_op.getValue()));
+      ExtractRequiredLayoutFromOperand(strided_slice_op.value()));
   TF_ASSIGN_OR_RETURN(const Layout output_layout,
                       ExtractRequiredSingleLayoutFromOp(op));
 
   TF_ASSIGN_OR_RETURN(
       const llvm::ArrayRef<int64_t> global_input_shape,
-      GetGlobalShapeOfValueFromDTensorLayout(strided_slice_op.getInput()));
+      GetGlobalShapeOfValueFromDTensorLayout(strided_slice_op.input()));
 
   const int input_rank = global_input_shape.size();
-  const int value_rank = ValueRank(strided_slice_op.getValue());
+  const int value_rank = ValueRank(strided_slice_op.value());
 
   llvm::SmallVector<int64_t, 4> end;
   TF_ASSIGN_OR_RETURN(
@@ -742,23 +738,23 @@ StatusOr<mlir::Operation*> TensorStridedSliceUpdateSPMDExpander::ExpandOp(
                                      intermediate_input_layout, FORWARD));
 
   TF_ASSIGN_OR_RETURN(mlir::Value new_input,
-                      EmitRelayout(strided_slice_op.getInput(), input_layout,
+                      EmitRelayout(strided_slice_op.input(), input_layout,
                                    intermediate_input_layout));
 
   TF_ASSIGN_OR_RETURN(mlir::Value new_value,
-                      EmitRelayout(strided_slice_op.getValue(), value_layout,
+                      EmitRelayout(strided_slice_op.value(), value_layout,
                                    intermediate_value_layout));
 
-  strided_slice_op.getInputMutable().assign(new_input);
-  strided_slice_op.getValueMutable().assign(new_value);
+  strided_slice_op.inputMutable().assign(new_input);
+  strided_slice_op.valueMutable().assign(new_value);
 
   mlir::OpBuilder builder(op);
 
   if (!end.empty()) {
     mlir::Value new_end =
         IntConstWithMatchingType(builder, strided_slice_op.getLoc(), end,
-                                 strided_slice_op.getBegin().getType());
-    strided_slice_op.getEndMutable().assign(new_end);
+                                 strided_slice_op.begin().getType());
+    strided_slice_op.endMutable().assign(new_end);
   }
 
   op = InferSPMDExpandedLocalShape(op);
@@ -769,10 +765,10 @@ StatusOr<mlir::Operation*> TensorStridedSliceUpdateSPMDExpander::ExpandOp(
 
   TF_ASSIGN_OR_RETURN(
       mlir::Value output,
-      EmitRelayout(strided_slice_op.getOutput(), intermediate_input_layout,
+      EmitRelayout(strided_slice_op.output(), intermediate_input_layout,
                    output_layout, &newly_created_ops));
 
-  strided_slice_op.getOutput().replaceAllUsesExcept(output, newly_created_ops);
+  strided_slice_op.output().replaceAllUsesExcept(output, newly_created_ops);
 
   return output.getDefiningOp();
 }
@@ -789,10 +785,10 @@ TensorStridedSliceUpdateSPMDExpander::ComputeLayoutForward(
   mlir::TF::TensorStridedSliceUpdateOp strided_slice_op =
       mlir::cast<mlir::TF::TensorStridedSliceUpdateOp>(op);
   TF_ASSIGN_OR_RETURN(const llvm::ArrayRef<int64_t> global_input_shape,
-                      GetShapeOfValue(strided_slice_op.getInput(),
+                      GetShapeOfValue(strided_slice_op.input(),
                                       /*fail_on_dynamic=*/true));
   const int input_rank = global_input_shape.size();
-  const int value_rank = ValueRank(strided_slice_op.getValue());
+  const int value_rank = ValueRank(strided_slice_op.value());
 
   // We have a choice to determine the output layout, we will default to use
   // input_layout if available, otherwise we will expand value_layout and use
@@ -825,10 +821,10 @@ TensorStridedSliceUpdateSPMDExpander::ComputeLayoutBackward(
   TF_ASSIGN_OR_RETURN(const Mesh mesh, ExtractDeviceMeshEnclosingCluster(op));
 
   TF_ASSIGN_OR_RETURN(const llvm::ArrayRef<int64_t> global_input_shape,
-                      GetShapeOfValue(strided_slice_op.getInput(),
+                      GetShapeOfValue(strided_slice_op.input(),
                                       /*fail_on_dynamic=*/true));
   const int input_rank = global_input_shape.size();
-  const int value_rank = ValueRank(strided_slice_op.getValue());
+  const int value_rank = ValueRank(strided_slice_op.value());
 
   llvm::DenseMap<int, Layout> input_layouts(strided_slice_op.getNumOperands());
   // Set replicated layout for begin, end, and strides operands.
@@ -865,15 +861,15 @@ StatusOr<mlir::Operation*> StridedSliceGradSPMDExpander::ExpandOp(
   auto strided_slice_grad_op = llvm::cast<mlir::TF::StridedSliceGradOp>(op);
   TF_ASSIGN_OR_RETURN(
       const Layout input_layout,
-      ExtractRequiredLayoutFromOperand(strided_slice_grad_op.getDy()));
+      ExtractRequiredLayoutFromOperand(strided_slice_grad_op.dy()));
   TF_ASSIGN_OR_RETURN(const Layout output_layout,
                       ExtractRequiredSingleLayoutFromOp(op));
 
-  TF_ASSIGN_OR_RETURN(const llvm::ArrayRef<int64_t> global_output_shape,
-                      GetGlobalShapeOfValueFromDTensorLayout(
-                          strided_slice_grad_op.getOutput()));
+  TF_ASSIGN_OR_RETURN(
+      const llvm::ArrayRef<int64_t> global_output_shape,
+      GetGlobalShapeOfValueFromDTensorLayout(strided_slice_grad_op.output()));
 
-  const int input_rank = ValueRank(strided_slice_grad_op.getDy());
+  const int input_rank = ValueRank(strided_slice_grad_op.dy());
   const int output_rank = global_output_shape.size();
 
   llvm::SmallVector<int64_t, 4> end;
@@ -888,18 +884,18 @@ StatusOr<mlir::Operation*> StridedSliceGradSPMDExpander::ExpandOp(
                           intermediate_output_layout, FORWARD));
 
   TF_ASSIGN_OR_RETURN(mlir::Value new_dy,
-                      EmitRelayout(strided_slice_grad_op.getDy(), input_layout,
+                      EmitRelayout(strided_slice_grad_op.dy(), input_layout,
                                    intermediate_input_layout));
 
-  strided_slice_grad_op.getDyMutable().assign(new_dy);
+  strided_slice_grad_op.dyMutable().assign(new_dy);
 
   mlir::OpBuilder builder(op);
 
   if (!end.empty()) {
     mlir::Value new_end =
         IntConstWithMatchingType(builder, strided_slice_grad_op.getLoc(), end,
-                                 strided_slice_grad_op.getBegin().getType());
-    strided_slice_grad_op.getEndMutable().assign(new_end);
+                                 strided_slice_grad_op.begin().getType());
+    strided_slice_grad_op.endMutable().assign(new_end);
   }
 
   // The shape input to StridedSliceGrad will still be global, so we need to
@@ -908,8 +904,8 @@ StatusOr<mlir::Operation*> StridedSliceGradSPMDExpander::ExpandOp(
       intermediate_output_layout.LocalShapeFromGlobalShape(global_output_shape);
   mlir::Value new_shape = IntConstWithMatchingType(
       builder, strided_slice_grad_op.getLoc(), computed_output_shape,
-      strided_slice_grad_op.getBegin().getType());
-  strided_slice_grad_op.getShapeMutable().assign(new_shape);
+      strided_slice_grad_op.begin().getType());
+  strided_slice_grad_op.shapeMutable().assign(new_shape);
 
   op = InferSPMDExpandedLocalShape(op);
 
@@ -917,13 +913,13 @@ StatusOr<mlir::Operation*> StridedSliceGradSPMDExpander::ExpandOp(
   // differences between intermediate_output_layout and output_layout.
   llvm::SmallPtrSet<mlir::Operation*, 4> newly_created_ops;
 
-  TF_ASSIGN_OR_RETURN(mlir::Value output,
-                      EmitRelayout(strided_slice_grad_op.getOutput(),
-                                   intermediate_output_layout, output_layout,
-                                   &newly_created_ops));
+  TF_ASSIGN_OR_RETURN(
+      mlir::Value output,
+      EmitRelayout(strided_slice_grad_op.output(), intermediate_output_layout,
+                   output_layout, &newly_created_ops));
 
-  strided_slice_grad_op.getOutput().replaceAllUsesExcept(output,
-                                                         newly_created_ops);
+  strided_slice_grad_op.output().replaceAllUsesExcept(output,
+                                                      newly_created_ops);
 
   return output.getDefiningOp();
 }
@@ -938,9 +934,9 @@ StridedSliceGradSPMDExpander::ComputeLayoutForward(
   mlir::TF::StridedSliceGradOp strided_slice_grad_op =
       mlir::cast<mlir::TF::StridedSliceGradOp>(op);
   TF_ASSIGN_OR_RETURN(const llvm::ArrayRef<int64_t> global_output_shape,
-                      GetShapeOfValue(strided_slice_grad_op.getOutput(),
+                      GetShapeOfValue(strided_slice_grad_op.output(),
                                       /*fail_on_dynamic=*/true));
-  const int input_rank = ValueRank(strided_slice_grad_op.getDy());
+  const int input_rank = ValueRank(strided_slice_grad_op.dy());
   const int output_rank = global_output_shape.size();
 
   const Layout& input_layout = input_layouts.lookup(4);
@@ -965,9 +961,9 @@ StridedSliceGradSPMDExpander::ComputeLayoutBackward(
   TF_ASSIGN_OR_RETURN(const Mesh mesh, ExtractDeviceMeshEnclosingCluster(op));
 
   TF_ASSIGN_OR_RETURN(const llvm::ArrayRef<int64_t> global_output_shape,
-                      GetShapeOfValue(strided_slice_grad_op.getOutput(),
+                      GetShapeOfValue(strided_slice_grad_op.output(),
                                       /*fail_on_dynamic=*/true));
-  const int input_rank = ValueRank(strided_slice_grad_op.getDy());
+  const int input_rank = ValueRank(strided_slice_grad_op.dy());
   const int output_rank = global_output_shape.size();
 
   llvm::DenseMap<int, Layout> input_layouts(

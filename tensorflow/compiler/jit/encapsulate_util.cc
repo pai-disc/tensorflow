@@ -24,11 +24,12 @@ limitations under the License.
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/jit/shape_inference.h"
 #include "tensorflow/compiler/tf2xla/tf2xla_util.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/statusor.h"
 #include "tensorflow/core/framework/node_def_util.h"
 #include "tensorflow/core/graph/node_builder.h"
 #include "tensorflow/core/protobuf/error_codes.pb.h"
 
-using tsl::StatusOr;
+using stream_executor::port::StatusOr;
 
 namespace tensorflow {
 

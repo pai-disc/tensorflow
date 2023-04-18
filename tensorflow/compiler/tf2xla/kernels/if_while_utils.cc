@@ -49,7 +49,8 @@ absl::InlinedVector<int, 5> ConvertCompileTimeConstArgumentsToConst(
                                      xla::ValueInferenceMode::kUpperBound);
       if ((maybe_constant.ok() && maybe_constant->has_value()) ||
           (bounds.ok() && bounds->has_value())) {
-        StatusOr<Tensor> values_are_dynamic = expression.ResolveDynamism();
+        StatusOr<Tensor> values_are_dynamic =
+            expression.ResolveDynamism(ctx->compiler()->client());
         bool all_values_are_static = false;
         if (values_are_dynamic.ok()) {
           xla::Literal literal =

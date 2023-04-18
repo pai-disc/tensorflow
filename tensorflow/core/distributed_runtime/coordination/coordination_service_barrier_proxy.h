@@ -24,11 +24,10 @@ limitations under the License.
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
+#include "tensorflow/core/distributed_runtime/coordination/coordination_service_agent.h"
 #include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/platform/mutex.h"
-#include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/thread_annotations.h"
-#include "tensorflow/tsl/distributed_runtime/coordination/coordination_service_agent.h"
 
 namespace tensorflow {
 
@@ -56,7 +55,7 @@ class BarrierProxy {
   // `num_local_threads` specifies the number of threads in this task to
   // particiate. If no tasks are specified, the barrier will block for all the
   // connected tasks.
-  BarrierProxy(tsl::CoordinationServiceAgent* agent,
+  BarrierProxy(CoordinationServiceAgent* agent,
                std::vector<CoordinatedTask> tasks, int num_local_threads,
                absl::string_view key, absl::Duration timeout)
       : key_(key),
@@ -74,7 +73,7 @@ class BarrierProxy {
 
  private:
   const std::string key_;
-  tsl::CoordinationServiceAgent* agent_;
+  CoordinationServiceAgent* agent_;
   const std::vector<CoordinatedTask> tasks_;
   absl::Duration timeout_;
 
@@ -105,7 +104,7 @@ class BarrierProxyManager {
   // `num_local_threads` specifies the number of threads in this task to
   // participate. If no tasks are specified, the barrier will block for all the
   // connected tasks.
-  Status Wait(tsl::CoordinationServiceAgent* agent,
+  Status Wait(CoordinationServiceAgent* agent,
               const std::vector<CoordinatedTask>& tasks, int num_local_threads,
               absl::string_view key, absl::Duration timeout);
   // The number of active BarrierProxies.

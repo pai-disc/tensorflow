@@ -20,7 +20,6 @@ limitations under the License.
 #include <initializer_list>
 #include <string>
 
-#include "absl/base/attributes.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
@@ -32,21 +31,14 @@ namespace profiler {
 
 // An argument passed to TraceMeEncode.
 struct TraceMeArg {
-  // String conversions of value types are supported via AlphaNum. We keep a
-  // reference to the AlphaNum's internal buffer here, so it must remain valid
-  // for the lifetime of this object. We cannot store it by value because it is
-  // not safe to construct an AlphaNum as a member of a class, particularly when
-  // AbslStringify is being used (it may reference default arguments that are on
-  // the caller's stack, if we constructed it here those default arguments would
-  // be destroyed before they are used).
-  TraceMeArg(absl::string_view k,
-             const absl::AlphaNum& v ABSL_ATTRIBUTE_LIFETIME_BOUND)
-      : key(k), value(v.Piece()) {}
+  // This constructor is required because absl::AlphaNum is non-copyable.
+  template <typename Value>
+  TraceMeArg(absl::string_view k, Value v) : key(k), value(v) {}
 
   TF_DISALLOW_COPY_AND_ASSIGN(TraceMeArg);
 
   absl::string_view key;
-  absl::string_view value;
+  absl::AlphaNum value;
 };
 
 namespace traceme_internal {
@@ -82,7 +74,7 @@ TF_ATTRIBUTE_ALWAYS_INLINE inline std::string AppendArgs(
     for (const auto& arg : args) {
       out = Append(out, arg.key);
       *out++ = '=';
-      out = Append(out, arg.value);
+      out = Append(out, arg.value.Piece());
       *out++ = ',';
     }
     *(out - 1) = '#';

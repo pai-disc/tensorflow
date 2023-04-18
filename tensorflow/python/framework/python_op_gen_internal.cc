@@ -18,13 +18,9 @@ limitations under the License.
 #include <float.h>
 #include <stdio.h>
 
-#include <cmath>
 #include <iomanip>
-#include <locale>
-#include <set>
 #include <sstream>
 #include <unordered_map>
-#include <vector>
 
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_replace.h"
@@ -41,6 +37,8 @@ limitations under the License.
 #include "tensorflow/core/lib/gtl/map_util.h"
 #include "tensorflow/core/lib/strings/str_util.h"
 #include "tensorflow/core/lib/strings/strcat.h"
+#include "tensorflow/core/lib/strings/stringprintf.h"
+#include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/platform/types.h"
 
@@ -515,16 +513,14 @@ const ApiDef::Attr* FindAttr(StringPiece name, const ApiDef& api_def) {
 }
 
 GenPythonOp::GenPythonOp(const OpDef& op_def, const ApiDef& api_def,
-                         const string& function_name, bool add_type_annotations,
-                         GeneratedCodeAnnotator* annotator = nullptr)
+                         const string& function_name, bool add_type_annotations)
     : op_def_(op_def),
       api_def_(api_def),
       function_name_(function_name),
       add_type_annotations_(add_type_annotations),
-      num_outs_(op_def.output_arg_size()),
-      annotator_(annotator) {}
+      num_outs_(op_def.output_arg_size()) {}
 
-GenPythonOp::~GenPythonOp() = default;
+GenPythonOp::~GenPythonOp() {}
 
 string GenPythonOp::Code() {
   // This has all the input args followed by those attrs that don't have

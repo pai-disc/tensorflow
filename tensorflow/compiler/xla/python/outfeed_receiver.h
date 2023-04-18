@@ -16,10 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_XLA_PYTHON_OUTFEED_RECEIVER_H_
 #define TENSORFLOW_COMPILER_XLA_PYTHON_OUTFEED_RECEIVER_H_
 
-#include <cstdint>
-#include <functional>
 #include <memory>
-#include <vector>
 
 #include "tensorflow/compiler/xla/client/xla_builder.h"
 #include "tensorflow/compiler/xla/literal.h"
@@ -67,8 +64,7 @@ class OutfeedReceiver {
   // invalid.
   StatusOr<XlaOp> AddOutfeedToBuilder(XlaBuilder* builder, XlaOp token,
                                       uint32_t consumer_id,
-                                      std::vector<XlaOp> arrays,
-                                      uint32_t device_idx);
+                                      std::vector<XlaOp> arrays);
 
  private:
   std::unique_ptr<OutfeedReceiverImpl> p_impl_;

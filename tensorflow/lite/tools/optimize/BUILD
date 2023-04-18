@@ -7,7 +7,6 @@ load(
 )
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//visibility:public",
     ],
@@ -42,7 +41,6 @@ tf_cc_test(
         ":test_util",
         "//tensorflow/core/platform:platform_port",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/schema:schema_utils",
         "//tensorflow/lite/testing:util",
@@ -60,8 +58,7 @@ cc_library(
     deps = [
         ":model_utils",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
-        "//tensorflow/lite/core/c:common",
+        "//tensorflow/lite/c:common",
         "//tensorflow/lite/kernels/internal:compatibility",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/schema:schema_utils",
@@ -81,7 +78,6 @@ tf_cc_test(
     deps = [
         ":modify_model_interface",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/schema:schema_utils",
         "@com_google_absl//absl/memory",
@@ -106,7 +102,6 @@ cc_library(
     deps = [
         ":operator_property",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
         "//tensorflow/lite/core/api",
         "//tensorflow/lite/schema:schema_fbs",
         "@flatbuffers",
@@ -123,7 +118,6 @@ tf_cc_test(
     deps = [
         ":quantization_wrapper_utils",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/schema:schema_utils",
         "@com_google_absl//absl/memory",
@@ -150,7 +144,6 @@ tf_cc_test(
     deps = [
         ":operator_property",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
         "//tensorflow/lite/core/api",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/schema:schema_utils",
@@ -184,8 +177,8 @@ cc_library(
         ":model_utils",
         "//tensorflow/lite:framework",
         "//tensorflow/lite:minimal_logging",
+        "//tensorflow/lite/c:common",
         "//tensorflow/lite/core/api",
-        "//tensorflow/lite/core/c:common",
         "//tensorflow/lite/kernels/internal:cppmath",
         "//tensorflow/lite/kernels/internal:quantization_util",
         "//tensorflow/lite/kernels/internal:tensor_utils",
@@ -204,7 +197,6 @@ cc_library(
     deps = [
         ":operator_property",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
         "//tensorflow/lite/kernels/internal:tensor_utils",
         "//tensorflow/lite/kernels/internal:types",
         "//tensorflow/lite/schema:schema_conversion_utils",
@@ -225,7 +217,6 @@ tf_cc_test(
         ":model_utils",
         ":test_util",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
         "//tensorflow/lite/schema:schema_fbs",
         "@com_google_googletest//:gtest_main",
         "@flatbuffers",
@@ -240,7 +231,6 @@ cc_library(
     copts = tflite_copts(),
     deps = [
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/schema:schema_utils",
     ],
@@ -265,7 +255,6 @@ tf_cc_test(
         "//tensorflow/core:framework_internal",
         "//tensorflow/core:lib",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/schema:schema_utils",
         "//tensorflow/lite/testing:util",
@@ -295,7 +284,6 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_set",
         "@flatbuffers",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
         # TODO(suharshs): Move the relevant quantization utils to a non-internal location.
         "//tensorflow/lite/kernels/internal:tensor_utils",
         "//tensorflow/lite/schema:schema_fbs",
@@ -332,7 +320,6 @@ tf_cc_test(
         "//tensorflow/core:framework_internal",
         "//tensorflow/core:lib",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/schema:schema_utils",
         "@com_google_googletest//:gtest",
@@ -363,7 +350,6 @@ cc_library(
         ":quantization_utils",
         "//tensorflow/lite:framework",
         "//tensorflow/lite:util",
-        "//tensorflow/lite/core:framework",
         "//tensorflow/lite/core/api",
         "//tensorflow/lite/kernels/internal:cppmath",
         "//tensorflow/lite/schema:schema_fbs",
@@ -422,7 +408,6 @@ tf_cc_test(
         "//tensorflow/core:framework_internal",
         "//tensorflow/core:lib",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite/core:framework",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/schema:schema_utils",
         "//tensorflow/lite/testing:util",

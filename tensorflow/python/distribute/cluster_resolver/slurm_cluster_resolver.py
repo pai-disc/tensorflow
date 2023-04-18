@@ -60,9 +60,8 @@ def expand_hostlist(hostlist):
         sub_range = sub_range * 2
       else:
         assert len(sub_range) == 2
-      num_digits = len(sub_range[0])
       for i in range(int(sub_range[0]), int(sub_range[1]) + 1):
-        yield str(i).zfill(num_digits)
+        yield i
 
   hosts = []
   try:
@@ -76,7 +75,8 @@ def expand_hostlist(hostlist):
       if m.group(3) is None:
         hosts.append(prefix)
       else:
-        hosts.extend(prefix + i for i in expand_range_expression(m.group(3)))
+        hosts.extend(
+            prefix + str(i) for i in expand_range_expression(m.group(3)))
   except Exception as e:
     raise ValueError('Invalid hostlist format "%s": %s' % (hostlist, e))
   return hosts

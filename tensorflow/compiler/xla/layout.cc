@@ -25,8 +25,6 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "tensorflow/compiler/xla/layout_util.h"
-#include "tensorflow/compiler/xla/primitive_util.h"
-#include "tensorflow/compiler/xla/printer.h"
 #include "tensorflow/compiler/xla/shape.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 
@@ -40,30 +38,22 @@ TileProto Tile::ToProto() const {
   return tile_proto;
 }
 
-void Tile::Print(Printer* printer) const {
-  printer->Append("(");
+std::string Tile::ToString() const {
+  std::vector<std::string> elements;
   const auto& dims = dimensions();
-  for (int i = 0; i < dims.size(); ++i) {
-    const auto dim = dims[i];
-    if (i != 0) printer->Append(",");
+  elements.reserve(dims.size());
+  for (auto dim : dims) {
     if (dim >= 0) {
-      printer->Append(absl::AlphaNum(dim).Piece());
+      elements.push_back(std::to_string(dim));
     } else {
       if (dim == kCombineDimension) {
-        printer->Append("*");
+        elements.push_back("*");
       } else {
-        printer->Append("Invalid value ");
-        printer->Append(absl::AlphaNum(dim).Piece());
+        elements.push_back(absl::StrCat("Invalid value ", dim));
       }
     }
   }
-  printer->Append(")");
-}
-
-std::string Tile::ToString() const {
-  StringPrinter printer;
-  Print(&printer);
-  return std::move(printer).ToString();
+  return absl::StrCat("(", absl::StrJoin(elements, ","), ")");
 }
 
 Layout::Layout() = default;
@@ -77,8 +67,7 @@ Layout::Layout(absl::Span<const int64_t> minor_to_major,
                absl::Span<const bool> dim_ordered, absl::Span<const Tile> tiles,
                PrimitiveType index_primitive_type,
                PrimitiveType pointer_primitive_type, int64_t memory_space,
-               std::unique_ptr<Shape> physical_shape,
-               int64_t dynamic_shape_metadata_prefix_bytes)
+               std::unique_ptr<Shape> physical_shape)
     : dim_level_types_(dim_level_types.begin(), dim_level_types.end()),
       dim_unique_(dim_unique.begin(), dim_unique.end()),
       dim_ordered_(dim_ordered.begin(), dim_ordered.end()),
@@ -87,9 +76,7 @@ Layout::Layout(absl::Span<const int64_t> minor_to_major,
       index_primitive_type_(index_primitive_type),
       pointer_primitive_type_(pointer_primitive_type),
       memory_space_(memory_space),
-      physical_shape_(std::move(physical_shape)),
-      dynamic_shape_metadata_prefix_bytes_(
-          dynamic_shape_metadata_prefix_bytes) {}
+      physical_shape_(std::move(physical_shape)) {}
 
 Layout::Layout(const Layout& other)
     : dim_level_types_(other.dim_level_types_),
@@ -102,9 +89,7 @@ Layout::Layout(const Layout& other)
       memory_space_(other.memory_space_),
       physical_shape_(other.physical_shape_ != nullptr
                           ? std::make_unique<Shape>(*other.physical_shape_)
-                          : nullptr),
-      dynamic_shape_metadata_prefix_bytes_(
-          other.dynamic_shape_metadata_prefix_bytes_) {}
+                          : nullptr) {}
 
 Layout::Layout(Layout&& other) = default;
 
@@ -125,8 +110,6 @@ Layout& Layout::operator=(const Layout& other) {
     } else {
       physical_shape_ = nullptr;
     }
-    dynamic_shape_metadata_prefix_bytes_ =
-        other.dynamic_shape_metadata_prefix_bytes_;
   }
   return *this;
 }
@@ -157,8 +140,6 @@ Layout& Layout::operator=(Layout&& other) = default;
   if (proto.has_physical_shape()) {
     *layout.mutable_physical_shape() = Shape(proto.physical_shape());
   }
-  layout.set_dynamic_shape_metadata_prefix_bytes(
-      proto.dynamic_shape_metadata_prefix_bytes());
   return layout;
 }
 
@@ -186,8 +167,6 @@ LayoutProto Layout::ToProto() const {
   if (has_physical_shape()) {
     *proto.mutable_physical_shape() = physical_shape_->ToProto();
   }
-  proto.set_dynamic_shape_metadata_prefix_bytes(
-      dynamic_shape_metadata_prefix_bytes_);
   return proto;
 }
 
@@ -206,96 +185,58 @@ absl::string_view DimLevelTypeAbbrev(DimLevelType dim_level_type) {
 }
 }  // namespace
 
-void Layout::Print(Printer* printer) const {
-  printer->Append("{");
-  printer->Append(absl::StrJoin(minor_to_major(), ","));
-
-  bool colon_printed = false;
-  auto print_colon = [&]() {
-    if (colon_printed) return;
-    printer->Append(":");
-    colon_printed = true;
-  };
+std::string Layout::ToString() const {
+  std::string colon_string;
 
   if (!dim_level_types().empty()) {
-    print_colon();
-    printer->Append("D(");
+    absl::StrAppend(&colon_string, "D(");
     for (int i = 0; i < dim_level_types().size(); ++i) {
       if (i != 0) {
-        printer->Append(",");
+        absl::StrAppend(&colon_string, ",");
       }
-      printer->Append(DimLevelTypeAbbrev(dim_level_type(i)));
+      absl::StrAppend(&colon_string, DimLevelTypeAbbrev(dim_level_type(i)));
       if (!dim_unique().empty() && !dim_unique(i)) {
-        printer->Append("+");
+        absl::StrAppend(&colon_string, "+");
       }
       if (!dim_ordered().empty() && !dim_ordered(i)) {
-        printer->Append("~");
+        absl::StrAppend(&colon_string, "~");
       }
     }
-    printer->Append(")");
+    absl::StrAppend(&colon_string, ")");
   }
 
   if (!tiles().empty()) {
-    print_colon();
-    printer->Append("T");
+    absl::StrAppend(&colon_string, "T");
     for (const Tile& tile : tiles()) {
-      tile.Print(printer);
+      absl::StrAppend(&colon_string, tile.ToString());
     }
   }
 
   if (index_primitive_type() != PRIMITIVE_TYPE_INVALID) {
-    print_colon();
-    if (primitive_util::IsIntegralType(index_primitive_type())) {
-      printer->Append("#(");
-      printer->Append(
-          primitive_util::LowercasePrimitiveTypeName(index_primitive_type()));
-      printer->Append(")");
-    } else {
-      printer->Append("#(invalid)");
-    }
+    absl::StrAppend(
+        &colon_string, "#(",
+        primitive_util::LowercasePrimitiveTypeName(index_primitive_type()),
+        ")");
   }
 
   if (pointer_primitive_type() != PRIMITIVE_TYPE_INVALID) {
-    print_colon();
-    if (primitive_util::IsIntegralType(pointer_primitive_type())) {
-      printer->Append("*(");
-      printer->Append(
-          primitive_util::LowercasePrimitiveTypeName(pointer_primitive_type()));
-      printer->Append(")");
-    } else {
-      printer->Append("*(invalid)");
-    }
+    absl::StrAppend(
+        &colon_string, "*(",
+        primitive_util::LowercasePrimitiveTypeName(pointer_primitive_type()),
+        ")");
   }
 
   if (memory_space() != 0) {
-    print_colon();
-    printer->Append("S(");
-    printer->Append(absl::AlphaNum(memory_space()).Piece());
-    printer->Append(")");
+    absl::StrAppend(&colon_string, "S(", memory_space(), ")");
   }
 
   if (has_physical_shape()) {
-    print_colon();
-    printer->Append("P(");
-    physical_shape_->Print(printer, /*print_layout=*/true);
-    printer->Append(")");
+    absl::StrAppend(&colon_string, "P(",
+                    physical_shape_->ToString(/*print_layout=*/true), ")");
   }
 
-  if (dynamic_shape_metadata_prefix_bytes_ > 0) {
-    print_colon();
-    printer->Append("M(");
-    printer->Append(
-        absl::AlphaNum(dynamic_shape_metadata_prefix_bytes()).Piece());
-    printer->Append(")");
-  }
-
-  printer->Append("}");
-}
-
-std::string Layout::ToString() const {
-  StringPrinter printer;
-  Print(&printer);
-  return std::move(printer).ToString();
+  return absl::StrCat("{", absl::StrJoin(minor_to_major(), ","),
+                      colon_string.empty() ? "" : ":", colon_string, "}");
 }
 
 bool Layout::Equal::operator()(const Layout& lhs, const Layout& rhs) {

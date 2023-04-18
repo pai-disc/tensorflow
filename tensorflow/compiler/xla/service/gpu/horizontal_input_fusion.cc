@@ -18,9 +18,13 @@ limitations under the License.
 #include <algorithm>
 
 #include "absl/container/flat_hash_set.h"
+#include "absl/strings/str_cat.h"
 #include "absl/types/span.h"
+#include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/service/gpu/gpu_fusible.h"
+#include "tensorflow/compiler/xla/service/gpu/ir_emission_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
+#include "tensorflow/tsl/platform/errors.h"
 
 namespace xla {
 namespace gpu {
@@ -42,9 +46,8 @@ Shape GetInputShapeForMultiOutputFusion(const HloInstruction& instr) {
 
 class HorizontalInputFusionImpl {
  public:
-  explicit HorizontalInputFusionImpl(HloComputation* computation,
-                                     const GpuDeviceInfo& d)
-      : computation_(computation), device_info_(d) {}
+  explicit HorizontalInputFusionImpl(HloComputation* computation)
+      : computation_(computation) {}
 
   ~HorizontalInputFusionImpl() {}
 
@@ -52,7 +55,6 @@ class HorizontalInputFusionImpl {
 
  private:
   HloComputation* computation_;
-  const GpuDeviceInfo device_info_;
 };  // HorizontalInputFusionImpl
 
 // Compares one-by-one the dimensions of `shape_a` and `shape_b` from left to
@@ -136,7 +138,7 @@ StatusOr<bool> HorizontalInputFusionImpl::Run() {
       HloInstruction* fusion_anchor = candidates[fusion_anchor_id];
       HloInstruction* fused = candidates[j];
       if (ShapesCompatibleForMultiOutputFusion(*fusion_anchor, *fused) &&
-          FusionFitsInBudget(*fusion_anchor, *fused, device_info_)) {
+          FusionFitsInBudget(*fusion_anchor, *fused)) {
         VLOG(3) << "Fuse " << fused->ToString() << " into "
                 << fusion_anchor->ToString();
         fusion_anchor->MergeFusionInstructionIntoMultiOutput(fused);
@@ -157,7 +159,7 @@ StatusOr<bool> HorizontalInputFusionImpl::Run() {
 
 StatusOr<bool> GpuHorizontalInputFusion::RunOnComputation(
     HloComputation* computation) {
-  HorizontalInputFusionImpl horizontal_fusion_impl(computation, device_info_);
+  HorizontalInputFusionImpl horizontal_fusion_impl(computation);
   return horizontal_fusion_impl.Run();
 }
 

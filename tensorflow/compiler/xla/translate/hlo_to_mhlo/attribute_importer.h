@@ -21,9 +21,7 @@ limitations under the License.
 
 #include "mlir/IR/Attributes.h"  // from @llvm-project
 #include "mlir/IR/Builders.h"  // from @llvm-project
-#include "tensorflow/compiler/xla/hlo/ir/dynamic_parameter_binding.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_module.h"
-#include "tensorflow/compiler/xla/mlir_hlo/mhlo/IR/hlo_ops.h"
+#include "tensorflow/compiler/xla/mlir_hlo/include/mlir-hlo/Dialect/mhlo/IR/hlo_ops.h"
 #include "tensorflow/compiler/xla/service/hlo.pb.h"
 #include "tensorflow/compiler/xla/shape.h"
 #include "tensorflow/compiler/xla/shape_util.h"
@@ -53,18 +51,10 @@ mlir::mhlo::ConvDimensionNumbersAttr ConvertConvDimensionNumbers(
     const xla::ConvolutionDimensionNumbers& dnums, mlir::Builder* builder);
 
 // Converts the output operand aliasing to attributes.
-mlir::ArrayAttr ConvertOutputOperandAliasing(
+mlir::ArrayAttr ConvertCustomCallOutputOperandAliasing(
     const std::vector<std::pair<xla::ShapeIndex,
                                 std::pair<int64_t, xla::ShapeIndex>>>& aliaInfo,
     mlir::Builder* builder);
-
-// Converts the list of prefetches.
-mlir::ArrayAttr ConvertCrossProgramPrefetches(
-    absl::Span<const xla::HloModule::CrossProgramPrefetchInfo> prefetches,
-    mlir::Builder* builder);
-
-mlir::ArrayAttr ConvertDynamicParameterBindings(DynamicParameterBinding dpb,
-                                                mlir::Builder* builder);
 
 StatusOr<mlir::mhlo::FftType> ConvertFftType(FftType type);
 StatusOr<mlir::mhlo::Transpose> ConvertTranspose(

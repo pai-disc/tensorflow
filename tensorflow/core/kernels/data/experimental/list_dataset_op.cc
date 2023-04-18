@@ -130,8 +130,6 @@ class ListDatasetOp::Dataset : public DatasetBase {
     explicit Iterator(const Params& params)
         : DatasetIterator<Dataset>(params) {}
 
-    bool SymbolicCheckpointCompatible() const override { return true; }
-
     Status Initialize(IteratorContext* ctx) override {
       if (ctx->split_providers().empty()) {
         split_provider_ =

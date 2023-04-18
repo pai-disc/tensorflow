@@ -17,7 +17,7 @@ if(TARGET egl_headers OR egl_headers_POPULATED)
   return()
 endif()
 
-include(OverridableFetchContent)
+include(FetchContent)
 
 OverridableFetchContent_Declare(
   egl_headers

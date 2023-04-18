@@ -12,17 +12,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-// Must be included first
-// clang-format off
-#include "tensorflow/tsl/python/lib/core/numpy.h" //NOLINT
-// clang-format on
 
 #include "tensorflow/python/eager/pywrap_tensor.h"
 
-#include <stdlib.h>  // NOLINT
-#include <string.h>  // NOLINT
+#include <stdlib.h>
+#include <string.h>
 
-#include <cmath>  // NOLINT
+#include <cmath>
 
 #include "structmember.h"  // NOLINT // For PyMemberDef
 #include "pybind11/pybind11.h"
@@ -39,6 +35,7 @@ limitations under the License.
 #include "tensorflow/python/eager/pywrap_tfe.h"
 #include "tensorflow/python/lib/core/ndarray_tensor.h"
 #include "tensorflow/python/lib/core/ndarray_tensor_bridge.h"
+#include "tensorflow/python/lib/core/numpy.h"
 #include "tensorflow/python/lib/core/py_exception_registry.h"
 #include "tensorflow/python/lib/core/py_seq_tensor.h"
 #include "tensorflow/python/lib/core/pybind11_status.h"

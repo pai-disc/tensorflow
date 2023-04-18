@@ -4,14 +4,12 @@
 # Note that these fuzzers cover a large part of TF, they are not granular.
 
 load(
-    "//tensorflow/security/fuzzing:tf_fuzzing.bzl",
-    "tf_cc_fuzz_test",
+    "//tensorflow:tensorflow.bzl",
+    "tf_cc_test",
 )
 
-# copybara:uncomment package(default_applicable_licenses = ["//tensorflow:license"])
-
 # A trivial fuzzer with no pre-specified corpus.
-tf_cc_fuzz_test(
+tf_cc_test(
     name = "identity_fuzz",
     srcs = ["identity_fuzz.cc"],
     tags = ["no_oss"],
@@ -20,10 +18,12 @@ tf_cc_fuzz_test(
         "//tensorflow/core/framework:types_proto_cc",
         "//tensorflow/core/kernels:array",
         "//tensorflow/security/fuzzing/cc:fuzz_session",
+        "@com_google_fuzztest//fuzztest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
-tf_cc_fuzz_test(
+tf_cc_test(
     name = "concat_fuzz",
     srcs = ["concat_fuzz.cc"],
     tags = ["no_oss"],
@@ -32,10 +32,12 @@ tf_cc_fuzz_test(
         "//tensorflow/core/framework:types_proto_cc",
         "//tensorflow/core/kernels:array",
         "//tensorflow/security/fuzzing/cc:fuzz_session",
+        "@com_google_fuzztest//fuzztest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
-tf_cc_fuzz_test(
+tf_cc_test(
     name = "add_fuzz",
     srcs = ["add_fuzz.cc"],
     tags = ["no_oss"],
@@ -44,10 +46,12 @@ tf_cc_fuzz_test(
         "//tensorflow/core/framework:types_proto_cc",
         "//tensorflow/core/kernels:array",
         "//tensorflow/security/fuzzing/cc:fuzz_session",
+        "@com_google_fuzztest//fuzztest",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
-tf_cc_fuzz_test(
+tf_cc_test(
     name = "matmul_fuzz",
     srcs = ["matmul_fuzz.cc"],
     tags = ["no_oss"],
@@ -57,29 +61,7 @@ tf_cc_fuzz_test(
         "//tensorflow/core/kernels:array",
         "//tensorflow/core/kernels:matmul_op",
         "//tensorflow/security/fuzzing/cc:fuzz_session",
-    ],
-)
-
-tf_cc_fuzz_test(
-    name = "bincount_fuzz",
-    srcs = ["bincount_fuzz.cc"],
-    tags = ["no_oss"],
-    deps = [
-        "//tensorflow/cc:cc_ops",
-        "//tensorflow/core/kernels:array",
-        "//tensorflow/core/kernels:bincount_op",
-        "//tensorflow/security/fuzzing/cc:fuzz_session",
-    ],
-)
-
-tf_cc_fuzz_test(
-    name = "string_to_number_fuzz",
-    srcs = ["string_to_number_fuzz.cc"],
-    tags = ["no_oss"],
-    deps = [
-        "//tensorflow/cc:cc_ops",
-        "//tensorflow/core/kernels:array",
-        "//tensorflow/core/kernels:string_to_number_op",
-        "//tensorflow/security/fuzzing/cc:fuzz_session",
+        "@com_google_fuzztest//fuzztest",
+        "@com_google_googletest//:gtest_main",
     ],
 )

@@ -25,8 +25,10 @@ namespace tpu {
 
 class TpuStreamInterface : public stream_executor::internal::StreamInterface {
  public:
+  using Status = stream_executor::port::Status;
+
   virtual bool IsSameSharedMemoryLocation(TpuStreamInterface* other) = 0;
-  virtual tsl::Status EnqueueOnTpuDeviceSendRecvLocal(
+  virtual Status EnqueueOnTpuDeviceSendRecvLocal(
       stream_executor::DeviceMemoryBase send_buffer,
       stream_executor::DeviceMemoryBase recv_buffer) = 0;
 };

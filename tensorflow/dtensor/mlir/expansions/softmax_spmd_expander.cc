@@ -17,9 +17,8 @@ limitations under the License.
 
 #include <optional>
 #include <string>
-#include <vector>
 
-#include "mlir/IR/IRMapping.h"  // from @llvm-project
+#include "mlir/IR/BlockAndValueMapping.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
 #include "tensorflow/dtensor/cc/tensor_layout.h"
 #include "tensorflow/dtensor/mlir/collectives.h"
@@ -210,7 +209,7 @@ StatusOr<mlir::Value> GetFPConstOfType(mlir::OpBuilder& builder,
             mlir::DenseFPElementsAttr::get<float>(
                 mlir::RankedTensorType::get({}, type.getElementType()),
                 {value}))
-        .getOutput();
+        .output();
   } else {
     return errors::Unimplemented("non tensor type for labels is not supported");
   }
@@ -278,17 +277,17 @@ StatusOr<mlir::Value> ComputeOneHot(mlir::OpBuilder& builder,
               mesh_coordinates,
               IntConst(builder, input.getLoc(), {0, mesh_dim_index}),
               IntConst(builder, input.getLoc(), {1, 1}))
-          .getOutput();
+          .output();
 
   shard_id = builder
                  .create<mlir::TF::SqueezeOp>(
                      loc, mlir::RankedTensorType::get({}, builder.getI32Type()),
                      shard_id, builder.getI64ArrayAttr({0, 1}))
-                 .getOutput();
+                 .output();
 
   // `new_indices` = `input` - `shard_id` * (classes/num_shards)
   mlir::Value id_offset =
-      builder.create<mlir::TF::MulOp>(loc, shard_id, depth).getZ();
+      builder.create<mlir::TF::MulOp>(loc, shard_id, depth).z();
 
   // Note that the type of id_offset (int32) may not match the type of input.
   // So we insert a cast in this case.
@@ -301,10 +300,10 @@ StatusOr<mlir::Value> ComputeOneHot(mlir::OpBuilder& builder,
                 loc,
                 mlir::RankedTensorType::get({}, input_type.getElementType()),
                 id_offset)
-            .getY();
+            .y();
 
   mlir::Value indices =
-      builder.create<mlir::TF::SubOp>(loc, input, id_offset).getZ();
+      builder.create<mlir::TF::SubOp>(loc, input, id_offset).z();
 
   TF_ASSIGN_OR_RETURN(mlir::Value on_value,
                       GetFPConstOfType(builder, features, 1.0));
@@ -314,7 +313,7 @@ StatusOr<mlir::Value> ComputeOneHot(mlir::OpBuilder& builder,
   return builder
       .create<mlir::TF::OneHotOp>(input.getLoc(), indices, depth, on_value,
                                   off_value, builder.getI64IntegerAttr(1))
-      .getOutput();
+      .output();
 }
 
 }  // namespace
@@ -593,15 +592,14 @@ StatusOr<mlir::Operation*> SoftmaxLossOpSPMDExpander::ExpandOp(
       builder
           .create<mlir::TF::EqualOp>(op->getLoc(), labels, labels_zero,
                                      builder.getBoolAttr(true))
-          .getZ();
+          .z();
   const mlir::Value safe_softmax =
       builder
           .create<mlir::TF::SelectV2Op>(op->getLoc(), is_labels_zero,
                                         features_zero, log_softmax)
-          .getOutput();
+          .output();
   const mlir::Value prod =
-      builder.create<mlir::TF::MulOp>(op->getLoc(), labels, safe_softmax)
-          .getZ();
+      builder.create<mlir::TF::MulOp>(op->getLoc(), labels, safe_softmax).z();
 
   // Compute the reduce sum
   TF_ASSIGN_OR_RETURN(
@@ -611,7 +609,7 @@ StatusOr<mlir::Operation*> SoftmaxLossOpSPMDExpander::ExpandOp(
 
   builder.setInsertionPointAfterValue(positive_loss);
   mlir::Value loss =
-      builder.create<mlir::TF::NegOp>(op->getLoc(), positive_loss).getY();
+      builder.create<mlir::TF::NegOp>(op->getLoc(), positive_loss).y();
 
   mlir::Value backprop =
       builder.create<mlir::TF::SubOp>(op->getLoc(), softmax, labels);

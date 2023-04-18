@@ -1,4 +1,6 @@
 op {
   graph_op_name: "Xdivy"
-  visibility: HIDDEN
+  endpoint {
+    name: "math.xdivy"
+  }
 }

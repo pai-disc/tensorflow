@@ -144,6 +144,7 @@ REGISTER_PACK(tstring);
       Name("Pack").Device(DEVICE_GPU).TypeConstraint<type>("T"), \
       PackOp<GPUDevice, type>)
 
+TF_CALL_bfloat16(REGISTER_GPU);
 TF_CALL_int64(REGISTER_GPU);
 TF_CALL_int16(REGISTER_GPU);
 TF_CALL_uint32(REGISTER_GPU);

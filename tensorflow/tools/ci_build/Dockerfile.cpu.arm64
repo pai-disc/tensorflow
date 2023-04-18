@@ -12,9 +12,7 @@ RUN yum -y check-update || true && \
         ncurses-devel \
         nss-devel \
         readline-devel \
-        sqlite-devel \
-        epel-release && \
-    yum install -y hdf5-devel && \
+        sqlite-devel && \
     yum clean all
 
 COPY install/install_bazel.sh /install/

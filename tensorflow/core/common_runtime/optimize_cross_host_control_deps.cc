@@ -93,14 +93,9 @@ Status OptimizeCrossHostControlOutputEdges(Graph* graph,
       TF_RETURN_IF_ERROR(BuildNoopNode(
           *n, graph->NewName(strings::StrCat(n->name(), "/", "control_after")),
           /*device=*/pair.first, graph, &control_after));
-
-      // When adding control edges, set `allow_duplicates` to true since the
-      // duplication check is expensive and unnecessary here due to there
-      // shouldn't be duplicated control edges introduced by this pass.
-      graph->AddControlEdge(n, control_after, /*allow_duplicates=*/true);
+      graph->AddControlEdge(n, control_after);
       for (const Edge* edge : pair.second) {
-        graph->AddControlEdge(control_after, edge->dst(),
-                              /*allow_duplicates=*/true);
+        graph->AddControlEdge(control_after, edge->dst());
         graph->RemoveEdge(edge);
       }
     }
@@ -158,7 +153,7 @@ Status OptimizeCrossHostControlInputEdges(Graph* graph,
       if (pair.second.size() < cross_host_edges_threshold) {
         continue;
       }
-      VLOG(1) << "Optmize cross host input control edge, dst node: "
+      VLOG(0) << "Optmize cross host input control edge, dst node: "
               << dst->name() << " dst device: " << dst_host_device
               << " src host device: " << pair.first
               << " edges size: " << pair.second.size();
@@ -167,14 +162,9 @@ Status OptimizeCrossHostControlInputEdges(Graph* graph,
           *dst,
           graph->NewName(strings::StrCat(dst->name(), "/", "control_before")),
           /*device=*/pair.first, graph, &control_before));
-
-      // When adding control edges, set `allow_duplicates` to true since the
-      // duplication check is expensive and unnecessary here due to there
-      // shouldn't be duplicated control edges introduced by this pass.
-      graph->AddControlEdge(control_before, dst, /*allow_duplicates=*/true);
+      graph->AddControlEdge(control_before, dst);
       for (const Edge* edge : pair.second) {
-        graph->AddControlEdge(edge->src(), control_before,
-                              /*allow_duplicates=*/true);
+        graph->AddControlEdge(edge->src(), control_before);
         graph->RemoveEdge(edge);
       }
     }

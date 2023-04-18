@@ -23,8 +23,8 @@ limitations under the License.
 
 extern "C" {
 
-struct TSL_Status;
-typedef TSL_Status TF_Status;
+struct TF_Status;
+typedef struct TF_Status TF_Status;
 
 // Maximum number of array elements to inline into structs for performance.
 #define TPU_C_API_MAX_INLINED 6
@@ -40,9 +40,6 @@ enum TpuVersionEnum {
   kTpuV2,
   kTpuV3,
   kTpuV4,
-  // BEGIN-INTERNAL
-  // reserved for internal use
-  // END-INTERNAL
 };
 
 typedef struct TpuRuntimeVersion {
@@ -244,7 +241,6 @@ typedef struct XLA_Layout {
   int index_primitive_type;
   int pointer_primitive_type;
   int64_t memory_space;
-  int64_t dynamic_shape_metadata_prefix_bytes;
 } XLA_Layout;
 
 // Represents an XLA shape tree.
@@ -320,7 +316,7 @@ typedef struct XLA_HloModuleConfig {
   TpuSerializedProto static_device_assignment;
   bool has_entry_computation_layout;
   XLA_ComputationLayout entry_computation_layout;
-  BoolList allow_spmd_sharding_propagation_to_output;
+  bool allow_spmd_sharding_propagation_to_output;
 } XLA_HloModuleConfig;
 
 typedef struct SE_HloExecutionProfile SE_HloExecutionProfile;

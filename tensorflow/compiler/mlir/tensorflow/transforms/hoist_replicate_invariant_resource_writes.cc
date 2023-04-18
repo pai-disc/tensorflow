@@ -71,9 +71,9 @@ void MoveTailWritesAfterReplicate(
   // returned.
   auto new_result_types = llvm::to_vector<4>(replicate_op->getResultTypes());
   for (auto assign : tail_assign_variable_ops) {
-    return_op->insertOperands(return_op->getNumOperands(), assign.getValue());
+    return_op->insertOperands(return_op->getNumOperands(), assign.value());
     new_result_types.insert(new_result_types.end(), num_replicas,
-                            assign.getValue().getType());
+                            assign.value().getType());
   }
 
   OpBuilder builder(replicate_op);
@@ -114,7 +114,7 @@ SmallVector<TF::AssignVariableOp> GetTailWritesToReplicateInvariantResourceVars(
     if (op_accessed_resources.empty()) continue;
 
     if (auto assign = llvm::dyn_cast<TF::AssignVariableOp>(op)) {
-      Value resource_var = assign.getResource();
+      Value resource_var = assign.resource();
       if (visited_resources.contains(resource_var) ||
           !resource_var.getParentRegion()->isProperAncestor(
               &replicate_op.getRegion()))

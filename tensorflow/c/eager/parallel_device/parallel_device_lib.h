@@ -17,7 +17,6 @@ limitations under the License.
 #define TENSORFLOW_C_EAGER_PARALLEL_DEVICE_PARALLEL_DEVICE_LIB_H_
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -45,8 +44,6 @@ class TensorHandleDeleter {
   }
 };
 
-// TODO(b/256016071): Replace this with `Safe_TFE_TensorHandlePtr` when
-// `Safe_TFE_TensorHandlePtr` is marked to be compatible on non-prod env.
 using TensorHandlePtr = std::unique_ptr<TFE_TensorHandle, TensorHandleDeleter>;
 
 class ParallelTensor;
@@ -59,7 +56,7 @@ class ParallelDevice {
   // Eager async execution is only supported when remote eager is not in use
   // (b/157523095).
   explicit ParallelDevice(const std::vector<std::string>& devices,
-                          bool is_async = false, int in_flight_nodes_limit = 0);
+                          const bool is_async = false);
 
   ~ParallelDevice();
 
@@ -121,24 +118,12 @@ class ParallelDevice {
   //
   // Set step_id to configure the step id used for rendezvous creation. step id
   // of value -1 is reserved for global rendezvous and should not be set here.
-  //
-  // This function is overloaded so that if the inputs are constructed from
-  // `TensorWithLayout` we can use the one with `TensorHandlePtr` but
-  // if the inputs are directly `ParallelTensor` (for example, in the case of
-  // custom device execution) we can use the one with `ParallelTensor`.
   void StartExecute(TFE_Context* context,
                     const std::vector<ParallelTensor*>& inputs,
                     const char* operation_name, const TFE_OpAttrs* attributes,
                     int expected_max_outputs,
                     CancellationManager& cancellation_manager,
-                    std::optional<int64_t> step_id = std::nullopt) const;
-
-  void StartExecute(TFE_Context* context,
-                    const std::vector<const TensorHandlePtr*>& inputs,
-                    const char* operation_name, const TFE_OpAttrs* attributes,
-                    int expected_max_outputs,
-                    CancellationManager& cancellation_manager,
-                    std::optional<int64_t> step_id = std::nullopt) const;
+                    absl::optional<int64_t> step_id = absl::nullopt) const;
 
   // Blocks until the previous `StartExecute` has run `TFE_Execute` on each
   // device. If is_async=false (constructor argument) this means the ops have
@@ -204,7 +189,6 @@ class ParallelTensor {
 
   size_t num_tensors() const { return tensors_.size(); }
   TFE_TensorHandle* tensor(size_t index) const { return tensors_[index].get(); }
-  const TensorHandlePtr* tensor_data() const { return tensors_.data(); }
 
   // If the `shape` argument to `FromTensorHandles` is specified, returns that.
   //

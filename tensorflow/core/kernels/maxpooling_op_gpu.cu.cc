@@ -17,8 +17,6 @@ limitations under the License.
 
 #define EIGEN_USE_GPU
 
-#include "tensorflow/core/kernels/maxpooling_op_gpu.h"
-
 #include <stdio.h>
 
 #include <cfloat>
@@ -27,6 +25,7 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor_types.h"
 #include "tensorflow/core/framework/type_traits.h"
 #include "tensorflow/core/kernels/maxpooling_op.h"
+#include "tensorflow/core/kernels/maxpooling_op_gpu.h"
 #include "tensorflow/core/util/gpu_kernel_helper.h"
 
 namespace tensorflow {

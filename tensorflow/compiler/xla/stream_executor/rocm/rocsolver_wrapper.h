@@ -20,16 +20,10 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_XLA_STREAM_EXECUTOR_ROCM_ROCSOLVER_WRAPPER_H_
 #define TENSORFLOW_COMPILER_XLA_STREAM_EXECUTOR_ROCM_ROCSOLVER_WRAPPER_H_
 
-#include "rocm/rocm_config.h"
-#if (TF_ROCM_VERSION >= 50200)
 #include "rocm/include/rocsolver/rocsolver.h"
-#else
-#include "rocm/include/rocsolver.h"
-#endif
-
+#include "tensorflow/compiler/xla/stream_executor/lib/env.h"
 #include "tensorflow/compiler/xla/stream_executor/platform/dso_loader.h"
 #include "tensorflow/compiler/xla/stream_executor/platform/port.h"
-#include "tensorflow/tsl/platform/env.h"
 
 namespace stream_executor {
 namespace wrap {
@@ -54,9 +48,9 @@ namespace wrap {
     static FuncPtrT loaded = []() -> FuncPtrT {                               \
       static const char* kName = TO_STR(api_name);                            \
       void* f;                                                                \
-      auto s = tsl::Env::Default()->GetSymbolFromLibrary(                     \
+      auto s = stream_executor::port::Env::Default()->GetSymbolFromLibrary(   \
           stream_executor::internal::CachedDsoLoader::GetRocsolverDsoHandle() \
-              .value(),                                                       \
+              .value(),                                                  \
           kName, &f);                                                         \
       CHECK(s.ok()) << "could not find " << kName                             \
                     << " in rocsolver lib; dlerror: " << s.error_message();   \

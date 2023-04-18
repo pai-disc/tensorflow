@@ -14,15 +14,17 @@ limitations under the License.
 ==============================================================================*/
 #include <memory>
 
-#include "tensorflow/lite/core/c/common.h"
+#include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/delegates/xnnpack/xnnpack_delegate.h"
 
 namespace tflite {
 // Corresponding weak declaration found in lite/tflite_with_xnnpack_optional.cc
 // when TFLITE_BUILD_WITH_XNNPACK_DELEGATE macro isn't defined.
 std::unique_ptr<TfLiteDelegate, void (*)(TfLiteDelegate*)>
-AcquireXNNPACKDelegate() {
+AcquireXNNPACKDelegate(int num_threads) {
   auto opts = TfLiteXNNPackDelegateOptionsDefault();
+  // Note that we don't want to use the thread pool for num_threads == 1.
+  opts.num_threads = num_threads > 1 ? num_threads : 0;
   return std::unique_ptr<TfLiteDelegate, void (*)(TfLiteDelegate*)>(
       TfLiteXNNPackDelegateCreate(&opts), TfLiteXNNPackDelegateDelete);
 }

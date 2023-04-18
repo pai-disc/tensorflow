@@ -40,18 +40,18 @@ class XlaInterpreterPlatform : public Platform {
 
   const std::string& Name() const override;
 
-  tsl::StatusOr<std::unique_ptr<DeviceDescription>> DescriptionForDevice(
+  port::StatusOr<std::unique_ptr<DeviceDescription>> DescriptionForDevice(
       int ordinal) const override;
 
-  tsl::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) override;
+  port::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) override;
 
-  tsl::StatusOr<StreamExecutor*> ExecutorForDeviceWithPluginConfig(
+  port::StatusOr<StreamExecutor*> ExecutorForDeviceWithPluginConfig(
       int ordinal, const PluginConfig& config) override;
 
-  tsl::StatusOr<StreamExecutor*> GetExecutor(
+  port::StatusOr<StreamExecutor*> GetExecutor(
       const StreamExecutorConfig& config) override;
 
-  tsl::StatusOr<std::unique_ptr<StreamExecutor>> GetUncachedExecutor(
+  port::StatusOr<std::unique_ptr<StreamExecutor>> GetUncachedExecutor(
       const StreamExecutorConfig& config) override;
 
   void RegisterTraceListener(std::unique_ptr<TraceListener> listener) override;

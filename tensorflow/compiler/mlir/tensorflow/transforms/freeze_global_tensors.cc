@@ -20,7 +20,6 @@ limitations under the License.
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
-#include "mlir/Analysis/DataFlow/ConstantPropagationAnalysis.h"  // from @llvm-project
 #include "mlir/Analysis/DataFlow/DeadCodeAnalysis.h"  // from @llvm-project
 #include "mlir/Analysis/DataFlow/SparseAnalysis.h"  // from @llvm-project
 #include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
@@ -59,7 +58,6 @@ void FreezeGlobalTensorsPass::runOnOperation() {
 
   DataFlowSolver solver;
   solver.load<dataflow::DeadCodeAnalysis>();
-  solver.load<dataflow::SparseConstantPropagation>();
   solver.load<TF::ResourceDataflowAnalysis>();
   if (failed(solver.initializeAndRun(module))) return signalPassFailure();
 

@@ -24,10 +24,10 @@ limitations under the License.
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "tensorflow/compiler/xla/stream_executor/device_memory.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/statusor.h"
 #include "tensorflow/compiler/xla/stream_executor/platform.h"
 #include "tensorflow/tsl/platform/errors.h"
 #include "tensorflow/tsl/platform/status.h"
-#include "tensorflow/tsl/platform/statusor.h"
 #include "tensorflow/tsl/platform/types.h"
 
 namespace stream_executor {
@@ -141,7 +141,7 @@ class ScopedDeviceMemory {
   int device_ordinal() const { return device_ordinal_; }
 
   // Frees the existing memory, resets the wrapped memory to null.
-  tsl::Status Free();
+  port::Status Free();
 
  private:
   DeviceMemory<ElemT> wrapped_;       // Value we wrap with scoped-release.
@@ -175,10 +175,10 @@ class DeviceMemoryAllocator {
   // fails, the allocation should return immediately without retrying.  An
   // example use case is optional scratch spaces where a failure has only
   // performance impact.
-  virtual tsl::StatusOr<OwningDeviceMemory> Allocate(int device_ordinal,
-                                                     uint64_t size,
-                                                     bool retry_on_failure,
-                                                     int64_t memory_space) = 0;
+  virtual port::StatusOr<OwningDeviceMemory> Allocate(int device_ordinal,
+                                                      uint64_t size,
+                                                      bool retry_on_failure,
+                                                      int64_t memory_space) = 0;
 
   // Two-arg version of Allocate(), which sets retry-on-failure to true and
   // memory_space to default (0).
@@ -186,22 +186,22 @@ class DeviceMemoryAllocator {
   // (We don't simply use a default argument on the virtual Allocate function
   // because default args on virtual functions are disallowed by the Google
   // style guide.)
-  tsl::StatusOr<OwningDeviceMemory> Allocate(int device_ordinal,
-                                             uint64_t size) {
+  port::StatusOr<OwningDeviceMemory> Allocate(int device_ordinal,
+                                              uint64_t size) {
     return Allocate(device_ordinal, size, /*retry_on_failure=*/true,
                     /*memory_space=*/0);
   }
 
   // Three-arg version of Allocate(), which sets memory_space to default (0).
-  tsl::StatusOr<OwningDeviceMemory> Allocate(int device_ordinal, uint64_t size,
-                                             bool retry_on_failure) {
+  port::StatusOr<OwningDeviceMemory> Allocate(int device_ordinal, uint64_t size,
+                                              bool retry_on_failure) {
     return Allocate(device_ordinal, size, retry_on_failure,
                     /*memory_space=*/0);
   }
 
   // Typed version of the allocation, returning typed memory.
   template <typename ElemT>
-  tsl::StatusOr<ScopedDeviceMemory<ElemT>> Allocate(
+  port::StatusOr<ScopedDeviceMemory<ElemT>> Allocate(
       int device_ordinal, uint64_t size, bool retry_on_failure = true,
       int64_t memory_space = 0) {
     return Allocate(device_ordinal, size, retry_on_failure, memory_space);
@@ -210,7 +210,7 @@ class DeviceMemoryAllocator {
   // Must be a nop for null pointers. Should not be used.
   //
   // TODO(cheshire): Add deprecation notice.
-  virtual tsl::Status Deallocate(int device_ordinal, DeviceMemoryBase mem) = 0;
+  virtual port::Status Deallocate(int device_ordinal, DeviceMemoryBase mem) = 0;
 
   // Return the platform that the allocator allocates memory on.
   const Platform *platform() const { return platform_; }
@@ -223,7 +223,7 @@ class DeviceMemoryAllocator {
   // allocated by this allocator. It is not necessary to use the returned stream
   // though, as clients may have additional information letting them safely use
   // a different stream.
-  virtual tsl::StatusOr<Stream *> GetStream(int device_ordinal) = 0;
+  virtual port::StatusOr<Stream *> GetStream(int device_ordinal) = 0;
 
  protected:
   const Platform *platform_;
@@ -244,23 +244,23 @@ class StreamExecutorMemoryAllocator : public DeviceMemoryAllocator {
       const Platform *platform,
       absl::Span<StreamExecutor *const> stream_executors);
 
-  tsl::StatusOr<OwningDeviceMemory> Allocate(int device_ordinal, uint64_t size,
-                                             bool retry_on_failure,
-                                             int64_t memory_space) override;
+  port::StatusOr<OwningDeviceMemory> Allocate(int device_ordinal, uint64_t size,
+                                              bool retry_on_failure,
+                                              int64_t memory_space) override;
 
   // Pull in two-arg overload that sets retry_on_failure to true.
   using DeviceMemoryAllocator::Allocate;
 
-  tsl::Status Deallocate(int device_ordinal, DeviceMemoryBase mem) override;
+  port::Status Deallocate(int device_ordinal, DeviceMemoryBase mem) override;
 
   bool AllowsAsynchronousDeallocation() const override;
 
   // Gets-or-creates a stream for a given `device_ordinal` from an appropriate
   // stream executor.
-  tsl::StatusOr<Stream *> GetStream(int device_ordinal) override;
+  port::StatusOr<Stream *> GetStream(int device_ordinal) override;
 
   // Gets the stream executor for given device ordinal.
-  tsl::StatusOr<StreamExecutor *> GetStreamExecutor(int device_ordinal) const;
+  port::StatusOr<StreamExecutor *> GetStreamExecutor(int device_ordinal) const;
 
  private:
   // Available stream executors. Each stream executor has a different device
@@ -274,7 +274,7 @@ class StreamExecutorMemoryAllocator : public DeviceMemoryAllocator {
 };
 
 template <typename ElemT>
-tsl::Status ScopedDeviceMemory<ElemT>::Free() {
+port::Status ScopedDeviceMemory<ElemT>::Free() {
   if (!wrapped_.is_null()) {
     CHECK(allocator_ != nullptr) << "Owning pointer in inconsistent state";
     TF_RETURN_IF_ERROR(allocator_->Deallocate(device_ordinal_, wrapped_));

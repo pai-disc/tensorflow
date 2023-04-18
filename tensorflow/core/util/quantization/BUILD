@@ -16,7 +16,6 @@ load("//tensorflow:tensorflow.default.bzl", "filegroup")
 
 # buildifier: disable=no-layering-check
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//visibility:public"],
     features = ["-layering_check"],
     licenses = ["notice"],

@@ -6,7 +6,6 @@ load(
 )
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//tensorflow/tools/api:__subpackages__",
         "//third_party/py/keras/api:__subpackages__",

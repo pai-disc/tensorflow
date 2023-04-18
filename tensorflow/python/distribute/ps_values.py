@@ -30,7 +30,6 @@ from tensorflow.python.distribute.coordinator import coordinator_context
 from tensorflow.python.eager import context
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import tensor_conversion_registry
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import lookup_ops
@@ -225,15 +224,13 @@ class AggregatingVariable(resource_variable_ops.BaseResourceVariable,
       return self._v._gather_saveables_for_checkpoint()  # pylint:disable=protected-access
     return {trackable.VARIABLE_VALUE_KEY: self._v}
 
-  def _export_to_saved_model_graph(self, object_map, tensor_map,
-                                   options, **kwargs):
+  def _map_resources(self, save_options):
     """For implementing `Trackable`."""
     # By delegating this method to the wrapped variable, SavedModel with
     # AggregatingVariable are identical to SavedModel with normal variables.
-    resource_list = self._v._export_to_saved_model_graph(object_map, tensor_map,  # pylint:disable=protected-access
-                                                         options, **kwargs)
-    object_map[self] = object_map[self._v]
-    return resource_list
+    obj_map, resource_map = self._v._map_resources(save_options)  # pylint:disable=protected-access
+    obj_map[self] = obj_map[self._v]
+    return obj_map, resource_map
 
   # pylint: disable=multiple-statements
   def __add__(self, o):
@@ -516,15 +513,13 @@ class CachingVariable(resource_variable_ops.BaseResourceVariable, core.Tensor):
   def _gather_saveables_for_checkpoint(self):
     return {trackable.VARIABLE_VALUE_KEY: self._v}
 
-  def _export_to_saved_model_graph(self, object_map, tensor_map,
-                                   options, **kwargs):
+  def _map_resources(self, save_options):
     """For implementing `Trackable`."""
     # By delegating this method to the wrapped variable, SavedModel with
     # AggregatingVariable are identical to SavedModel with normal variables.
-    resource_list = self._v._export_to_saved_model_graph(object_map, tensor_map,  # pylint:disable=protected-access
-                                                         options, **kwargs)
-    object_map[self] = object_map[self._v]
-    return resource_list
+    obj_map, resource_map = self._v._map_resources(save_options)  # pylint:disable=protected-access
+    obj_map[self] = obj_map[self._v]
+    return obj_map, resource_map
 
 
 # Register a conversion function which reads the value of the variable,
@@ -533,8 +528,8 @@ def _tensor_conversion_aggregate(var, dtype=None, name=None, as_ref=False):
   return var._dense_var_to_tensor(dtype, name, as_ref)  # pylint: disable=protected-access
 
 
-tensor_conversion_registry.register_tensor_conversion_function(
-    AggregatingVariable, _tensor_conversion_aggregate)
+ops.register_tensor_conversion_function(AggregatingVariable,
+                                        _tensor_conversion_aggregate)
 
 
 # Register a conversion function which reads the value of the variable,
@@ -543,8 +538,8 @@ def _tensor_conversion_caching(var, dtype=None, name=None, as_ref=False):
   return var._dense_var_to_tensor(dtype, name, as_ref)  # pylint: disable=protected-access
 
 
-tensor_conversion_registry.register_tensor_conversion_function(
-    CachingVariable, _tensor_conversion_caching)
+ops.register_tensor_conversion_function(CachingVariable,
+                                        _tensor_conversion_caching)
 
 CachingVariable._overload_overloadable_operators()  # pylint: disable=protected-access
 

@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <utility>
 #include <vector>
 
@@ -72,15 +71,15 @@ void AppendFloatValues(const int num_of_elements, const float* float_values,
 
 }  // namespace
 
-std::optional<NodeDef> ExtractSmallTensorValue(TFE_Context* context,
-                                               TFE_TensorHandle* tensor,
-                                               const Layout& layout,
-                                               TF_Status* status) {
+absl::optional<NodeDef> ExtractSmallTensorValue(TFE_Context* context,
+                                                TFE_TensorHandle* tensor,
+                                                const Layout& layout,
+                                                TF_Status* status) {
   if (!layout.IsFullyReplicated()) return std::nullopt;
   auto num_elements = TFE_TensorHandleNumElements(tensor, status);
-  if (TF_GetCode(status) != TF_OK) return std::nullopt;
+  if (TF_GetCode(status) != TF_OK) return absl::nullopt;
 
-  if (num_elements >= kSmallTensorThreshold) return std::nullopt;
+  if (num_elements >= kSmallTensorThreshold) return absl::nullopt;
 
   // Check the DType before attempting to resolve the tensor so we don't try to
   // copy resource-dtype tensors off the DTensor device. Currently we only
@@ -88,7 +87,7 @@ std::optional<NodeDef> ExtractSmallTensorValue(TFE_Context* context,
   // and tf_string tensors that are mostly used in save/restore ops.
   const auto& dtype = TFE_TensorHandleDataType(tensor);
   if (absl::c_find(kAllowedDataType, dtype) == std::end(kAllowedDataType)) {
-    return std::nullopt;
+    return absl::nullopt;
   }
 
   // This is the enum from protobuf, or the following AddNodeAttr will always
@@ -96,7 +95,7 @@ std::optional<NodeDef> ExtractSmallTensorValue(TFE_Context* context,
   const auto& datatype = static_cast<DataType>(dtype);
   std::unique_ptr<TF_Tensor, decltype(&TF_DeleteTensor)> value_tensor(
       TFE_TensorHandleResolve(tensor, status), TF_DeleteTensor);
-  if (TF_GetCode(status) != TF_OK) return std::nullopt;
+  if (TF_GetCode(status) != TF_OK) return absl::nullopt;
 
   NodeDef node_def;
   node_def.set_op("Const");
@@ -134,7 +133,7 @@ std::optional<NodeDef> ExtractSmallTensorValue(TFE_Context* context,
                                 " fell through the supported extraction list. "
                                 "This should not happen.")
                        .c_str());
-      return std::nullopt;
+      return absl::nullopt;
   }
 
   std::vector<int64_t> dim_list;

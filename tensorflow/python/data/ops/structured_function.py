@@ -16,7 +16,6 @@
 
 import warnings
 
-from tensorflow.python.data.ops import debug_mode
 from tensorflow.python.data.util import nest
 from tensorflow.python.data.util import structure
 from tensorflow.python.eager import context
@@ -37,6 +36,9 @@ autograph = lazy_loader.LazyLoader(
 autograph_ctx = lazy_loader.LazyLoader(
     "autograph_ctx", globals(),
     "tensorflow.python.autograph.core.ag_ctx")
+dataset_ops = lazy_loader.LazyLoader(
+    "dataset_ops", globals(),
+    "tensorflow.python.data.ops.dataset_ops")
 
 
 def _should_pack(arg):
@@ -247,7 +249,7 @@ class StructuredFunctionWrapper():
     else:
       defun_kwargs.update({"func_name": func_name})
       defun_kwargs.update({"_tf_data_function": True})
-      if debug_mode.DEBUG_MODE:
+      if dataset_ops.DEBUG_MODE:
         fn_factory = trace_py_function(defun_kwargs)
       else:
         if def_function.functions_run_eagerly():

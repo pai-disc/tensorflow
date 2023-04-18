@@ -21,8 +21,9 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "tensorflow/compiler/xla/stream_executor/host/host_gpu_executor.h"
 #include "tensorflow/compiler/xla/stream_executor/host/host_platform_id.h"
-#include "tensorflow/compiler/xla/stream_executor/platform/initialize.h"
-#include "tensorflow/tsl/platform/errors.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/error.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/initialize.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/status.h"
 
 namespace stream_executor {
 namespace host {
@@ -39,12 +40,12 @@ int HostPlatform::VisibleDeviceCount() const {
 
 const std::string& HostPlatform::Name() const { return name_; }
 
-tsl::StatusOr<std::unique_ptr<DeviceDescription>>
+port::StatusOr<std::unique_ptr<DeviceDescription>>
 HostPlatform::DescriptionForDevice(int ordinal) const {
   return HostExecutor::CreateDeviceDescription(ordinal);
 }
 
-tsl::StatusOr<StreamExecutor*> HostPlatform::ExecutorForDevice(int ordinal) {
+port::StatusOr<StreamExecutor*> HostPlatform::ExecutorForDevice(int ordinal) {
   StreamExecutorConfig config;
   config.ordinal = ordinal;
   config.plugin_config = PluginConfig();
@@ -52,7 +53,7 @@ tsl::StatusOr<StreamExecutor*> HostPlatform::ExecutorForDevice(int ordinal) {
   return GetExecutor(config);
 }
 
-tsl::StatusOr<StreamExecutor*> HostPlatform::ExecutorForDeviceWithPluginConfig(
+port::StatusOr<StreamExecutor*> HostPlatform::ExecutorForDeviceWithPluginConfig(
     int device_ordinal, const PluginConfig& plugin_config) {
   StreamExecutorConfig config;
   config.ordinal = device_ordinal;
@@ -61,21 +62,21 @@ tsl::StatusOr<StreamExecutor*> HostPlatform::ExecutorForDeviceWithPluginConfig(
   return GetExecutor(config);
 }
 
-tsl::StatusOr<StreamExecutor*> HostPlatform::GetExecutor(
+port::StatusOr<StreamExecutor*> HostPlatform::GetExecutor(
     const StreamExecutorConfig& config) {
   return executor_cache_.GetOrCreate(
       config, [&]() { return GetUncachedExecutor(config); });
 }
 
-tsl::StatusOr<std::unique_ptr<StreamExecutor>>
+port::StatusOr<std::unique_ptr<StreamExecutor>>
 HostPlatform::GetUncachedExecutor(const StreamExecutorConfig& config) {
   auto executor = std::make_unique<StreamExecutor>(
       this, std::make_unique<HostExecutor>(config.plugin_config),
       config.ordinal);
   auto init_status = executor->Init(config.device_options);
   if (!init_status.ok()) {
-    return tsl::Status(
-        tsl::error::INTERNAL,
+    return port::Status(
+        port::error::INTERNAL,
         absl::StrFormat(
             "failed initializing StreamExecutor for device ordinal %d: %s",
             config.ordinal, init_status.ToString().c_str()));
@@ -95,7 +96,7 @@ void HostPlatform::UnregisterTraceListener(TraceListener* listener) {
 
 static void InitializeHostPlatform() {
   std::unique_ptr<Platform> platform(new host::HostPlatform);
-  TF_CHECK_OK(MultiPlatformManager::RegisterPlatform(std::move(platform)));
+  SE_CHECK_OK(MultiPlatformManager::RegisterPlatform(std::move(platform)));
 }
 
 }  // namespace host

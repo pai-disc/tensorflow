@@ -24,13 +24,44 @@ limitations under the License.
 #include "absl/strings/string_view.h"
 #include "absl/strings/strip.h"
 #include "tensorflow/core/platform/platform.h"
-#include "tensorflow/tsl/profiler/utils/file_system_utils.h"
+
+#ifdef PLATFORM_WINDOWS
+const absl::string_view kPathSep = "\\";
+#else
+const absl::string_view kPathSep = "/";
+#endif
 
 namespace tensorflow {
 namespace profiler {
 
-using tsl::profiler::ProfilerJoinPath;      // NOLINT
-using tsl::profiler::ProfilerJoinPathImpl;  // NOLINT
+inline std::string ProfilerJoinPathImpl(
+    std::initializer_list<absl::string_view> paths) {
+  std::string result;
+  for (absl::string_view path : paths) {
+    if (path.empty()) continue;
+
+    if (result.empty()) {
+      result = std::string(path);
+      continue;
+    }
+
+    path = absl::StripPrefix(path, kPathSep);
+    if (absl::EndsWith(result, kPathSep)) {
+      absl::StrAppend(&result, path);
+    } else {
+      absl::StrAppend(&result, kPathSep, path);
+    }
+  }
+
+  return result;
+}
+
+// A local duplication of ::tensorflow::io::JoinPath that supports windows.
+// TODO(b/150699701): revert to use ::tensorflow::io::JoinPath when fixed.
+template <typename... T>
+std::string ProfilerJoinPath(const T&... args) {
+  return ProfilerJoinPathImpl({args...});
+}
 
 }  // namespace profiler
 }  // namespace tensorflow

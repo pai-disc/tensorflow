@@ -20,7 +20,6 @@ limitations under the License.
 #include <utility>
 
 #include "tensorflow/compiler/xla/primitive_util.h"
-#include "tensorflow/compiler/xla/stream_executor/gpu/gpu_stream.h"
 #include "tensorflow/compiler/xla/util.h"
 
 namespace xla {
@@ -293,23 +292,41 @@ Status ConvertStatus(rocblas_status status) {
 
 }  // namespace
 
-StatusOr<GpuSolverContext> GpuSolverContext::Create() {
+StatusOr<GpuSolverContext> GpuSolverContext::Create(se::Stream* stream) {
   gpusolverHandle_t handle;
   TF_RETURN_IF_ERROR(ConvertStatus(GpuSolverCreate(&handle)));
-  return GpuSolverContext(handle);
+  GpuSolverContext context(stream, handle);
+
+  if (stream) {
+    // StreamExecutor really should just expose the Cuda stream to clients...
+    const gpuStream_t* gpu_stream =
+        CHECK_NOTNULL(reinterpret_cast<const gpuStream_t*>(
+            stream->implementation()->GpuStreamMemberHack()));
+    TF_RETURN_IF_ERROR(ConvertStatus(GpuSolverSetStream(handle, *gpu_stream)));
+  }
+
+  return std::move(context);
 }
 
-Status GpuSolverContext::SetStream(se::Stream* stream) {
-  return ConvertStatus(
-      GpuSolverSetStream(handle_.get(), se::gpu::AsGpuStreamValue(stream)));
+GpuSolverContext::GpuSolverContext(se::Stream* stream, gpusolverHandle_t handle)
+    : stream_(stream), handle_(handle) {}
+
+GpuSolverContext::GpuSolverContext(GpuSolverContext&& other) {
+  handle_ = other.handle_;
+  stream_ = other.stream_;
+  other.handle_ = nullptr;
+  other.stream_ = nullptr;
 }
 
-GpuSolverContext::GpuSolverContext(gpusolverHandle_t handle)
-    : handle_(handle) {}
+GpuSolverContext& GpuSolverContext::operator=(GpuSolverContext&& other) {
+  std::swap(handle_, other.handle_);
+  std::swap(stream_, other.stream_);
+  return *this;
+}
 
-void GpuSolverContext::Deleter::operator()(gpusolverHandle_t handle) {
-  if (handle) {
-    Status status = ConvertStatus(GpuSolverDestroy(handle));
+GpuSolverContext::~GpuSolverContext() {
+  if (handle_) {
+    Status status = ConvertStatus(GpuSolverDestroy(handle_));
     if (!status.ok()) {
       LOG(ERROR) << "GpuSolverDestroy failed: " << status;
     }
@@ -327,27 +344,23 @@ StatusOr<int64_t> GpuSolverContext::PotrfBufferSize(PrimitiveType type,
   int size = -1;
   switch (type) {
     case F32: {
-      TF_RETURN_IF_ERROR(ConvertStatus(
-          GpuSolverSpotrf_bufferSize(handle_.get(), GpuBlasUpperLower(uplo), n,
-                                     /*A=*/nullptr, lda, &size)));
+      TF_RETURN_IF_ERROR(ConvertStatus(GpuSolverSpotrf_bufferSize(
+          handle(), GpuBlasUpperLower(uplo), n, /*A=*/nullptr, lda, &size)));
       break;
     }
     case F64: {
-      TF_RETURN_IF_ERROR(ConvertStatus(
-          GpuSolverDpotrf_bufferSize(handle_.get(), GpuBlasUpperLower(uplo), n,
-                                     /*A=*/nullptr, lda, &size)));
+      TF_RETURN_IF_ERROR(ConvertStatus(GpuSolverDpotrf_bufferSize(
+          handle(), GpuBlasUpperLower(uplo), n, /*A=*/nullptr, lda, &size)));
       break;
     }
     case C64: {
-      TF_RETURN_IF_ERROR(ConvertStatus(
-          GpuSolverCpotrf_bufferSize(handle_.get(), GpuBlasUpperLower(uplo), n,
-                                     /*A=*/nullptr, lda, &size)));
+      TF_RETURN_IF_ERROR(ConvertStatus(GpuSolverCpotrf_bufferSize(
+          handle(), GpuBlasUpperLower(uplo), n, /*A=*/nullptr, lda, &size)));
       break;
     }
     case C128: {
-      TF_RETURN_IF_ERROR(ConvertStatus(
-          GpuSolverZpotrf_bufferSize(handle_.get(), GpuBlasUpperLower(uplo), n,
-                                     /*A=*/nullptr, lda, &size)));
+      TF_RETURN_IF_ERROR(ConvertStatus(GpuSolverZpotrf_bufferSize(
+          handle(), GpuBlasUpperLower(uplo), n, /*A=*/nullptr, lda, &size)));
       break;
     }
     default:
@@ -366,12 +379,64 @@ StatusOr<int64_t> GpuSolverContext::PotrfBufferSize(PrimitiveType type,
 #endif
 }
 
+Status GpuSolverContext::Potrf(se::blas::UpperLower uplo, int n,
+                               se::DeviceMemory<float> a, int lda,
+                               se::DeviceMemory<int> lapack_info,
+                               se::DeviceMemoryBase workspace) {
+  return ConvertStatus(GpuSolverSpotrf(
+      handle(), GpuBlasUpperLower(uplo), n, ToDevicePointer(a), lda,
+#if TENSORFLOW_USE_CUSOLVER_OR_HIPSOLVER
+      ToDevicePointer(se::DeviceMemory<float>(workspace)),
+      se::DeviceMemory<float>(workspace).ElementCount(),
+#endif
+      ToDevicePointer(lapack_info)));
+}
+
+Status GpuSolverContext::Potrf(se::blas::UpperLower uplo, int n,
+                               se::DeviceMemory<double> a, int lda,
+                               se::DeviceMemory<int> lapack_info,
+                               se::DeviceMemoryBase workspace) {
+  return ConvertStatus(GpuSolverDpotrf(
+      handle(), GpuBlasUpperLower(uplo), n, ToDevicePointer(a), lda,
+#if TENSORFLOW_USE_CUSOLVER_OR_HIPSOLVER
+      ToDevicePointer(se::DeviceMemory<double>(workspace)),
+      se::DeviceMemory<double>(workspace).ElementCount(),
+#endif
+      ToDevicePointer(lapack_info)));
+}
+
+Status GpuSolverContext::Potrf(se::blas::UpperLower uplo, int n,
+                               se::DeviceMemory<std::complex<float>> a, int lda,
+                               se::DeviceMemory<int> lapack_info,
+                               se::DeviceMemoryBase workspace) {
+  return ConvertStatus(GpuSolverCpotrf(
+      handle(), GpuBlasUpperLower(uplo), n, ToDevicePointer(a), lda,
+#if TENSORFLOW_USE_CUSOLVER_OR_HIPSOLVER
+      ToDevicePointer(se::DeviceMemory<std::complex<float>>(workspace)),
+      se::DeviceMemory<std::complex<float>>(workspace).ElementCount(),
+#endif
+      ToDevicePointer(lapack_info)));
+}
+
+Status GpuSolverContext::Potrf(se::blas::UpperLower uplo, int n,
+                               se::DeviceMemory<std::complex<double>> a,
+                               int lda, se::DeviceMemory<int> lapack_info,
+                               se::DeviceMemoryBase workspace) {
+  return ConvertStatus(GpuSolverZpotrf(
+      handle(), GpuBlasUpperLower(uplo), n, ToDevicePointer(a), lda,
+#if TENSORFLOW_USE_CUSOLVER_OR_HIPSOLVER
+      ToDevicePointer(se::DeviceMemory<std::complex<double>>(workspace)),
+      se::DeviceMemory<std::complex<double>>(workspace).ElementCount(),
+#endif
+      ToDevicePointer(lapack_info)));
+}
+
 Status GpuSolverContext::PotrfBatched(se::blas::UpperLower uplo, int n,
                                       se::DeviceMemory<float*> as, int lda,
                                       se::DeviceMemory<int> lapack_info,
                                       int batch_size) {
   return ConvertStatus(GpuSolverSpotrfBatched(
-      handle_.get(), GpuBlasUpperLower(uplo), n, ToDevicePointer(as), lda,
+      handle(), GpuBlasUpperLower(uplo), n, ToDevicePointer(as), lda,
 #if TENSORFLOW_USE_HIPSOLVER
       nullptr, 0,
 #endif
@@ -383,7 +448,7 @@ Status GpuSolverContext::PotrfBatched(se::blas::UpperLower uplo, int n,
                                       se::DeviceMemory<int> lapack_info,
                                       int batch_size) {
   return ConvertStatus(GpuSolverDpotrfBatched(
-      handle_.get(), GpuBlasUpperLower(uplo), n, ToDevicePointer(as), lda,
+      handle(), GpuBlasUpperLower(uplo), n, ToDevicePointer(as), lda,
 #if TENSORFLOW_USE_HIPSOLVER
       nullptr, 0,
 #endif
@@ -396,7 +461,7 @@ Status GpuSolverContext::PotrfBatched(se::blas::UpperLower uplo, int n,
                                       se::DeviceMemory<int> lapack_info,
                                       int batch_size) {
   return ConvertStatus(GpuSolverCpotrfBatched(
-      handle_.get(), GpuBlasUpperLower(uplo), n, ToDevicePointer(as), lda,
+      handle(), GpuBlasUpperLower(uplo), n, ToDevicePointer(as), lda,
 #if TENSORFLOW_USE_HIPSOLVER
       nullptr, 0,
 #endif
@@ -408,7 +473,7 @@ Status GpuSolverContext::PotrfBatched(
     se::DeviceMemory<std::complex<double>*> as, int lda,
     se::DeviceMemory<int> lapack_info, int batch_size) {
   return ConvertStatus(GpuSolverZpotrfBatched(
-      handle_.get(), GpuBlasUpperLower(uplo), n, ToDevicePointer(as), lda,
+      handle(), GpuBlasUpperLower(uplo), n, ToDevicePointer(as), lda,
 #if TENSORFLOW_USE_HIPSOLVER
       nullptr, 0,
 #endif

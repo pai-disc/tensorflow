@@ -3,10 +3,7 @@
 load("//tensorflow:tensorflow.default.bzl", "cuda_py_test", "tf_py_test")
 load("//tensorflow/core/platform:build_config_root.bzl", "tf_additional_xla_deps_py")
 
-package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    licenses = ["notice"],
-)
+package(licenses = ["notice"])
 
 cuda_py_test(
     name = "array_ops_test",
@@ -443,8 +440,7 @@ cuda_py_test(
 
 cuda_py_test(
     name = "pad_op_test",
-    size = "medium",
-    timeout = "moderate",
+    size = "small",
     srcs = ["pad_op_test.py"],
     tags = ["no_mac"],  # test is times out on mac b/186262388
     xla_tags = [

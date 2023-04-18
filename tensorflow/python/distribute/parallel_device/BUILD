@@ -1,9 +1,6 @@
 load("//tensorflow/core/platform:distribute.bzl", "distribute_py_test")
 
-package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    licenses = ["notice"],
-)
+package(licenses = ["notice"])
 
 # Pybind rules must live in tensorflow/python due to header rule visibility.
 exports_files(

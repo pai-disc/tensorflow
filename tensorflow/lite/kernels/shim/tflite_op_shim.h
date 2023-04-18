@@ -22,7 +22,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "flatbuffers/flexbuffers.h"  // from @flatbuffers
-#include "tensorflow/lite/core/c/common.h"
+#include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/shim/op_kernel.h"
 #include "tensorflow/lite/kernels/shim/shape.h"
@@ -54,8 +54,7 @@ class TfLiteInvokeContext : public InvokeContext<TfLiteInvokeContext> {
   TfLiteInvokeContext(TfLiteContext* context_, TfLiteNode* node_);
   // Read an input tensor
   ConstTensorViewOr GetInput(const int idx) const;
-  // Get a mutable output tensor. For output string tensors, this should only
-  // be called once.
+  // Get a mutable output tensor
   TensorViewOr GetOutput(const int idx, const Shape& shape) const;
   // Number of input tensors
   int NumInputs() const;
@@ -112,10 +111,10 @@ Shape TfLiteShapeToShape(const TfLiteIntArray* tflite_shape);
 
 // An op kernel base class which is an adapter between an Op implementation
 // (OpKernelShim subclass) and TFLite runtime
-template <template <Runtime, typename...> typename Impl, typename... Ts>
+template <template <Runtime> typename Impl>
 class TfLiteOpKernel {
  public:
-  using ImplType = Impl<Runtime::kTfLite, Ts...>;
+  using ImplType = Impl<Runtime::kTfLite>;
 
   // Builds a TfLiteRegistration object to register this with the TfLite runtime
   static TfLiteRegistration* GetTfLiteRegistration() {
@@ -126,11 +125,11 @@ class TfLiteOpKernel {
 
   // Adds this op kernel to the passed in op resolver
   static void Add(MutableOpResolver* resolver) {
-    resolver->AddCustom(ImplType::OpName(), GetTfLiteRegistration());
+    resolver->AddCustom(ImplType::kOpName, GetTfLiteRegistration());
   }
 
   // The operation name
-  static const char* OpName() { return ImplType::OpName(); }
+  static const char* OpName() { return ImplType::kOpName; }
 
  protected:
   // The data that is stored in node::user_data.

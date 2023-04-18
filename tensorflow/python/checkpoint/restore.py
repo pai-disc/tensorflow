@@ -52,13 +52,13 @@ class CheckpointPosition(object):
     # object.
     self.skip_restore = False
 
-  def restore(self, trackable, reader=None):
+  def restore(self, trackable):
     """Restore this value into `trackable`."""
     with ops.init_scope():
       if self.bind_object(trackable):
         # This object's correspondence with a checkpointed object is new, so
         # process deferred restorations for it and its dependencies.
-        restore_ops = self._restore_descendants(reader)
+        restore_ops = self._restore_descendants()
         if restore_ops:
           self._checkpoint.new_restore_ops(restore_ops)
 
@@ -325,14 +325,11 @@ class CheckpointPosition(object):
 
     return existing_restore_ops, named_saveables
 
-  def restore_ops(self, reader=None):
+  def restore_ops(self):
     """Create or fetch restore ops for this object's attributes.
 
     Requires that the `Trackable` Python object has been bound to an object
     ID in the checkpoint.
-
-    Args:
-      reader: A `CheckpointReader`. If None, a new instance will be created.
 
     Returns:
       A list of operations when graph building, or an empty list when executing
@@ -344,8 +341,7 @@ class CheckpointPosition(object):
     (restore_ops, tensor_saveables, python_positions,
      _) = self.gather_ops_or_named_saveables()
     restore_ops.extend(
-        self._checkpoint.restore_saveables(
-            tensor_saveables, python_positions, reader=reader))
+        self._checkpoint.restore_saveables(tensor_saveables, python_positions))
     return restore_ops
 
   @property
@@ -431,7 +427,7 @@ class CheckpointPosition(object):
   def create_child_position(self, node_id):
     return CheckpointPosition(checkpoint=self.checkpoint, proto_id=node_id)
 
-  def _restore_descendants(self, reader=None):
+  def _restore_descendants(self):
     """Restore the bound Trackable and dependencies (may be deferred)."""
     # Attempt a breadth-first traversal, since presumably the user has more
     # control over shorter paths. If we don't have all of the dependencies at
@@ -465,11 +461,9 @@ class CheckpointPosition(object):
       _queue_slot_variables(current_position, visit_queue)
 
     restore_ops.extend(
-        current_position.checkpoint.restore_saveables(
-            tensor_saveables,
-            python_positions,
-            registered_savers,
-            reader=reader))
+        current_position.checkpoint.restore_saveables(tensor_saveables,
+                                                      python_positions,
+                                                      registered_savers))
     return restore_ops
 
   def _single_restore(self):

@@ -40,7 +40,7 @@ FuncOp CustomCallDeclarations::GetOrCreate(ImplicitLocOpBuilder& b,
                                            StringRef target,
                                            FunctionType type) {
   // Check if we already have a custom all declaration.
-  Key key = {b.getStringAttr(target), type};
+  Key key = {target, type};
   if (auto it = custom_calls_.find(key); it != custom_calls_.end())
     return it->second;
 

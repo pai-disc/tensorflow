@@ -49,7 +49,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/iterator_util.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/map_util.h"
-#include "tensorflow/compiler/xla/printer.h"
 #include "tensorflow/compiler/xla/service/hlo.pb.h"
 #include "tensorflow/compiler/xla/service/mapped_ptr_container_sorter.h"
 #include "tensorflow/compiler/xla/service/name_uniquer.h"
@@ -66,7 +65,7 @@ namespace xla {
 class HloComputation;
 class HloModule;
 
-absl::string_view PrintName(absl::string_view name, bool print_ids);
+std::string PrintName(const std::string& name, bool print_ids);
 
 // A bunch of switches that control how the hlo text should be printed.
 class HloPrintOptions {
@@ -647,7 +646,7 @@ class HloInstruction {
   // prefetch or not.
   static std::unique_ptr<HloInstruction> CreateCopyStart(
       const Shape& shape, HloInstruction* operand,
-      std::optional<int> cross_program_prefetch_index = std::nullopt);
+      bool is_cross_program_prefetch = false);
 
   // Creates a compare op, performing the comparison specified in direction.
   static std::unique_ptr<HloInstruction> CreateCompare(
@@ -833,12 +832,6 @@ class HloInstruction {
   // convert and shape is the target shape for the conversion.
   static std::unique_ptr<HloInstruction> CreateBitcastConvert(
       const Shape& shape, HloInstruction* operand);
-
-  // Creates a stochastic conversion instruction, where operand is the data to
-  // convert, random is a given random input to determine the rounding direction
-  // and shape is the target shape for the conversion.
-  static std::unique_ptr<HloInstruction> CreateStochasticConvert(
-      const Shape& shape, HloInstruction* operand, HloInstruction* random);
 
   // Creates an infeed instruction, which reads data of the given shape from the
   // Infeed interface of the device. infeed_shape is the shape of the data
@@ -1505,12 +1498,6 @@ class HloInstruction {
   // function, e.g. the signature of an F32 add is (F32, F32) -> F32.
   std::string SignatureString() const;
 
-  // Prints a debugging string that represents this instruction.
-  void Print(Printer* printer) const {
-    return Print(printer, HloPrintOptions());
-  }
-  void Print(Printer* printer, const HloPrintOptions& options) const;
-
   // Returns a debugging string that represents this instruction.
   //
   // (We express the default options using an overload rather than a default
@@ -1522,10 +1509,10 @@ class HloInstruction {
   std::string ToString() const { return ToString(HloPrintOptions()); }
   std::string ToString(const HloPrintOptions& options) const;
 
-  // Components of the Print() and ToString() representation:
+  // Components of the ToString() representation:
 
-  // Prints a string representation of the operand list.
-  void PrintOperands(Printer* printer, const HloPrintOptions& options) const;
+  // Returns a string representation of the operand list.
+  std::string OperandsToString(const HloPrintOptions& options) const;
 
   // Returns string representation of op-specific attributes.
   std::vector<std::string> ExtraAttributesToString(
@@ -1539,9 +1526,9 @@ class HloInstruction {
   // The canonical string representation needs to name operands and instruction
   // names in a consistent way. This is implemented through the
   // canonical_name_map.
-  void PrintWithCanonicalNameMap(Printer* printer,
-                                 const HloPrintOptions& options,
-                                 CanonicalNameMap* canonical_name_map) const;
+  std::string ToStringWithCanonicalNameMap(
+      const HloPrintOptions& options,
+      CanonicalNameMap* canonical_name_map) const;
 
   // Returns a serialized representation of this instruction.
   virtual HloInstructionProto ToProto() const;
@@ -1581,14 +1568,14 @@ class HloInstruction {
   // Returns the sharding unique device, if any.
   std::optional<int64_t> sharding_unique_device() const {
     if (sharding_ == nullptr) {
-      return std::nullopt;
+      return std::optional<int64_t>();
     }
     return sharding_->UniqueDevice();
   }
   // Sets the sharding of this operator. Should only be called by HloModule or
   // HloComputation methods.
   void set_sharding(const HloSharding& sharding) {
-    set_sharding(std::make_shared<const HloSharding>(sharding));
+    sharding_ = std::make_shared<const HloSharding>(sharding);
   }
   void set_sharding(std::shared_ptr<const HloSharding> sharding) {
     sharding_ = std::move(sharding);
@@ -2156,8 +2143,8 @@ class HloInstruction {
       absl::string_view async_execution_thread,
       bool skip_async_execution_thread_overwrite);
 
-  // Delegates to HloCopyStartInstruction::is_cross_program_prefetch_index().
-  std::optional<int> cross_program_prefetch_index() const;
+  // Delegates to HloCopyStartInstruction::is_cross_program_prefetch().
+  bool is_cross_program_prefetch() const;
 
   // Delegates to HloCompareInstruction::direction().
   ComparisonDirection comparison_direction() const;
@@ -2170,9 +2157,9 @@ class HloInstruction {
   // Delegates to HloCholeskyInstruction::cholesky_options().
   const CholeskyOptions& cholesky_options() const;
 
-  // Delegates to HloCallableInstruction::output_to_operand_aliasing().
+  // Delegates to HloCustomCallInstruction::output_to_operand_aliasing().
   const std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>&
-  output_operand_aliasing() const;
+  custom_call_output_operand_aliasing() const;
 
   // Appends operand to the list of operands and adds this instruction as a user
   // of the operand.
@@ -2288,8 +2275,8 @@ class HloInstruction {
       const std::optional<int64_t>& operand_idx) const;
 
   // Prints an operand to a string. Accessed by friend class HloInstruction.
-  virtual void PrintOperandsWithCanonicalNameMap(
-      Printer* printer, const HloPrintOptions& options,
+  virtual std::string OperandsToStringWithCanonicalNameMap(
+      const HloPrintOptions& options,
       CanonicalNameMap* canonical_name_map) const;
 
   // See comments on Identical().

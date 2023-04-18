@@ -13,9 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <optional>
-
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -81,17 +80,17 @@ LogicalResult GetSplitElementTypeAndCount(TF::TensorArraySplitV3Op split,
                                           RankedTensorType* elem_type,
                                           int64_t* count) {
   auto lengths_const =
-      llvm::dyn_cast_or_null<TF::ConstOp>(split.getLengths().getDefiningOp());
+      llvm::dyn_cast_or_null<TF::ConstOp>(split.lengths().getDefiningOp());
   if (!lengths_const) return split.emitOpError("non-constant split lengths");
-  *count = lengths_const.getValue().getNumElements();
+  *count = lengths_const.value().getNumElements();
   if (*count <= 0) return split.emitOpError("non-positive split count");
-  auto buffer_type = split.getValue().getType().dyn_cast<RankedTensorType>();
+  auto buffer_type = split.value().getType().dyn_cast<RankedTensorType>();
   if (!buffer_type || !buffer_type.hasStaticShape() ||
       buffer_type.getRank() < 1) {
     return split.emitOpError("unknown or invalid split tensor shape");
   }
   int64_t length = buffer_type.getDimSize(0) / *count;
-  for (const auto& len : lengths_const.getValue().getValues<APInt>()) {
+  for (const auto& len : lengths_const.value().getValues<APInt>()) {
     if (length == len.getSExtValue()) continue;
     return split.emitOpError("different split lengths are not supported");
   }
@@ -107,7 +106,7 @@ LogicalResult GetSplitElementTypeAndCount(TF::TensorArraySplitV3Op split,
 // Tries to infer the tensor array element shape.
 llvm::Optional<llvm::SmallVector<int64_t, 8>> GetTensorArrayElementShape(
     TF::TensorArrayV3Op ta, ModuleOp module) {
-  auto element_shape = ta.getElementShapeAttr().cast<mlir::TF::ShapeAttr>();
+  auto element_shape = ta.element_shapeAttr().cast<mlir::TF::ShapeAttr>();
   if (element_shape.hasStaticShape()) {
     auto shape = element_shape.getShape();
     // Convert int64 to int64_t.
@@ -117,21 +116,21 @@ llvm::Optional<llvm::SmallVector<int64_t, 8>> GetTensorArrayElementShape(
 
   bool has_failure = false;
   auto elem_type = cutil::GetElementTypeFromAccess(
-      ta.getHandle(), module, [&](Operation* user) -> llvm::Optional<Type> {
-        if (has_failure) return std::nullopt;
+      ta.handle(), module, [&](Operation* user) -> llvm::Optional<Type> {
+        if (has_failure) return llvm::None;
         if (auto write = llvm::dyn_cast<TF::TensorArrayWriteV3Op>(user)) {
-          return write.getValue().getType();
+          return write.value().getType();
         } else if (auto split =
                        llvm::dyn_cast<TF::TensorArraySplitV3Op>(user)) {
-          if (!split.getLengths().getDefiningOp() ||
-              !llvm::isa<TF::ConstOp>(split.getLengths().getDefiningOp())) {
-            return std::nullopt;
+          if (!split.lengths().getDefiningOp() ||
+              !llvm::isa<TF::ConstOp>(split.lengths().getDefiningOp())) {
+            return llvm::None;
           }
           RankedTensorType t;
           int64_t count;
           if (failed(GetSplitElementTypeAndCount(split, &t, &count))) {
             has_failure = true;
-            return std::nullopt;
+            return llvm::None;
           }
           return t;
         } else if (auto scatter =
@@ -139,28 +138,28 @@ llvm::Optional<llvm::SmallVector<int64_t, 8>> GetTensorArrayElementShape(
           // TensorArrayScatter writes vector of tensors to TensorArray. We can
           // deduce the shape of TensorArray by dropping the 0th dim of
           // TensorArrayScatter `value`.
-          auto t = scatter.getValue().getType().dyn_cast<RankedTensorType>();
-          if (!t || t.getShape().empty()) return std::nullopt;
+          auto t = scatter.value().getType().dyn_cast<RankedTensorType>();
+          if (!t || t.getShape().empty()) return llvm::None;
           return RankedTensorType::get(t.getShape().drop_front(),
                                        t.getElementType());
         } else if (auto gather =
                        llvm::dyn_cast<TF::TensorArrayGatherV3Op>(user)) {
           // Try to infer from result type of gather.
-          auto t = gather.getValue().getType().dyn_cast<RankedTensorType>();
+          auto t = gather.value().getType().dyn_cast<RankedTensorType>();
           if (t && !t.getShape().empty())
             return RankedTensorType::get(t.getShape().drop_front(),
                                          t.getElementType());
           // Try to infer from `element_shape` attribute of gather.
-          auto element_shape = gather.getElementShapeAttr()
+          auto element_shape = gather.element_shapeAttr()
                                    .dyn_cast_or_null<mlir::TF::ShapeAttr>();
           if (element_shape && element_shape.hasStaticShape()) {
             return RankedTensorType::get(element_shape.getShape(),
-                                         gather.getDtype());
+                                         gather.dtype());
           }
         }
-        return std::nullopt;
+        return llvm::None;
       });
-  if (!elem_type) return std::nullopt;
+  if (!elem_type) return llvm::None;
   return llvm::to_vector<8>(elem_type->getShape());
 }
 
@@ -197,13 +196,13 @@ LogicalResult HandleTensorArrayV3Op(
     llvm::SmallDenseMap<Value, TensorArrayStats>* stats) {
   auto elem_shape = GetTensorArrayElementShape(ta, module);
   if (!elem_shape) return ta.emitOpError("unknown element shape");
-  if (ta.getDynamicSize()) {
+  if (ta.dynamic_size()) {
     return ta.emitOpError("dynamic tensor array size is unsupported");
   }
   Value buffer;
   OpBuilder builder(ta);
-  if (failed(cutil::CreateInitBufferValue(*elem_shape, ta.getSize(), ta,
-                                          ta.getDtype(), builder, &buffer))) {
+  if (failed(cutil::CreateInitBufferValue(*elem_shape, ta.size(), ta,
+                                          ta.dtype(), builder, &buffer))) {
     return failure();
   }
   auto var_type = RankedTensorType::get(
@@ -213,7 +212,7 @@ LogicalResult HandleTensorArrayV3Op(
   auto local_var = builder.create<TF::MlirLocalVarOp>(
       ta.getLoc(), ArrayRef<Type>{var_type}, ArrayRef<Value>{});
   cutil::WriteLocalVariable(local_var, buffer, builder, ta.getLoc());
-  ta.getHandle().replaceAllUsesWith(local_var);
+  ta.handle().replaceAllUsesWith(local_var);
   // The flow output is just a way for the front end to enforce ordering among
   // tensor array ops, but in the MLIR TF dialect they have sequential ordering.
   // Just create a constant to replace its uses.
@@ -221,7 +220,7 @@ LogicalResult HandleTensorArrayV3Op(
   scalar_tensor.scalar<float>()() = 0.0f;
   auto flow = builder.create<TF::ConstOp>(
       ta.getLoc(), tensorflow::ConvertTensor(scalar_tensor, &builder).value());
-  ta.getFlow().replaceAllUsesWith(flow);
+  ta.flow().replaceAllUsesWith(flow);
   ta.erase();
   (*stats)[local_var].accumulate_on_write = false;
   return success();
@@ -230,17 +229,17 @@ LogicalResult HandleTensorArrayV3Op(
 LogicalResult HandleTensorArrayReadV3Op(
     TF::TensorArrayReadV3Op read,
     const llvm::SmallDenseMap<Value, TensorArrayStats>& stats) {
-  auto local_var = read.getHandle();
+  auto local_var = read.handle();
   if (stats.count(local_var) == 0) {
     return read.emitOpError("unknown tensor array");
   }
   OpBuilder builder(read);
   auto buffer = cutil::ReadLocalVariable(local_var, builder, read.getLoc());
   auto index_reshape =
-      cutil::ReshapeScalarToSizeType(builder, read.getIndex(), read.getLoc());
+      cutil::ReshapeScalarToSizeType(builder, read.index(), read.getLoc());
   auto elem = cutil::GetElement(index_reshape, buffer, builder, read.getLoc());
-  ReplaceAllUsesExceptTerminator(read.getValue(), elem);
-  ReplaceAllUsesWithCast(read.getValue(), elem);
+  ReplaceAllUsesExceptTerminator(read.value(), elem);
+  ReplaceAllUsesWithCast(read.value(), elem);
   read.erase();
   // The clear_after_read attribute does not mean setting the tensor to 0 after
   // read; instead it does not allow a second read before the next write. We
@@ -251,14 +250,14 @@ LogicalResult HandleTensorArrayReadV3Op(
 LogicalResult HandleTensorArrayWriteV3Op(
     TF::TensorArrayWriteV3Op write,
     const llvm::SmallDenseMap<Value, TensorArrayStats>& stats) {
-  auto local_var = write.getHandle();
+  auto local_var = write.handle();
   auto stat_it = stats.find(local_var);
   if (stat_it == stats.end()) return write.emitOpError("unknown tensor array");
   OpBuilder builder(write);
   auto buffer = cutil::ReadLocalVariable(local_var, builder, write.getLoc());
   auto index_reshape =
-      cutil::ReshapeScalarToSizeType(builder, write.getIndex(), write.getLoc());
-  Value elem = write.getValue();
+      cutil::ReshapeScalarToSizeType(builder, write.index(), write.getLoc());
+  auto elem = write.value();
   if (stat_it->getSecond().accumulate_on_write) {
     // Get the old slice, and accumulate with it. We set keep_slice_shape
     // (keeping the leading size-1 dimension) because it avoids reshape back and
@@ -278,7 +277,7 @@ LogicalResult HandleTensorArrayWriteV3Op(
   buffer =
       cutil::SetElement(index_reshape, buffer, elem, builder, write.getLoc());
   cutil::WriteLocalVariable(local_var, buffer, builder, write.getLoc());
-  write.getFlowOut().replaceAllUsesWith(write.getFlowIn());
+  write.flow_out().replaceAllUsesWith(write.flow_in());
   write.erase();
   return success();
 }
@@ -286,7 +285,7 @@ LogicalResult HandleTensorArrayWriteV3Op(
 LogicalResult HandleTensorArrayConcatV3Op(
     TF::TensorArrayConcatV3Op concat,
     const llvm::SmallDenseMap<Value, TensorArrayStats>& stats) {
-  auto local_var = concat.getHandle();
+  auto local_var = concat.handle();
   if (stats.count(local_var) == 0) {
     return concat.emitOpError("unknown tensor array");
   }
@@ -305,8 +304,8 @@ LogicalResult HandleTensorArrayConcatV3Op(
           RankedTensorType::get(shape, buffer_type.getElementType())},
       ArrayRef<Value>{buffer,
                       cutil::GetR1Const(shape, builder, concat.getLoc())});
-  ReplaceAllUsesExceptTerminator(concat.getValue(), buffer);
-  ReplaceAllUsesWithCast(concat.getValue(), buffer);
+  ReplaceAllUsesExceptTerminator(concat.value(), buffer);
+  ReplaceAllUsesWithCast(concat.value(), buffer);
 
   // Create the lengths as a list of the same value (element size).
   tensorflow::Tensor lengths_tensor(tensorflow::DT_INT64,
@@ -314,7 +313,7 @@ LogicalResult HandleTensorArrayConcatV3Op(
   for (int64_t i = 0; i < buffer_type.getDimSize(0); ++i) {
     lengths_tensor.vec<int64_t>()(i) = buffer_type.getDimSize(1);
   }
-  concat.getLengths().replaceAllUsesWith(builder.create<TF::ConstOp>(
+  concat.lengths().replaceAllUsesWith(builder.create<TF::ConstOp>(
       concat.getLoc(),
       tensorflow::ConvertTensor(lengths_tensor, &builder).value()));
   concat.erase();
@@ -324,7 +323,7 @@ LogicalResult HandleTensorArrayConcatV3Op(
 LogicalResult HandleTensorArraySplitV3Op(
     TF::TensorArraySplitV3Op split,
     const llvm::SmallDenseMap<Value, TensorArrayStats>& stats) {
-  auto local_var = split.getHandle();
+  auto local_var = split.handle();
   if (stats.count(local_var) == 0) {
     return split.emitOpError("unknown tensor array");
   }
@@ -338,23 +337,22 @@ LogicalResult HandleTensorArraySplitV3Op(
   buffer_shape.push_back(count);
   for (int64_t dim : elem_type.getShape()) buffer_shape.push_back(dim);
   // Reshape the input to match the buffer of the tensor array.
-  Value buffer =
-      builder
-          .create<TF::ReshapeOp>(
-              split.getLoc(),
-              ArrayRef<Type>{RankedTensorType::get(buffer_shape,
-                                                   elem_type.getElementType())},
-              ArrayRef<Value>{
-                  split.getValue(),
-                  cutil::GetR1Const(buffer_shape, builder, split.getLoc())})
-          .getOutput();
+  auto buffer = builder
+                    .create<TF::ReshapeOp>(
+                        split.getLoc(),
+                        ArrayRef<Type>{RankedTensorType::get(
+                            buffer_shape, elem_type.getElementType())},
+                        ArrayRef<Value>{split.value(),
+                                        cutil::GetR1Const(buffer_shape, builder,
+                                                          split.getLoc())})
+                    .output();
   // Accumulate with the old buffer.
   auto old_buffer =
       cutil::ReadLocalVariable(local_var, builder, split.getLoc());
   buffer =
       cutil::AccumulateBuffers(old_buffer, buffer, builder, split.getLoc());
   cutil::WriteLocalVariable(local_var, buffer, builder, split.getLoc());
-  split.getFlowOut().replaceAllUsesWith(split.getFlowIn());
+  split.flow_out().replaceAllUsesWith(split.flow_in());
   split.erase();
   return success();
 }
@@ -362,7 +360,7 @@ LogicalResult HandleTensorArraySplitV3Op(
 LogicalResult HandleTensorArraySizeV3Op(
     TF::TensorArraySizeV3Op size,
     const llvm::SmallDenseMap<Value, TensorArrayStats>& stats) {
-  auto local_var = size.getHandle();
+  auto local_var = size.handle();
   if (stats.count(local_var) == 0) {
     return size.emitOpError("unknown tensor array");
   }
@@ -373,7 +371,7 @@ LogicalResult HandleTensorArraySizeV3Op(
   OpBuilder builder(size);
   auto result = cutil::CreateScalarConst(buffer_type.getDimSize(0), builder,
                                          size.getLoc());
-  size.getSize().replaceAllUsesWith(result);
+  size.size().replaceAllUsesWith(result);
   size.erase();
   return success();
 }
@@ -400,13 +398,13 @@ LogicalResult CreateAndInitializeGradVariable(Type local_var_type,
 LogicalResult HandleTensorArrayGradV3Op(
     TF::TensorArrayGradV3Op grad,
     llvm::SmallDenseMap<Value, TensorArrayStats>* stats) {
-  auto local_var = grad.getHandle();
+  auto local_var = grad.handle();
   OpBuilder builder(grad);
   Value grad_var;
   auto sit = stats->find(local_var);
   if (sit == stats->end()) return grad.emitOpError("unknown tensor array");
   auto emplace_res =
-      sit->getSecond().grads.try_emplace(grad.getSource().str(), Value());
+      sit->getSecond().grads.try_emplace(grad.source().str(), Value());
   if (!emplace_res.second) {
     // If the source has been assigned a grad, use it.
     grad_var = emplace_res.first->second;
@@ -419,8 +417,8 @@ LogicalResult HandleTensorArrayGradV3Op(
     // Write to a grad accumulates with previous writes.
     (*stats)[grad_var].accumulate_on_write = true;
   }
-  grad.getFlowOut().replaceAllUsesWith(grad.getFlowIn());
-  grad.getGradHandle().replaceAllUsesWith(grad_var);
+  grad.flow_out().replaceAllUsesWith(grad.flow_in());
+  grad.grad_handle().replaceAllUsesWith(grad_var);
   grad.erase();
   return success();
 }
@@ -428,16 +426,16 @@ LogicalResult HandleTensorArrayGradV3Op(
 LogicalResult HandleTensorArrayGatherV3Op(
     TF::TensorArrayGatherV3Op gather,
     const llvm::SmallDenseMap<Value, TensorArrayStats>& stats) {
-  auto local_var = gather.getHandle();
+  auto local_var = gather.handle();
   if (stats.count(local_var) == 0) {
     return gather.emitOpError("unknown tensor array");
   }
   OpBuilder builder(gather);
   auto buffer = cutil::ReadLocalVariable(local_var, builder, gather.getLoc());
-  auto result = cutil::GatherElements(gather.getIndices(), buffer, builder,
-                                      gather.getLoc());
-  ReplaceAllUsesExceptTerminator(gather.getValue(), result);
-  ReplaceAllUsesWithCast(gather.getValue(), result);
+  auto result =
+      cutil::GatherElements(gather.indices(), buffer, builder, gather.getLoc());
+  ReplaceAllUsesExceptTerminator(gather.value(), result);
+  ReplaceAllUsesWithCast(gather.value(), result);
   gather.erase();
   return success();
 }
@@ -445,17 +443,16 @@ LogicalResult HandleTensorArrayGatherV3Op(
 LogicalResult HandleTensorArrayScatterV3Op(
     TF::TensorArrayScatterV3Op scatter,
     const llvm::SmallDenseMap<Value, TensorArrayStats>& stats) {
-  auto local_var = scatter.getHandle();
+  auto local_var = scatter.handle();
   if (stats.count(local_var) == 0) {
     return scatter.emitOpError("unknown tensor array");
   }
   OpBuilder builder(scatter);
   auto buffer = cutil::ReadLocalVariable(local_var, builder, scatter.getLoc());
-  buffer =
-      cutil::ScatterAccumulateElements(scatter.getIndices(), scatter.getValue(),
-                                       buffer, builder, scatter.getLoc());
+  buffer = cutil::ScatterAccumulateElements(scatter.indices(), scatter.value(),
+                                            buffer, builder, scatter.getLoc());
   cutil::WriteLocalVariable(local_var, buffer, builder, scatter.getLoc());
-  scatter.getFlowOut().replaceAllUsesWith(scatter.getFlowIn());
+  scatter.flow_out().replaceAllUsesWith(scatter.flow_in());
   scatter.erase();
   return success();
 }
@@ -491,7 +488,7 @@ llvm::SmallDenseMap<int64_t, llvm::SmallVector<string, 4>> AccessedGradients(
         return;
       }
       if (auto grad = llvm::dyn_cast<TF::TensorArrayGradV3Op>(op)) {
-        insert(grad.getHandle(), grad.getSource().str(), func_block);
+        insert(grad.handle(), grad.source().str(), func_block);
       } else if (auto while_op = llvm::dyn_cast<TF::WhileOp>(op)) {
         for (const auto& entry : AccessedGradients(
                  {while_op.body_function(), while_op.cond_function()}, module))

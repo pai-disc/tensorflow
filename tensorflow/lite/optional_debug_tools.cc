@@ -499,23 +499,19 @@ void PrintInterpreterState(const Interpreter* interpreter) {
       }
       printf("  %d Input Tensors:",
              node.inputs != nullptr ? node.inputs->size : 0);
-      if (node.inputs) {
-        PrintTfLiteIntVector(
-            node.inputs,
-            /*collapse_consecutives=*/(node.delegate != nullptr));
-        PrintTotalBytesOfTensors(
-            subgraph, is_node_delegated ? TfLiteIntArrayView(&empty_int_array)
-                                        : TfLiteIntArrayView(node.inputs));
-      }
+      PrintTfLiteIntVector(
+          node.inputs,
+          /*collapse_consecutives=*/(node.delegate != nullptr));
+      PrintTotalBytesOfTensors(
+          subgraph, is_node_delegated ? TfLiteIntArrayView(&empty_int_array)
+                                      : TfLiteIntArrayView(node.inputs));
 
       printf("  %d Output Tensors:",
              node.outputs != nullptr ? node.outputs->size : 0);
-      if (node.outputs) {
-        PrintTfLiteIntVector(node.outputs);
-        PrintTotalBytesOfTensors(
-            subgraph, is_node_delegated ? TfLiteIntArrayView(&empty_int_array)
-                                        : TfLiteIntArrayView(node.outputs));
-      }
+      PrintTfLiteIntVector(node.outputs);
+      PrintTotalBytesOfTensors(
+          subgraph, is_node_delegated ? TfLiteIntArrayView(&empty_int_array)
+                                      : TfLiteIntArrayView(node.outputs));
 
       if (node.intermediates && node.intermediates->size) {
         printf("  %d Intermediate Tensors:", node.intermediates->size);

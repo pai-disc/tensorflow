@@ -31,6 +31,7 @@ limitations under the License.
 #include "tensorflow/compiler/tf2tensorrt/utils/trt_logger.h"
 #include "tensorflow/compiler/tf2tensorrt/utils/trt_shape_optimization_profiles.h"
 #include "tensorflow/compiler/tf2tensorrt/utils/trt_tensor_proxy.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/statusor.h"
 #include "tensorflow/core/framework/graph.pb.h"
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/grappler/costs/graph_properties.h"
@@ -43,7 +44,7 @@ namespace tensorflow {
 namespace tensorrt {
 
 namespace convert {
-using ::tsl::StatusOr;
+using ::stream_executor::port::StatusOr;
 
 struct EngineConnection {
   // Constructs a non-control edge.

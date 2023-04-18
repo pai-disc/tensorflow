@@ -16,15 +16,14 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/scatter_expander.h"
 
 #include "absl/algorithm/container.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_casting_utils.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_computation.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_instructions.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_module.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_opcode.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/call_inliner.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_creation_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_instructions.h"
+#include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/while_util.h"
 #include "tensorflow/compiler/xla/statusor.h"
 
@@ -485,48 +484,10 @@ StatusOr<HloInstruction*> ScatterExpander::ExpandInstruction(
   return MaybeMakeTuple(results);
 }
 
-namespace {
-
-bool IsCombinerAssociative(const HloComputation* combiner) {
-  // Consider simple binary combiner functions only.
-  if (combiner->instruction_count() != 3) {
-    return false;
-  }
-  switch (combiner->root_instruction()->opcode()) {
-    // Minimum and Maximum are common associative combiners.
-    case HloOpcode::kMinimum:
-    case HloOpcode::kMaximum:
-      return true;
-    // Other common combiners are associative at least for interger arithmetic.
-    case HloOpcode::kAdd:
-    case HloOpcode::kMultiply:
-    case HloOpcode::kOr:
-    case HloOpcode::kXor:
-      return combiner->root_instruction()->shape().IsInteger();
-    default:
-      return false;
-  }
-}
-
-bool IsDeterministic(const HloScatterInstruction* scatter) {
-  if (scatter->unique_indices()) {
-    return true;
-  }
-  if (IsCombinerAssociative(scatter->to_apply())) {
-    return true;
-  }
-  return false;
-}
-
-}  // namespace
-
 bool ScatterExpander::InstructionMatchesPattern(HloInstruction* inst) {
   auto* scatter = DynCast<HloScatterInstruction>(inst);
-  return (scatter != nullptr) && (mode_ == kEliminateAllScatters ||
-                                  (mode_ == kEliminateSimpleScatters &&
-                                   ScatterTripCount(scatter) == 1) ||
-                                  (mode_ == kEliminateIndeterminisitcScatters &&
-                                   !IsDeterministic(scatter)));
+  return scatter &&
+         (mode_ == kEliminateAllScatters || ScatterTripCount(scatter) == 1);
 }
 
 }  // namespace xla

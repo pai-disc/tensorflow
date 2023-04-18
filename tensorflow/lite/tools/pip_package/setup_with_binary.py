@@ -50,7 +50,6 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
         'Topic :: Scientific/Engineering',
         'Topic :: Scientific/Engineering :: Mathematics',
         'Topic :: Scientific/Engineering :: Artificial Intelligence',
@@ -62,7 +61,6 @@ setup(
     package_dir={'': '.'},
     package_data={'': ['*.so', '*.pyd']},
     install_requires=[
-        'numpy >= 1.21.2',  # Better to keep sync with both TF ci_build
-        # and OpenCV-Python requirement.
-    ],
-)
+        'numpy >= 1.19.2',  # Better to keep sync with both TF ci_build
+                            # and OpenCV-Python requirement.
+    ])

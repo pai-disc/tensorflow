@@ -23,12 +23,12 @@ limitations under the License.
 
 #include "absl/algorithm/container.h"
 #include "absl/strings/str_join.h"
-#include "tensorflow/compiler/xla/hlo/ir/dfs_hlo_visitor_with_default.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_casting_utils.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_module.h"
 #include "tensorflow/compiler/xla/service/collective_ops_utils.h"
+#include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
 #include "tensorflow/compiler/xla/service/gpu/ir_emission_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/shape.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -77,6 +77,8 @@ class ReductionRewriterVisitor : public DfsHloRewriteVisitor {
   Status RewriteReduction(HloInstruction *hlo) {
     ReductionDimensions reduction_dimensions =
         GetReductionKindAndContiguousComponents(*hlo);
+    std::array<int64_t, 3> reduction_tiling =
+        GetReductionTiling(reduction_dimensions, cuda_compute_capability_);
     VLOG(5) << "Input: " << hlo->ToString();
     auto *reduce = Cast<HloReduceInstruction>(hlo);
     absl::Span<int64_t const> input_shape_dims =
@@ -104,7 +106,7 @@ class ReductionRewriterVisitor : public DfsHloRewriteVisitor {
     bool is_row_reduction = reduction_dimensions.is_row_reduction;
 
     // Base case: everything fits.
-    if (ReductionIsRaceFree(reduction_dimensions)) {
+    if (ReductionIsRaceFree(reduction_dimensions, reduction_tiling)) {
       VLOG(3) << "Base case: dimensions fit";
       return OkStatus();
     }

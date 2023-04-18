@@ -8,7 +8,6 @@ load(
 )
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         # Restricting visibility for now
         "//tensorflow/c/experimental/saved_model/core:__subpackages__",

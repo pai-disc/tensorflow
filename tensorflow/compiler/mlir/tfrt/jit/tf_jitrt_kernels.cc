@@ -480,9 +480,6 @@ static Expected<AsyncValuePtr<JitExecutable>> CompileImpl(
             opts.legalize_i1_tensors = tf_jitrt_opts->legalize_i1_tensors;
           } else {
             opts.vectorize = GetJitRtFlags().vectorize;
-            opts.enable_xla_cpu_transformations =
-                tensorflow::GetJitRtFlags().enable_xla_cpu_transformations;
-            opts.lower_to_mmt4d = tensorflow::GetJitRtFlags().pack_matmul;
           }
 
           // Lower from Tensorflow to Linalg on buffers.
@@ -733,7 +730,7 @@ static void ExecuteImpl(Executable& executable, ArrayRef<MemrefDesc> memrefs,
   // notify the HostContext to emit the diagnostics for the kernel invocation.
   auto status = executable.Execute(memrefs, converter, opts);
   if (LLVM_UNLIKELY(!status.ok())) {
-    EmitError(exec_ctx, status.status().message());
+    EmitError(exec_ctx, status.message());
     return;
   }
 }

@@ -50,8 +50,7 @@ StatusOr<T> AppendTpuEmbeddingErrorPayload(StatusOr<T> obj) {
         kTpuEmbeddingErrorMessage, ". ", obj.status().error_message());
     Status status(obj.status().code(), error_message);
     TPUEmbeddingError error_payload;
-    status.SetPayload(kTpuEmbeddingErrorUrl,
-                      absl::Cord(error_payload.SerializeAsString()));
+    status.SetPayload(kTpuEmbeddingErrorUrl, error_payload.SerializeAsString());
     return status;
   }
 }

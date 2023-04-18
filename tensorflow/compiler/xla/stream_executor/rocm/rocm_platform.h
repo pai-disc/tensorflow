@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "absl/synchronization/mutex.h"
 #include "tensorflow/compiler/xla/stream_executor/executor_cache.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/statusor.h"
 #include "tensorflow/compiler/xla/stream_executor/multi_platform_manager.h"
 #include "tensorflow/compiler/xla/stream_executor/platform.h"
 #include "tensorflow/compiler/xla/stream_executor/platform/port.h"
@@ -51,7 +52,7 @@ class ROCmPlatform : public Platform {
   int DeviceToBus(int device_ordinal);
 
   // Returns the lowest-ordinal-number StreamExecutor on the specified bus.
-  tsl::StatusOr<StreamExecutor*> FirstExecutorForBus(int bus_ordinal);
+  port::StatusOr<StreamExecutor*> FirstExecutorForBus(int bus_ordinal);
 
   // Platform interface implementation:
   // Returns the same value as kROCmPlatform above.
@@ -62,19 +63,19 @@ class ROCmPlatform : public Platform {
 
   const string& Name() const override;
 
-  tsl::StatusOr<std::unique_ptr<DeviceDescription>> DescriptionForDevice(
+  port::StatusOr<std::unique_ptr<DeviceDescription>> DescriptionForDevice(
       int ordinal) const override;
 
-  tsl::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) override;
-  tsl::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal, void* hash);
+  port::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) override;
+  port::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal, void* hash);
 
-  tsl::StatusOr<StreamExecutor*> ExecutorForDeviceWithPluginConfig(
+  port::StatusOr<StreamExecutor*> ExecutorForDeviceWithPluginConfig(
       int ordinal, const PluginConfig& config) override;
 
-  tsl::StatusOr<StreamExecutor*> GetExecutor(
+  port::StatusOr<StreamExecutor*> GetExecutor(
       const StreamExecutorConfig& config) override;
 
-  tsl::StatusOr<std::unique_ptr<StreamExecutor>> GetUncachedExecutor(
+  port::StatusOr<std::unique_ptr<StreamExecutor>> GetUncachedExecutor(
       const StreamExecutorConfig& config) override;
 
   void RegisterTraceListener(std::unique_ptr<TraceListener> listener) override;

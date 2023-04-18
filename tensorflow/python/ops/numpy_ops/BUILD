@@ -1,9 +1,6 @@
 load("//tensorflow:tensorflow.default.bzl", "cuda_py_test")
 
-package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    licenses = ["notice"],
-)
+package(licenses = ["notice"])
 
 py_library(
     name = "numpy",

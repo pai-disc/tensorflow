@@ -874,6 +874,4 @@ class CheckpointManager(object):
 
     if self._init_fn is not None:
       self._init_fn()
-      logging.info(
-          "Customized initialization is done through the passed `init_fn`.")
     return None

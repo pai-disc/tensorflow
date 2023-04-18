@@ -15,7 +15,6 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_MLIR_TENSORFLOW_UTILS_DUMP_GRAPH_H_
 #define TENSORFLOW_COMPILER_MLIR_TENSORFLOW_UTILS_DUMP_GRAPH_H_
 
-#include <optional>
 #include <string>
 
 #include "mlir/IR/OperationSupport.h"  // from @llvm-project
@@ -51,7 +50,7 @@ struct MlirDumpConfig {
   // debug information is printed in a more readable 'pretty' form but this
   // pretty form is not parsable (so only for human readability).
   MlirDumpConfig& emit_location_information(bool pretty_form = false) {
-    this->op_printing_flags.enableDebugInfo(/*enable=*/true, pretty_form);
+    this->op_printing_flags.enableDebugInfo(pretty_form);
     return *this;
   }
 
@@ -61,7 +60,7 @@ struct MlirDumpConfig {
   }
 
   // Op printing flags.
-  mlir::OpPrintingFlags op_printing_flags = std::nullopt;
+  mlir::OpPrintingFlags op_printing_flags = llvm::None;
 
   // The target MLIR dialect.
   Dialect dialect = Dialect::kTFG;

@@ -31,8 +31,7 @@ bool IsAsyncWaitForRemoteFunctionEnabled() {
 }
 }  // namespace
 
-EagerExecutor::EagerExecutor(bool async, bool enable_streaming_enqueue,
-                             int in_flight_nodes_limit)
+EagerExecutor::EagerExecutor(bool async, bool enable_streaming_enqueue)
     : next_node_id_(0),
       ok_(true),
       thread_(async ? tensorflow::Env::Default()->StartThread(
@@ -42,13 +41,7 @@ EagerExecutor::EagerExecutor(bool async, bool enable_streaming_enqueue,
       last_eager_client_(nullptr),
       enable_async_wait_for_remote_function_(
           IsAsyncWaitForRemoteFunctionEnabled()),
-      enable_streaming_enqueue_(enable_streaming_enqueue),
-      in_flight_nodes_limit_(in_flight_nodes_limit) {
-  if (async && in_flight_nodes_limit_ > 0) {
-    VLOG(4) << "EagerExecutor InFlightNodes limit is set to "
-            << in_flight_nodes_limit_;
-  }
-}
+      enable_streaming_enqueue_(enable_streaming_enqueue) {}
 
 EagerExecutor::~EagerExecutor() {
   tensorflow::mutex_lock l(node_queue_mutex_);
@@ -107,7 +100,7 @@ const char* EagerExecutor::StateStringLocked() {
 
 Status EagerExecutor::SyncExecute(EagerNode* node) {
   if (Async()) {
-    return errors::Internal("SyncExecute does not support async execution.");
+    return errors::Internal("Executor does not support async execution");
   }
   if (node->AsAsync() != nullptr) {
     return errors::Internal("Executor does not support executing async nodes");
@@ -163,22 +156,7 @@ Status EagerExecutor::AddOrExecute(std::unique_ptr<EagerNode> node) {
         if (node_queue_.size() == 1) {
           nodes_pending_.notify_all();
         }
-        if (in_flight_nodes_limit_ == 0) {
-          return OkStatus();
-        }
-        // Limit the concurrency by controlling the number of in flight nodes.
-        while (true) {
-          int64_t in_flight_nodes_count =
-              node_queue_.size() + unfinished_nodes_.size();
-          if (in_flight_nodes_count < in_flight_nodes_limit_) {
-            break;
-          }
-          VLOG(4) << "Hitting in-flight node limit node_queue_.size() = "
-                  << node_queue_.size()
-                  << " unfinished_nodes_.size() = " << unfinished_nodes_.size()
-                  << ".";
-          nodes_done_.wait(l);
-        }
+
         return OkStatus();
       }
     }
@@ -297,8 +275,6 @@ void EagerExecutor::NodeDone(const core::RefCountPtr<NodeItem>& item,
     if (need_notification) {
       NotifyWaiters(item->id);
     }
-    // Notify AddOrExecute() some nodes have been done.
-    nodes_done_.notify_all();
   }
 
   for (auto& item : items_to_destroy) {

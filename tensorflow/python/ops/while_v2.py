@@ -90,8 +90,7 @@ def while_loop(cond,
   # `wrapped_body` below.
   loop_vars = _tensor_array_to_flow(loop_vars)
   loop_vars = nest.map_structure(
-      indexed_slices.internal_convert_to_tensor_or_indexed_slices,
-      loop_vars,
+      ops.internal_convert_to_tensor_or_indexed_slices, loop_vars,
       expand_composites=True)
 
   # `loop_vars_signature` is a structure of TypeSpecs and has the same
@@ -299,8 +298,7 @@ def while_loop(cond,
     _check_inputs_outputs_types_match(body_graph, flattened_loop_vars)
 
     with ops.control_dependencies(
-        list(cond_graph._function_captures.control) + list(  # pylint: disable=protected-access
-            body_graph._function_captures.control)):  # pylint: disable=protected-access
+        list(cond_graph.control_captures) + list(body_graph.control_captures)):
       output_shapes = [t.shape for t in body_graph.outputs]
       orig_loop_vars_range = slice(first_loop_var_index,
                                    first_loop_var_index + num_flattened_outputs)

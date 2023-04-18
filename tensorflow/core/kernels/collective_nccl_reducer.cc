@@ -122,7 +122,6 @@ void NcclReducer::Run(StatusCallback done) {
 }
 
 REGISTER_COLLECTIVE(NcclReduce, NcclReducer);
-REGISTER_COLLECTIVE(NcclReduceScatter, NcclReduceScatterer);
 
 }  // namespace tensorflow
 

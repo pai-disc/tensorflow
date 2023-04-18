@@ -23,18 +23,19 @@ limitations under the License.
 #include "mlir/IR/PatternMatch.h"  // from @llvm-project
 #include "mlir/IR/Value.h"  // from @llvm-project
 #include "mlir/Transforms/DialectConversion.h"  // from @llvm-project
-#include "stablehlo/dialect/StablehloOps.h"  // from @stablehlo
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
+#include "tensorflow/compiler/xla/mlir_hlo/include/mlir-hlo/Dialect/mhlo/IR/hlo_ops.h"
 
 namespace mlir {
-namespace odml {
+namespace TFL {
+namespace mhlo {
 
 namespace {
 
 LogicalResult SmuggleOp(Operation* op, PatternRewriter& rewriter) {
   auto call_target =
       rewriter.getNamedAttr("call_target_name", op->getName().getIdentifier());
-  auto custom_call = rewriter.create<mlir::stablehlo::CustomCallOp>(
+  auto custom_call = rewriter.create<mlir::mhlo::CustomCallOp>(
       op->getLoc(), op->getResultTypes(), op->getOperands(),
       ArrayRef<NamedAttribute>{call_target});
   rewriter.replaceOp(op, custom_call.getResults());
@@ -60,7 +61,7 @@ class SmuggleDisallowedOpsPass
  public:
   StringRef getArgument() const final { return "smuggle-disallowed-ops-pass"; }
   StringRef getDescription() const final {
-    return "Smuggle disallowed ops via stablehlo.custom_calls";
+    return "Smuggle disallowed ops via mhlo.custom_calls";
   }
 
   void runOnOperation() override {
@@ -69,7 +70,7 @@ class SmuggleDisallowedOpsPass
 
     ConversionTarget target(getContext());
     target.addIllegalOp<TF::ResizeBilinearOp>();
-    target.addLegalDialect<mlir::stablehlo::StablehloDialect>();
+    target.addLegalDialect<mlir::mhlo::MhloDialect>();
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns)))) {
       signalPassFailure();
@@ -83,5 +84,6 @@ std::unique_ptr<Pass> CreateSmuggleDisallowedOpsPass() {
 
 static PassRegistration<SmuggleDisallowedOpsPass> pass;
 
-}  // namespace odml
+}  // namespace mhlo
+}  // namespace TFL
 }  // namespace mlir

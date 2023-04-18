@@ -21,7 +21,6 @@ limitations under the License.
 #include <numeric>
 
 #include "absl/status/status.h"
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Casting.h"
@@ -62,7 +61,7 @@ SymbolicShapesResolver::SymbolicShapesResolver(
 
       // Keep track of all statically known dimension sizes.
       for (int64_t size : sizes) {
-        if (size != MemrefType::kDynamic) seen_static_sizes_.insert(size);
+        if (size != MemrefType::kDynamicSize) seen_static_sizes_.insert(size);
       }
     };
 
@@ -187,7 +186,7 @@ LLVM_ATTRIBUTE_ALWAYS_INLINE static LogicalResult ResolveImpl(
       symbolic_shapes[i].assign(static_sizes.begin(), static_sizes.end());
     } else {
       size_t rank = runtime_sizes.size();
-      symbolic_shapes[i].resize(rank, MemrefType::kDynamic);
+      symbolic_shapes[i].resize(rank, MemrefType::kDynamicSize);
     }
 
     MutableArrayRef<int64_t> symbolic_sizes = symbolic_shapes[i];
@@ -285,8 +284,9 @@ absl::StatusOr<llvm::hash_code> SymbolicShapesResolver::ResolveHash(
 
 /*static*/ StaticShape SymbolicShapesResolver::Normalize(
     const SymbolicShape& shape) {
-  auto normalize = llvm::map_range(
-      shape, [](int64_t dim) { return dim < 0 ? MemrefType::kDynamic : dim; });
+  auto normalize = llvm::map_range(shape, [](int64_t dim) {
+    return dim < 0 ? MemrefType::kDynamicSize : dim;
+  });
   return {normalize.begin(), normalize.end()};
 }
 

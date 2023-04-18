@@ -20,10 +20,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "llvm/Support/Casting.h"
 #include "pybind11/pybind11.h"
-#include "tensorflow/compiler/xla/python/ifrt/array.h"
-#include "tensorflow/compiler/xla/python/pjrt_ifrt/pjrt_array.h"
 #include "tensorflow/compiler/xla/python/py_buffer.h"
 #include "tensorflow/compiler/xla/python/types.h"
 
@@ -35,8 +32,7 @@ struct PyArray_Storage {
                   std::vector<int64_t> shape, pybind11::object sharding,
                   bool committed, std::shared_ptr<PyClient> py_client,
                   std::shared_ptr<Traceback> traceback,
-                  tsl::RCReference<ifrt::Array> ifrt_array
-                  )
+                  std::vector<std::shared_ptr<PjRtBuffer>> pjrt_buffers)
       : fastpath_enabled(true),
         aval(std::move(aval)),
         weak_type(weak_type),
@@ -46,8 +42,7 @@ struct PyArray_Storage {
         committed(committed),
         py_client(std::move(py_client)),
         traceback(std::move(traceback)),
-        ifrt_array(std::move(ifrt_array))
-  {
+        pjrt_buffers(std::move(pjrt_buffers)) {
     next = this->py_client->arrays_;
     this->py_client->arrays_ = this;
     if (next) {
@@ -77,7 +72,7 @@ struct PyArray_Storage {
 
   std::shared_ptr<PyClient> py_client;
   std::shared_ptr<Traceback> traceback;
-  tsl::RCReference<ifrt::Array> ifrt_array;
+  std::vector<std::shared_ptr<PjRtBuffer>> pjrt_buffers;
 
   // optional field, used only in python
   std::vector<PyBuffer::object> py_buffers;
@@ -119,8 +114,8 @@ class PyArray : public pybind11::object {
           std::vector<int64_t> shape, pybind11::object sharding,
           std::shared_ptr<PyClient> py_client,
           std::shared_ptr<Traceback> traceback,
-          tsl::RCReference<ifrt::Array> ifrt_array,
-          bool committed, bool skip_checks = true);
+          std::vector<std::shared_ptr<PjRtBuffer>> pjrt_buffers, bool committed,
+          bool skip_checks = true);
 
   static Status RegisterTypes(pybind11::module& m);
 
@@ -151,34 +146,12 @@ class PyArray : public pybind11::object {
     return GetStorage().traceback;
   }
 
-  // Returns xla::InvalidArgument if the buffer has been deleted.
-  // See `PjRtFuture` for the semantics of `IsReady` and `IsKnownReady`.
-  StatusOr<bool> IsReady() {
-    ifrt::Array* ifrt_array_ptr = ifrt_array();
-    if (ifrt_array_ptr->IsDeleted()) {
-      return InvalidArgument("Array has been deleted.");
-    }
-    return ifrt_array_ptr->GetReadyFuture().IsReady();
+  std::vector<std::shared_ptr<PjRtBuffer>>& pjrt_buffers() {
+    return GetStorage().pjrt_buffers;
   }
-
-  ifrt::Array* ifrt_array() const { return GetStorage().ifrt_array.get(); }
-
-  // Short-term escape hatch to get PjRtBuffers from PyArray.
-  // TODO(hyeontaek): Migrate all users of this method to be agnostic of PjRt.
-  absl::Span<const std::shared_ptr<PjRtBuffer>> pjrt_buffers() const {
-    ifrt::Array* ifrt_array_ptr = ifrt_array();
-    if (ifrt_array_ptr == nullptr) {
-      return {};
-    }
-    auto* arr =
-        llvm::dyn_cast_or_null<ifrt::PjRtCompatibleArray>(ifrt_array_ptr);
-    if (arr == nullptr) {
-      throw XlaRuntimeError(
-          "This operation is implemented for a PjRt-compatible backend only.");
-    }
-    return arr->pjrt_buffers();
+  const std::vector<std::shared_ptr<PjRtBuffer>>& pjrt_buffers() const {
+    return GetStorage().pjrt_buffers;
   }
-
   std::vector<PyBuffer::object>& py_buffers() {
     return GetStorage().py_buffers;
   }
@@ -189,13 +162,15 @@ class PyArray : public pybind11::object {
   pybind11::object arrays();
   Status set_arrays(pybind11::object obj);
 
-  int num_shards() const {
-    ifrt::Array* ifrt_array_ptr = ifrt_array();
-    if (ifrt_array_ptr == nullptr) {
-      return 0;
-    }
-    return ifrt_array_ptr->sharding().devices().size();
+  PjRtBuffer* GetBuffer(int device_id) const {
+    return pjrt_buffers().at(device_id).get();
   }
+
+  const std::shared_ptr<PjRtBuffer>& GetSharedPtrBuffer(int device_id) const {
+    return pjrt_buffers().at(device_id);
+  }
+
+  int num_shards() const { return pjrt_buffers().size(); }
 
   // TODO(yashkatariya): remove this once the transition completes.
   bool fastpath_enabled() const { return GetStorage().fastpath_enabled; }
@@ -215,8 +190,6 @@ class PyArray : public pybind11::object {
 
  private:
   void CheckAndRearrange();
-
-  void SetIfrtArray(tsl::RCReference<ifrt::Array> ifrt_array);
 
   Storage& GetStorage();
   const Storage& GetStorage() const;

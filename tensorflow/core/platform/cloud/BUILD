@@ -8,15 +8,14 @@ load(
 )
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
-        ":dependency_allowlist",
+        ":dependency_whitelist",
     ],
     licenses = ["notice"],
 )
 
 package_group(
-    name = "dependency_allowlist",
+    name = "dependency_whitelist",
     packages = [
         "//learning/brain/tfrc/...",
         "//tensorflow/...",

@@ -1,7 +1,6 @@
 # Example parser test data.
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = [
         "//tensorflow/core/example:__pkg__",
     ],

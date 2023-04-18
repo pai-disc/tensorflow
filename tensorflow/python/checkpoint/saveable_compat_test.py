@@ -21,7 +21,6 @@ from tensorflow.python.checkpoint import checkpoint
 from tensorflow.python.checkpoint import saveable_compat
 from tensorflow.python.checkpoint.testdata import generate_checkpoint
 from tensorflow.python.eager import test
-from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.trackable import base
 from tensorflow.python.training import checkpoint_utils
@@ -137,9 +136,8 @@ class TestForceCheckpointConversionFlag(test.TestCase):
         return {"-a": self.a, "-b": self.b}
 
       def _restore_from_tensors(self, restored_tensors):
-        return control_flow_ops.group(
-            self.a.assign(restored_tensors["-a"]),
-            self.b.assign(restored_tensors["-b"]))
+        self.a.assign(restored_tensors["-a"])
+        self.b.assign(restored_tensors["-b"])
 
     new = NewTrackable()
 

@@ -19,15 +19,10 @@ limitations under the License.
 #include "tensorflow/compiler/xla/runtime/compiler.h"
 #include "tensorflow/compiler/xla/status.h"
 
-namespace mlir {
-class DialectRegistry;
-}  // namespace mlir
-
 namespace xla {
 namespace cpu {
 
 struct HloXlaRuntimePipelineOptions {
-  bool enable_tiling_and_fusion = false;
   bool sparse_bufferization = true;
   bool outline_with_xla_framework = false;
 };
@@ -37,7 +32,8 @@ Status CreateHloXlaRuntimePipeline(xla::runtime::PassManager& passes,
                                    const HloXlaRuntimePipelineOptions& options);
 Status CreateDefaultHloXlaRuntimePipeline(xla::runtime::PassManager& passes);
 
-void RegisterHloXlaRuntimePipelineDialects(mlir::DialectRegistry& dialects);
+void RegisterHloXlaRuntimePipelineDialects(
+    xla::runtime::DialectRegistry& dialects);
 }  // namespace cpu
 }  // namespace xla
 

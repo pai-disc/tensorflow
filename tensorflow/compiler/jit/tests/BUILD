@@ -3,10 +3,7 @@ load("//tensorflow:tensorflow.bzl", "tf_cc_test")
 
 licenses(["notice"])
 
-package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = ["//visibility:private"],
-)
+package(default_visibility = ["//visibility:private"])
 
 cc_library(
     name = "auto_clustering_test_helper",
@@ -54,13 +51,10 @@ tf_cc_test(
 )
 
 cc_library(
-    name = "device_compiler_test_helper",
+    name = "xla_compilation_cache_test_helper",
     testonly = True,
-    srcs = ["device_compiler_test_helper.cc"],
-    hdrs = ["device_compiler_test_helper.h"],
-    visibility = [
-        "//tensorflow/compiler/jit:__pkg__",
-    ],
+    srcs = ["xla_compilation_cache_test_helper.cc"],
+    hdrs = ["xla_compilation_cache_test_helper.h"],
     deps = [
         "//tensorflow/compiler/jit:xla_activity_listener",
         "//tensorflow/compiler/jit:xla_compilation_cache_proto_cc",
@@ -84,9 +78,9 @@ cc_library(
 )
 
 tf_cc_test(
-    name = "device_compiler_serialize_test",
+    name = "xla_compilation_cache_serialize_test",
     srcs = [
-        "device_compiler_serialize_test.cc",
+        "xla_compilation_cache_serialize_test.cc",
     ],
     env = {
         "XLA_FLAGS": "--xla_gpu_enable_xla_runtime_executable",
@@ -98,7 +92,7 @@ tf_cc_test(
         "xla",
     ],
     deps = [
-        ":device_compiler_test_helper",
+        ":xla_compilation_cache_test_helper",
         "//tensorflow/compiler/jit:compilation_passes",
         "//tensorflow/compiler/jit:flags",
         "//tensorflow/core:test",
@@ -106,9 +100,9 @@ tf_cc_test(
 )
 
 tf_cc_test(
-    name = "device_compiler_serialize_options_test",
+    name = "xla_compilation_cache_serialize_options_test",
     srcs = [
-        "device_compiler_serialize_options_test.cc",
+        "xla_compilation_cache_serialize_options_test.cc",
     ],
     env = {
         "XLA_FLAGS": "--xla_gpu_enable_xla_runtime_executable",
@@ -120,7 +114,7 @@ tf_cc_test(
         "xla",
     ],
     deps = [
-        ":device_compiler_test_helper",
+        ":xla_compilation_cache_test_helper",
         "//tensorflow/compiler/jit:compilation_passes",
         "//tensorflow/compiler/jit:flags",
         "//tensorflow/core:test",

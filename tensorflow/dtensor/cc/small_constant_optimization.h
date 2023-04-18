@@ -16,8 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_DTENSOR_CC_SMALL_CONSTANT_OPTIMIZATION_H_
 #define TENSORFLOW_DTENSOR_CC_SMALL_CONSTANT_OPTIMIZATION_H_
 
-#include <optional>
-
+#include "absl/types/optional.h"
 #include "tensorflow/c/eager/c_api.h"
 #include "tensorflow/core/framework/node_def_builder.h"
 #include "tensorflow/dtensor/cc/tensor_layout.h"
@@ -33,10 +32,10 @@ namespace dtensor {
 // particular, reductions require access to the axis argument at compilation
 // time. While this is not strictly necessary, it greatly simplifies SPMD code
 // generation and is generally available.
-std::optional<NodeDef> ExtractSmallTensorValue(TFE_Context* context,
-                                               TFE_TensorHandle* tensor,
-                                               const Layout& layout,
-                                               TF_Status* status);
+absl::optional<NodeDef> ExtractSmallTensorValue(TFE_Context* context,
+                                                TFE_TensorHandle* tensor,
+                                                const Layout& layout,
+                                                TF_Status* status);
 
 // Returns true if the given input argument should be eligible for extracting
 // into a graph constant.

@@ -48,9 +48,8 @@ struct XentFunctor<GPUDevice, T> {
 };
 }  // end namespace functor
 
-// Instantiate the GPU implementation for half, bfloat16, float and double.
+// Instantiate the GPU implementation for half, float and double.
 template struct functor::XentFunctor<GPUDevice, Eigen::half>;
-template struct functor::XentFunctor<GPUDevice, Eigen::bfloat16>;
 template struct functor::XentFunctor<GPUDevice, float>;
 template struct functor::XentFunctor<GPUDevice, double>;
 

@@ -69,13 +69,6 @@ case "${TENSORFLOW_TARGET}" in
       --define tensorflow_mkldnn_contraction_kernel=0
       --define=raspberry_pi_with_neon=true"
     ;;
-  rpi0)
-    BAZEL_FLAGS="--config=elinux_armhf
-      --copt=-march=armv6 -mfpu=vfp -mfloat-abi=hard
-      --copt=-O3 --copt=-fno-tree-pre --copt=-fpermissive
-      --define tensorflow_mkldnn_contraction_kernel=0
-      --define=raspberry_pi_with_neon=true"
-    ;;
   aarch64)
     BAZEL_FLAGS="--config=elinux_aarch64
       --define tensorflow_mkldnn_contraction_kernel=0
@@ -119,20 +112,15 @@ case "${TENSORFLOW_TARGET}" in
     ${PYTHON} setup.py bdist --plat-name=${WHEEL_PLATFORM_NAME} \
                        bdist_wheel --plat-name=${WHEEL_PLATFORM_NAME}
     ;;
-  rpi0)
-    WHEEL_PLATFORM_NAME="${WHEEL_PLATFORM_NAME:-linux-armv6l}"
-    ${PYTHON} setup.py bdist --plat-name=${WHEEL_PLATFORM_NAME} \
-                       bdist_wheel --plat-name=${WHEEL_PLATFORM_NAME}
-    ;;
   aarch64)
     WHEEL_PLATFORM_NAME="${WHEEL_PLATFORM_NAME:-linux-aarch64}"
     ${PYTHON} setup.py bdist --plat-name=${WHEEL_PLATFORM_NAME} \
                        bdist_wheel --plat-name=${WHEEL_PLATFORM_NAME}
     ;;
   *)
-    if [[ -n "${WHEEL_PLATFORM_NAME}" ]]; then
-      ${PYTHON} setup.py bdist --plat-name=${WHEEL_PLATFORM_NAME} \
-                         bdist_wheel --plat-name=${WHEEL_PLATFORM_NAME}
+    if [[ -n "${TENSORFLOW_TARGET}" ]] && [[ -n "${TENSORFLOW_TARGET_ARCH}" ]]; then
+      ${PYTHON} setup.py bdist --plat-name=${TENSORFLOW_TARGET}-${TENSORFLOW_TARGET_ARCH} \
+                         bdist_wheel --plat-name=${TENSORFLOW_TARGET}-${TENSORFLOW_TARGET_ARCH}
     else
       ${PYTHON} setup.py bdist bdist_wheel
     fi
@@ -169,9 +157,6 @@ fi
 case "${TENSORFLOW_TARGET}" in
   armhf)
     dpkg-buildpackage -b -rfakeroot -us -uc -tc -d -a armhf
-    ;;
-  rpi0)
-    dpkg-buildpackage -b -rfakeroot -us -uc -tc -d -a armel
     ;;
   aarch64)
     dpkg-buildpackage -b -rfakeroot -us -uc -tc -d -a arm64

@@ -4,7 +4,6 @@ load("//tensorflow:tensorflow.bzl", "tf_cc_test")
 load("//tensorflow/core/profiler/builds:build_config.bzl", "tf_profiler_copts")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//tensorflow:internal"],
     licenses = ["notice"],
 )
@@ -23,20 +22,30 @@ cc_library(
 
 cc_library(
     name = "host_tracer",
+    srcs = ["host_tracer_factory.cc"],
     deps = [
-        "//tensorflow/compiler/xla/backends/profiler/cpu:host_tracer",
+        ":host_tracer_impl",
+        "//tensorflow/core/profiler:profiler_options_proto_cc",
+        "//tensorflow/core/profiler/lib:profiler_factory",
     ],
     alwayslink = True,
 )
 
 cc_library(
     name = "host_tracer_impl",
+    srcs = ["host_tracer.cc"],
     hdrs = ["host_tracer.h"],
     copts = tf_profiler_copts(),
     visibility = ["//tensorflow/core/profiler:internal"],
     deps = [
-        "//tensorflow/compiler/xla/backends/profiler/cpu:host_tracer_impl",
+        ":host_tracer_utils",
+        ":traceme_recorder",
+        "//tensorflow/core:lib",
         "//tensorflow/core/profiler/lib:profiler_interface",
+        "//tensorflow/core/profiler/protobuf:xplane_proto_cc",
+        "//tensorflow/core/profiler/utils:time_utils",
+        "//tensorflow/core/profiler/utils:xplane_schema",
+        "//tensorflow/core/profiler/utils:xplane_utils",
     ],
 )
 
@@ -50,13 +59,13 @@ tf_cc_test(
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
+        "//tensorflow/core/profiler:profiler_options_proto_cc",
         "//tensorflow/core/profiler/lib:profiler_interface",
         "//tensorflow/core/profiler/lib:profiler_session",
         "//tensorflow/core/profiler/lib:traceme",
         "//tensorflow/core/profiler/protobuf:xplane_proto_cc",
         "//tensorflow/core/profiler/utils:xplane_schema",
         "//tensorflow/core/profiler/utils:xplane_visitor",
-        "//tensorflow/tsl/profiler/protobuf:profiler_options_proto_cc",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
     ],
@@ -126,29 +135,45 @@ cc_library(
 
 cc_library(
     name = "python_tracer",
+    srcs = ["python_tracer_factory.cc"],
     deps = [
-        "//tensorflow/compiler/xla/backends/profiler/cpu:python_tracer",
+        ":python_tracer_impl",
+        "//tensorflow/core/profiler:profiler_options_proto_cc",
+        "//tensorflow/core/profiler/lib:profiler_factory",
     ],
     alwayslink = True,
 )
 
 cc_library(
     name = "python_tracer_impl",
+    srcs = ["python_tracer.cc"],
     hdrs = ["python_tracer.h"],
     copts = tf_profiler_copts() + ["-fexceptions"],
     features = ["-use_header_modules"],
     visibility = ["//tensorflow/core/profiler:internal"],
     deps = [
-        "//tensorflow/compiler/xla/backends/profiler/cpu:python_tracer_impl",
-        "//tensorflow/tsl/profiler/lib:profiler_interface",
+        "//tensorflow/core:lib",
+        "//tensorflow/core/profiler/lib:profiler_interface",
+        "//tensorflow/core/profiler/protobuf:xplane_proto_cc",
+        "//tensorflow/python/profiler/internal:python_hooks",
     ],
 )
 
 cc_library(
     name = "metadata_collector",
+    srcs = ["metadata_collector.cc"],
     copts = tf_profiler_copts(),
     deps = [
-        "//tensorflow/compiler/xla/backends/profiler/cpu:metadata_collector",
+        ":metadata_utils",
+        "//tensorflow/compiler/xla/service:hlo_proto_cc",
+        "//tensorflow/compiler/xla/service:xla_debug_info_manager",
+        "//tensorflow/core:lib",
+        "//tensorflow/core/profiler:profiler_options_proto_cc",
+        "//tensorflow/core/profiler/lib:profiler_factory",
+        "//tensorflow/core/profiler/lib:profiler_interface",
+        "//tensorflow/core/profiler/protobuf:xplane_proto_cc",
+        "//tensorflow/core/profiler/utils:xplane_schema",
+        "//tensorflow/core/profiler/utils:xplane_utils",
     ],
     alwayslink = True,
 )
@@ -158,7 +183,6 @@ cc_library(
     hdrs = ["metadata_utils.h"],
     visibility = ["//tensorflow/core/profiler:internal"],
     deps = [
-        "//tensorflow/compiler/xla/backends/profiler/cpu:metadata_utils",
         "//tensorflow/compiler/xla/service:hlo_proto_cc",
         "//tensorflow/core/profiler/convert:xla_op_utils",
         "//tensorflow/core/profiler/protobuf:xplane_proto_cc",

@@ -15,8 +15,6 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/service/gpu/cublas_cudnn.h"
 
-#include "absl/strings/string_view.h"
-
 namespace xla {
 namespace gpu {
 
@@ -34,22 +32,16 @@ bool IsCublasLtMatmul(const HloInstruction& hlo) {
          hlo.custom_call_target() == kCublasLtMatmulCallTarget;
 }
 
-bool IsCublasLtMatmulF8(const HloInstruction& hlo) {
-  return hlo.opcode() == HloOpcode::kCustomCall &&
-         hlo.custom_call_target() == kCublasLtMatmulF8CallTarget;
-}
-
-const absl::string_view kGemmCallTarget = "__cublas$gemm";
-const absl::string_view kCublasLtMatmulCallTarget = "__cublas$lt$matmul";
-const absl::string_view kCublasLtMatmulF8CallTarget = "__cublas$lt$matmul$f8";
-const absl::string_view kCudnnConvBackwardInputCallTarget =
+const char* const kGemmCallTarget = "__cublas$gemm";
+const char* const kCublasLtMatmulCallTarget = "__cublas$lt$matmul";
+const char* const kTriangularSolveCallTarget = "__cublas$triangularSolve";
+const char* const kCudnnConvForwardCallTarget = "__cudnn$convForward";
+const char* const kCudnnConvBackwardInputCallTarget =
     "__cudnn$convBackwardInput";
-const absl::string_view kCudnnConvBackwardFilterCallTarget =
+const char* const kCudnnConvBackwardFilterCallTarget =
     "__cudnn$convBackwardFilter";
-const absl::string_view kCudnnConvBiasActivationForwardCallTarget =
+const char* const kCudnnConvBiasActivationForwardCallTarget =
     "__cudnn$convBiasActivationForward";
-const absl::string_view kCudnnConvForwardCallTarget = "__cudnn$convForward";
-const absl::string_view kTriangularSolveCallTarget = "__cublas$triangularSolve";
 
 bool IsCustomCallToDnnConvolution(const HloInstruction& hlo) {
   if (hlo.opcode() != HloOpcode::kCustomCall) {

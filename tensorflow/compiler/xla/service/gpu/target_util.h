@@ -61,7 +61,6 @@ enum class TargetDeviceFunctionID {
   kRsqrt,
   kSin,
   kSqrt,
-  kTan,
   kTanh,
 };
 
@@ -70,8 +69,8 @@ enum class TargetDeviceFunctionID {
 llvm::CallInst* EmitDeviceFunctionCall(
     const std::string& callee_name, absl::Span<llvm::Value* const> operands,
     absl::Span<const PrimitiveType> input_type, PrimitiveType output_type,
-    const llvm::AttrBuilder& attributes, llvm::IRBuilder<>* b,
-    absl::string_view name = "");
+    absl::Span<const llvm::Attribute::AttrKind> attributes,
+    llvm::IRBuilder<>* b, absl::string_view name = "");
 
 // Emits a call to the specified target intrinsic with the given operands.
 // Overloaded intrinsics (for example, "minnum") must include a type

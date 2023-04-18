@@ -139,18 +139,18 @@ class GatherOp : public OpKernel {
     int64_t inner_size = 1;
 
     for (int i = 0; i < batch_dims; ++i) {
-      OP_REQUIRES_OK(c, result_shape.AddDimWithStatus(params.dim_size(i)));
+      result_shape.AddDim(params.dim_size(i));
       batch_size *= params.dim_size(i);
     }
     for (int i = batch_dims; i < axis; ++i) {
-      OP_REQUIRES_OK(c, result_shape.AddDimWithStatus(params.dim_size(i)));
+      result_shape.AddDim(params.dim_size(i));
       outer_size *= params.dim_size(i);
     }
     for (int i = batch_dims; i < indices.dims(); ++i) {
-      OP_REQUIRES_OK(c, result_shape.AddDimWithStatus(indices.dim_size(i)));
+      result_shape.AddDim(indices.dim_size(i));
     }
     for (int i = axis + 1; i < params.dims(); ++i) {
-      OP_REQUIRES_OK(c, result_shape.AddDimWithStatus(params.dim_size(i)));
+      result_shape.AddDim(params.dim_size(i));
       inner_size *= params.dim_size(i);
     }
 

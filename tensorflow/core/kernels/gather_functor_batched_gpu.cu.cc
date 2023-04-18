@@ -18,7 +18,6 @@ limitations under the License.
 #define EIGEN_USE_GPU
 
 #include "tensorflow/core/kernels/gather_functor_batched_gpu.cu.h"
-
 #include "tensorflow/core/framework/register_types.h"
 
 namespace tensorflow {

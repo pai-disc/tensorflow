@@ -574,8 +574,7 @@ class EncodeProtoOp : public OpKernel {
     }
 
     TensorShape expected_sizes_shape = common_prefix;
-    OP_REQUIRES_OK(ctx,
-                   expected_sizes_shape.AddDimWithStatus(field_descs_.size()));
+    expected_sizes_shape.AddDim(field_descs_.size());
 
     OP_REQUIRES(ctx, sizes_tensor->shape() == expected_sizes_shape,
                 errors::InvalidArgument(

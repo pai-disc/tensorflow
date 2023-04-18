@@ -15,10 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/service/gpu/nvptx_compiler.h"
 
-#include <memory>
-
-#include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/buffer_assignment.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/hlo_parser.h"
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
@@ -27,15 +25,7 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
-class NVPTXCompilerTest : public HloTestBase {
- public:
-  StatusOr<std::unique_ptr<BufferAssignment>> AssignBuffers(HloModule* module) {
-    Backend& test_backend = backend();
-    NVPTXCompiler compiler;
-    return compiler.AssignBuffers(module,
-                                  test_backend.default_stream_executor());
-  }
-};
+using NVPTXCompilerTest = HloTestBase;
 
 TEST_F(NVPTXCompilerTest, AllReducePerformedInplace) {
   const absl::string_view hlo_string = R"(
@@ -56,7 +46,9 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  TF_ASSERT_OK_AND_ASSIGN(auto buffer_assignment, AssignBuffers(module.get()));
+  NVPTXCompiler compiler;
+  TF_ASSERT_OK_AND_ASSIGN(auto buffer_assignment,
+                          compiler.AssignBuffers(module.get()));
 
   HloInstruction* all_reduce = module->entry_computation()->root_instruction();
   EXPECT_TRUE(buffer_assignment->SharesTopLevelSlice(all_reduce,
@@ -84,7 +76,9 @@ ENTRY entry {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
                           ParseAndReturnVerifiedModule(hlo_string));
 
-  TF_ASSERT_OK_AND_ASSIGN(auto buffer_assignment, AssignBuffers(module.get()));
+  NVPTXCompiler compiler;
+  TF_ASSERT_OK_AND_ASSIGN(auto buffer_assignment,
+                          compiler.AssignBuffers(module.get()));
 
   HloInstruction* all_reduce = module->entry_computation()->root_instruction();
   EXPECT_TRUE(buffer_assignment->SharesSliceAtIndex(

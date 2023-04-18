@@ -318,7 +318,7 @@ void PickSubgraphsPass::BuildSubgraphs(
     // Build the subgraph.
     Subgraph subgraph;
     subgraph.call = call_op;
-    auto impl_iter = func_impls.find(*interface_name);
+    auto impl_iter = func_impls.find(interface_name.getValue());
     if (impl_iter == func_impls.end()) {
       call_op.emitError(
           "we cannot find corresponding implementation for this call op");
@@ -331,7 +331,8 @@ void PickSubgraphsPass::BuildSubgraphs(
         impl.emitError("we cannot find inference device type for this func");
         signalPassFailure();
       }
-      subgraph.available_choices.emplace(*inference_device_type, impl);
+      subgraph.available_choices.emplace(inference_device_type.getValue(),
+                                         impl);
     }
 
     // Insert in the subgraphs.
@@ -351,10 +352,11 @@ PickSubgraphsPass::CollectSubgraphFuncs(ModuleOp module) {
   for (auto func : module.getOps<func::FuncOp>()) {
     auto interface_name = GetInterFaceName(func);
     if (interface_name.has_value()) {
-      auto impls_iter = func_impls.find(*interface_name);
+      auto impls_iter = func_impls.find(interface_name.getValue());
       if (impls_iter == func_impls.end())
         impls_iter =
-            func_impls.emplace(*interface_name, std::vector<func::FuncOp>())
+            func_impls
+                .emplace(interface_name.getValue(), std::vector<func::FuncOp>())
                 .first;
       impls_iter->second.push_back(func);
     }
@@ -422,11 +424,12 @@ void PickSubgraphsPass::RewireSubgraphs(
     const InferenceDeviceType& preferred_inference_device_type = kv.second;
 
     // We need to rewire the call.
-    std::string interface_name = *GetInterFaceName(call);
+    std::string interface_name = GetInterFaceName(call).getValue();
     for (auto impl : collected_impl_funcs.find(interface_name)->second) {
       const auto& impl_inference_device_type =
           GetInferenceDeviceTypeForOp(impl);
-      if (*impl_inference_device_type == preferred_inference_device_type) {
+      if (impl_inference_device_type.getValue() ==
+          preferred_inference_device_type) {
         if (call.getCallee() != impl.getName()) {
           // We need to rebuild the call op. :(
           builder->setInsertionPoint(call);

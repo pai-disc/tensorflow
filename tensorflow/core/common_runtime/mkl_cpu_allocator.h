@@ -316,7 +316,7 @@ class MklCPUAllocator : public Allocator {
 
   // Size in bytes that defines the upper-bound for "small" allocations.
   // Any allocation below this threshold is "small" allocation.
-  static constexpr const size_t kSmallAllocationsThreshold = 262144;
+  static constexpr const size_t kSmallAllocationsThreshold = 4096;
 
   // Prevent copying and assignment
   TF_DISALLOW_COPY_AND_ASSIGN(MklCPUAllocator);

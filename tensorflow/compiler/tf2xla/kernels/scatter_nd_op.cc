@@ -119,10 +119,9 @@ class ScatterNdOp : public XlaOpKernel {
     auto updates = context->Input(1);
     auto combine =
         context->input_xla_type(1) == xla::PRED ? CombineBool : CombineNum;
-    auto result = XlaScatter(buffer, updates, indices,
-                             /*indices_are_vectors=*/true,
-                             /*indices_are_sorted=*/false,
-                             /*combiner=*/combine, builder);
+    auto result =
+        XlaScatter(buffer, updates, indices,
+                   /*indices_are_vectors=*/true, /*combiner=*/combine, builder);
     OP_REQUIRES_OK(context, result.status());
     context->SetOutput(0, result.value());
   }
@@ -174,8 +173,7 @@ void CompileTensorScatter(
   auto indices = context->Input(1);
   auto updates = context->Input(2);
   auto result = XlaScatter(buffer, updates, indices,
-                           /*indices_are_vectors=*/true,
-                           /*indices_are_sorted=*/false, combiner, builder);
+                           /*indices_are_vectors=*/true, combiner, builder);
   OP_REQUIRES_OK(context, result.status());
   context->SetOutput(0, result.value());
 }

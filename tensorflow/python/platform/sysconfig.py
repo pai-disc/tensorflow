@@ -55,19 +55,10 @@ def get_lib():
 
 @tf_export('sysconfig.get_compile_flags')
 def get_compile_flags():
-  """Returns the compilation flags for compiling with TensorFlow.
-
-  The returned list of arguments can be passed to the compiler for compiling
-  against TensorFlow headers. The result is platform dependent.
-
-  For example, on a typical Linux system with Python 3.7 the following command
-  prints `['-I/usr/local/lib/python3.7/dist-packages/tensorflow/include',
-  '-D_GLIBCXX_USE_CXX11_ABI=1', '-DEIGEN_MAX_ALIGN_BYTES=64']`
-
-  >>> print(tf.sysconfig.get_compile_flags())
+  """Get the compilation flags for custom operators.
 
   Returns:
-    A list of strings for the compiler flags.
+    The compilation flags.
   """
   flags = []
   flags.append('-I%s' % get_include())
@@ -90,19 +81,10 @@ def get_compile_flags():
 
 @tf_export('sysconfig.get_link_flags')
 def get_link_flags():
-  """Returns the linker flags for linking with TensorFlow.
-
-  The returned list of arguments can be passed to the linker for linking against
-  TensorFlow. The result is platform dependent.
-
-  For example, on a typical Linux system with Python 3.7 the following command
-  prints `['-L/usr/local/lib/python3.7/dist-packages/tensorflow',
-  '-l:libtensorflow_framework.so.2']`
-
-  >>> print(tf.sysconfig.get_link_flags())
+  """Get the link flags for custom operators.
 
   Returns:
-    A list of strings for the linker flags.
+    The link flags.
   """
   is_mac = _platform.system() == 'Darwin'
   ver = _VERSION.split('.')[0]

@@ -34,8 +34,7 @@ from tensorflow.python.ops import resource_variable_ops
 def function_def_to_graph(fdef,
                           structured_input_signature=None,
                           structured_outputs=None,
-                          input_shapes=None,
-                          propagate_device_spec=False):
+                          input_shapes=None):
   """Converts a FunctionDef to a FuncGraph (sub-class Graph).
 
   The returned FuncGraph's `name`, `inputs` and `outputs` fields will be set.
@@ -57,8 +56,6 @@ def function_def_to_graph(fdef,
       specified, its length must match length of `fdef.signature.input_arg`. If
       a shape is None, the corresponding input placeholder will have unknown
       shape.
-    propagate_device_spec: Optional. Whether to propagate assigned device
-      information when constructing a new Graph from a FunctionDef.
 
   Returns:
     A FuncGraph.
@@ -87,8 +84,7 @@ def function_def_to_graph(fdef,
 
   with func_graph.as_default():
     # Add all function nodes to the graph.
-    importer.import_graph_def_for_function(
-        graph_def, name="", propagate_device_spec=propagate_device_spec)
+    importer.import_graph_def_for_function(graph_def, name="")
 
     # Initialize fields specific to FuncGraph.
 

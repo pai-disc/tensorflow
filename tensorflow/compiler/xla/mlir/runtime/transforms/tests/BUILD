@@ -1,14 +1,11 @@
-load("//tensorflow/tsl:tsl.default.bzl", "filegroup")
+load("//tensorflow:tensorflow.default.bzl", "filegroup")
 load("//tensorflow/compiler/mlir:glob_lit_test.bzl", "glob_lit_tests")
 
-package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    licenses = ["notice"],
-)
+package(licenses = ["notice"])
 
 glob_lit_tests(
     data = [":test_utilities"],
-    driver = "//tensorflow/compiler/xla:run_lit.sh",
+    driver = "//tensorflow/compiler/mlir:run_lit.sh",
     test_file_exts = ["mlir"],
 )
 
@@ -41,8 +38,6 @@ cc_library(
         "@llvm-project//mlir:FuncToLLVM",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:LLVMToLLVMIRTranslation",
-        "@llvm-project//mlir:MemRefDialect",
-        "@llvm-project//mlir:MemRefToLLVM",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:ReconcileUnrealizedCasts",
         "@llvm-project//mlir:SCFDialect",

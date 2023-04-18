@@ -26,7 +26,6 @@ limitations under the License.
 #include "tensorflow/core/platform/errors.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/macros.h"
-#include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/statusor.h"
 
 namespace tensorflow {
@@ -263,7 +262,7 @@ class TensorShapeBase : public TensorShapeRep {
   /// Same as `RemoveLastDims` but returns a `Status`.
   /// Use if unsure is `0 <= n <= dims()`, to prevent `CHECK`-crashes.
   Status RemoveLastDimsWithStatus(int64_t n) {
-    if (TF_PREDICT_FALSE(n > dims())) {
+    if (TF_PREDICT_FALSE(n < dims())) {
       return errors::Internal("Expected dimension index to be at most ", dims(),
                               " got ", n);
     }
@@ -666,7 +665,6 @@ Status TensorShape::AsEigenDSizesWithStatus(
                             " dimensions");
   }
   *out = AsEigenDSizesCopy<NDIMS, IndexType>();
-  return OkStatus();
 }
 
 template <int NDIMS, typename IndexType>
@@ -679,12 +677,11 @@ template <int NDIMS, typename IndexType>
 Status TensorShape::AsEigenDSizesWithPaddingWithStatus(
     Eigen::DSizes<IndexType, NDIMS>* out) const {
   if (TF_PREDICT_FALSE(NDIMS < dims())) {
-    return errors::Internal("Asking for tensor of at most ", NDIMS,
+    return errors::Internal("Asking for tensor of at least ", NDIMS,
                             " dimensions from a tensor of ", dims(),
                             " dimensions");
   }
   *out = AsEigenDSizesCopyAndPad<NDIMS, IndexType>();
-  return OkStatus();
 }
 
 // ----------------------------------------------------------------------------

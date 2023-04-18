@@ -44,11 +44,9 @@ Traceback::Traceback() {
     frames_.emplace_back(py_frame->f_code, py_frame->f_lasti);
   }
 #else   // PY_VERSION_HEX < 0x030b0000
-  PyFrameObject* next;
   for (PyFrameObject* py_frame = PyThreadState_GetFrame(thread_state);
-       py_frame != nullptr; py_frame = next) {
+       py_frame != nullptr; py_frame = PyFrame_GetBack(py_frame)) {
     frames_.emplace_back(PyFrame_GetCode(py_frame), PyFrame_GetLasti(py_frame));
-    next = PyFrame_GetBack(py_frame);
     Py_XDECREF(py_frame);
   }
 #endif  // PY_VERSION_HEX < 0x030b0000
@@ -91,7 +89,7 @@ std::vector<Traceback::Frame> Traceback::Frames() const {
         std::string(py::reinterpret_borrow<py::str>(frame.first->co_filename)),
         std::string(py::reinterpret_borrow<py::str>(frame.first->co_name)),
         frame.first->co_firstlineno,
-        PyCode_Addr2Line(frame.first, frame.second * kLastiWordBytes)});
+        PyCode_Addr2Line(frame.first, frame.second)});
   }
   return frames;
 }
@@ -127,8 +125,7 @@ py::object Traceback::AsPythonTraceback() const {
         py::reinterpret_steal<py::object>(
             reinterpret_cast<PyObject*>(py_frame)),
         /*tb_lasti=*/frame.second,
-        /*tb_lineno=*/
-        PyCode_Addr2Line(frame.first, frame.second * kLastiWordBytes));
+        /*tb_lineno=*/PyCode_Addr2Line(frame.first, frame.second));
   }
   return traceback;
 }
@@ -191,7 +188,7 @@ void BuildTracebackSubmodule(py::module& m) {
           throw xla::XlaRuntimeError("code argument must be a code object");
         }
         return PyCode_Addr2Line(reinterpret_cast<PyCodeObject*>(code.ptr()),
-                                lasti * kLastiWordBytes);
+                                lasti);
       },
       "Python wrapper around the Python C API function PyCode_Addr2Line");
 

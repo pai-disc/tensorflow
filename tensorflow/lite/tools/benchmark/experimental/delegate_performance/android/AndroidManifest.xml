@@ -16,7 +16,6 @@
 -->
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     package="org.tensorflow.lite.benchmark.delegateperformance">
 
     <!-- Necessary for loading custom models from disk and writing result to disk. -->
@@ -30,10 +29,7 @@
         android:minSdkVersion="23"
         android:targetSdkVersion="33" />
 
-    <application android:debuggable="true">
-        <!-- DPB needs to enable debugging to allow developers to copy their stable delegate
-        libraries into the application's data directory, to enable testing of such stable delegate
-        libraries. -->
+    <application>
         <!-- This Activity runs Delegate Performance Benchmark for latency. -->
         <activity
             android:name=".BenchmarkLatencyActivity"

@@ -59,7 +59,9 @@ class RunHandlerThreadWorkQueueTest : public ::testing::Test {
                                           std::move(work_queue));
     RequestContextBuilder req_ctx_builder{host_.get(),
                                           /*resource_context=*/nullptr};
-    auto queue = pool_->InitializeRequest(/*request_id=*/100);
+    tensorflow::thread::ThreadPoolInterface* intra_op_threadpool = nullptr;
+    auto queue =
+        pool_->InitializeRequest(&req_ctx_builder, &intra_op_threadpool);
     TF_CHECK_OK(queue.status());
     queue_ = std::move(*queue);
     auto req_ctx = std::move(req_ctx_builder).build();
@@ -179,9 +181,10 @@ TEST_F(RunHandlerThreadWorkQueueTest, NoHandlerReturnsError) {
   options.init_timeout_ms = 1;
   options.max_concurrent_handler = 0;
   auto queue = std::make_unique<RunHandlerThreadWorkQueue>(options);
+  tensorflow::thread::ThreadPoolInterface* interface;
   tfrt::RequestContextBuilder ctx_builder(nullptr, nullptr);
   EXPECT_THAT(
-      queue->InitializeRequest(/*request_id=*/100),
+      queue->InitializeRequest(&ctx_builder, &interface),
       tensorflow::testing::StatusIs(
           tensorflow::error::INTERNAL,
           "Could not obtain RunHandler for request after waiting for 1 ms."));

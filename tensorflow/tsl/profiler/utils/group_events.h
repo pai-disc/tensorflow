@@ -19,7 +19,6 @@ limitations under the License.
 #include <deque>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -74,7 +73,7 @@ class EventNode {
     child->parents_.push_back(this);
   }
 
-  std::optional<int64_t> GetGroupId() const { return group_id_; }
+  absl::optional<int64_t> GetGroupId() const { return group_id_; }
 
   std::string GetGroupName() const;
 
@@ -85,7 +84,7 @@ class EventNode {
 
   const XEventVisitor& GetEventVisitor() const { return visitor_; }
 
-  std::optional<XStatVisitor> GetContextStat(int64_t stat_type) const;
+  absl::optional<XStatVisitor> GetContextStat(int64_t stat_type) const;
 
   void AddStepName(absl::string_view step_name);
 
@@ -117,7 +116,7 @@ class EventNode {
   XEventVisitor visitor_;
   std::vector<EventNode*> parents_;
   std::vector<EventNode*> children_;
-  std::optional<int64_t> group_id_;
+  absl::optional<int64_t> group_id_;
   // Root event level.
   // By default root_level_ is set to 0, which means it is not a root event.
   // Events with root_level_ greater than 0 are considered as root events.
@@ -204,6 +203,10 @@ class EventForest {
   // Processes the TF loops and registers the first TF executor event of each
   // iteraton to `tf_loop_root_events_`.
   void ProcessTensorFlowLoop();
+
+  // Processes the worker thread by connecting a FunctionRun with the following
+  // eager ops (e.g., for Keras callback).
+  void ProcessWorker();
 
   EventNodeMap event_node_map_;
   std::vector<XPlaneVisitor> visitors_;

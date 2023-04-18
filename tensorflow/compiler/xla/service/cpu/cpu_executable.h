@@ -25,10 +25,7 @@ limitations under the License.
 #include <vector>
 
 #include "absl/types/span.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_module.h"
 #include "tensorflow/compiler/xla/runtime/executable.h"
-#include "tensorflow/compiler/xla/runtime/ffi.h"
 #include "tensorflow/compiler/xla/runtime/jit_executable.h"
 #include "tensorflow/compiler/xla/service/buffer_assignment.h"
 #include "tensorflow/compiler/xla/service/cpu/simple_orc_jit.h"
@@ -37,6 +34,8 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/executable.h"
 #include "tensorflow/compiler/xla/service/hlo_dataflow_analysis.h"
 #include "tensorflow/compiler/xla/service/hlo_execution_profile.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/shaped_buffer.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/stream_executor/device_memory_allocator.h"
@@ -59,31 +58,20 @@ class BufferDesc {
 };
 
 class XlaRuntimeCpuExecutable {
-  using FfiModulesState = ::xla::runtime::ffi::FfiModulesState;
-
  public:
   explicit XlaRuntimeCpuExecutable(
       std::unique_ptr<runtime::JitExecutable> jit_executable,
-      const XlaFrameworkMapping& xla_framework_mapping,
-      FfiModulesState ffi_modules_state)
+      const XlaFrameworkMapping& xla_framework_mapping)
       : executable_(std::move(jit_executable)),
-        xla_framework_mapping_(xla_framework_mapping),
-        ffi_modules_state_(std::move(ffi_modules_state)) {
-    runtime::ffi::ExportFfiModules(dynamic_custom_calls_);
-  }
+        xla_framework_mapping_(xla_framework_mapping) {}
 
   explicit XlaRuntimeCpuExecutable(
       std::unique_ptr<runtime::Executable> executable,
-      const XlaFrameworkMapping& xla_framework_mapping,
-      FfiModulesState ffi_modules_state)
+      const XlaFrameworkMapping& xla_framework_mapping)
       : executable_(std::move(executable)),
-        xla_framework_mapping_(xla_framework_mapping),
-        ffi_modules_state_(std::move(ffi_modules_state)) {
-    runtime::ffi::ExportFfiModules(dynamic_custom_calls_);
-  }
+        xla_framework_mapping_(xla_framework_mapping) {}
 
-  Status Execute(const std::vector<BufferDesc>& descriptor_table,
-                 const ExecutableRunOptions* run_options);
+  Status Execute(const std::vector<BufferDesc>& descriptor_table);
 
   runtime::Executable& GetExecutable() {
     if (std::holds_alternative<std::unique_ptr<runtime::JitExecutable>>(
@@ -135,12 +123,6 @@ class XlaRuntimeCpuExecutable {
       executable_;
 
   XlaFrameworkMapping xla_framework_mapping_;
-
-  // Keeps an executable state for all registered FFI modules.
-  FfiModulesState ffi_modules_state_;
-
-  // Dynamic custom calls exported from XLA runtime modules (and FFI modules).
-  runtime::DynamicCustomCallRegistry dynamic_custom_calls_;
 };
 
 // CPU-targeting implementation of the XLA Executable interface.
@@ -167,9 +149,8 @@ class CpuExecutable : public Executable {
 
   bool IsXlaRuntime() const { return xla_runtime_executable_ != nullptr; }
 
-  Status ExecuteXlaRuntime(const std::vector<BufferDesc>& descriptor_table,
-                           const ExecutableRunOptions* run_options = nullptr) {
-    return xla_runtime_executable_->Execute(descriptor_table, run_options);
+  Status ExecuteXlaRuntime(const std::vector<BufferDesc>& descriptor_table) {
+    return xla_runtime_executable_->Execute(descriptor_table);
   }
 
   StatusOr<ExecutionOutput> ExecuteAsyncOnStream(

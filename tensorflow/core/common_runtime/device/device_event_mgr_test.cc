@@ -15,13 +15,12 @@ limitations under the License.
 
 #if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 
-#include "tensorflow/core/common_runtime/device/device_event_mgr.h"
-
 #include <atomic>
 
-#include "tensorflow/compiler/xla/stream_executor/gpu/gpu_init.h"
+#include "tensorflow/core/common_runtime/device/device_event_mgr.h"
 #include "tensorflow/core/common_runtime/dma_helper.h"
 #include "tensorflow/core/common_runtime/gpu/gpu_device.h"
+#include "tensorflow/core/common_runtime/gpu/gpu_init.h"
 #include "tensorflow/core/common_runtime/gpu/gpu_process_state.h"
 #include "tensorflow/core/framework/fake_input.h"
 #include "tensorflow/core/framework/node_def.pb.h"
@@ -34,7 +33,6 @@ limitations under the License.
 #include "tensorflow/core/platform/test_benchmark.h"
 #include "tensorflow/core/protobuf/config.pb.h"
 #include "tensorflow/core/public/version.h"
-#include "tensorflow/tsl/framework/device_id.h"
 
 namespace tensorflow {
 
@@ -57,11 +55,7 @@ class TEST_EventMgrHelper {
 
   size_t queue_size() {
     mutex_lock l(em_->mu_);
-    size_t n = 0;
-    for (const auto& [stream, events_and_callbacks] : em_->callbacks_) {
-      n += events_and_callbacks.size();
-    }
-    return n;
+    return em_->used_events_.size();
   }
 
   size_t free_size() {
@@ -71,8 +65,15 @@ class TEST_EventMgrHelper {
 
   void PollEvents() {
     while (queue_size() > 0) {
-      mutex_lock l(em_->mu_);
-      em_->PollEvents();
+      // For ordinary tensor frees, this function
+      // should synchronously harvest all complete
+      // events and execute the corresponding memory frees.
+      EventMgr::ToFreeVector to_free;
+      {
+        mutex_lock l(em_->mu_);
+        em_->PollEvents(true, &to_free);
+      }
+      em_->FreeMemory(to_free);
     }
   }
 
@@ -108,7 +109,7 @@ class TestTensorBuffer : public TensorBuffer {
 namespace {
 
 TEST(EventMgr, Empty) {
-  auto stream_exec = se::GPUMachineManager()->ExecutorForDevice(0).value();
+  auto stream_exec = GPUMachineManager()->ExecutorForDevice(0).value();
   TEST_EventMgr em(stream_exec, GPUOptions());
   TEST_EventMgrHelper th(&em);
   EXPECT_EQ(0, th.queue_size());
@@ -117,7 +118,7 @@ TEST(EventMgr, Empty) {
 
 // Tests that WarnIfInCallback() triggers correctly.
 TEST(EventMgr, WarnIfInCallback) {
-  auto stream_exec = se::GPUMachineManager()->ExecutorForDevice(0).value();
+  auto stream_exec = GPUMachineManager()->ExecutorForDevice(0).value();
   TEST_EventMgr em(stream_exec, GPUOptions());
   TEST_EventMgrHelper th(&em);
   std::unique_ptr<se::Stream> stream(new se::Stream(stream_exec));
@@ -148,9 +149,8 @@ class GPUDeviceTestHelper {
         DeviceFactory::NewDevice(DEVICE_GPU, sops, "/job:a/replica:0/task:0");
     gpu_.reset(reinterpret_cast<BaseGPUDevice*>(device_.release()));
     gpu_allocator_ = GPUProcessState::singleton()->GetGPUAllocator(
-        GPUOptions(), tsl::TfDeviceId(0), memory_limit, /*peer_gpu_ids=*/{});
-    host_allocator_ = GPUProcessState::singleton()->GetGpuHostAllocator(
-        /*options=*/{}, /*numa_node=*/0);
+        GPUOptions(), TfDeviceId(0), memory_limit, /*peer_gpu_ids=*/{});
+    host_allocator_ = GPUProcessState::singleton()->GetGpuHostAllocator(0);
   }
 
   BaseGPUDevice* gpu() { return gpu_.get(); }
@@ -436,7 +436,7 @@ static void BM_no_ops(::testing::benchmark::State& state) {
   const int threads = state.range(0);
   const int iters = state.max_iterations;
 
-  auto stream_exec = se::GPUMachineManager()->ExecutorForDevice(0).value();
+  auto stream_exec = GPUMachineManager()->ExecutorForDevice(0).value();
   std::unique_ptr<se::Stream> stream(new se::Stream(stream_exec));
   CHECK(stream);
   stream->Init();

@@ -25,7 +25,8 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_saved_model.h"
 
 namespace mlir {
-namespace odml {
+namespace TFL {
+namespace mhlo {
 
 class RenameEntrypointToMainPass
     : public PassWrapper<RenameEntrypointToMainPass, OperationPass<ModuleOp>> {
@@ -85,5 +86,6 @@ std::unique_ptr<Pass> CreateRenameEntrypointToMainPass() {
 
 static PassRegistration<RenameEntrypointToMainPass> pass;
 
-}  // namespace odml
+}  // namespace mhlo
+}  // namespace TFL
 }  // namespace mlir

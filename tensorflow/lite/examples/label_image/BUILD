@@ -4,7 +4,6 @@
 load("//tensorflow/lite:build_def.bzl", "tflite_linkopts")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
@@ -54,7 +53,6 @@ cc_library(
         "log.h",
     ],
     deps = [
-        "//tensorflow/core/platform:tstring",
         "//tensorflow/lite:builtin_op_data",
         "//tensorflow/lite:framework",
         "//tensorflow/lite:string",

@@ -17,8 +17,6 @@ limitations under the License.
 
 #define EIGEN_USE_GPU
 
-#include "tensorflow/core/kernels/bias_op_gpu.h"
-
 #include <algorithm>
 
 #include "tensorflow/core/framework/register_types.h"
@@ -26,6 +24,7 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/framework/tensor_types.h"
 #include "tensorflow/core/kernels/bias_op.h"
+#include "tensorflow/core/kernels/bias_op_gpu.h"
 #include "tensorflow/core/kernels/reduction_gpu_kernels.cu.h"
 #include "tensorflow/core/kernels/reduction_ops_common.h"
 #include "tensorflow/core/platform/types.h"
@@ -46,11 +45,6 @@ struct AccumulatorType {
 
 template <>
 struct AccumulatorType<Eigen::half> {
-  typedef float type;
-};
-
-template <>
-struct AccumulatorType<Eigen::bfloat16> {
   typedef float type;
 };
 

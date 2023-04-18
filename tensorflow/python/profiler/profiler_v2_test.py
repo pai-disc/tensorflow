@@ -59,10 +59,12 @@ class ProfilerTest(test_util.TensorFlowTestCase):
 
     profiler.stop()
     file_list = gfile.ListDirectory(logdir)
-    self.assertEqual(len(file_list), 1)
+    self.assertEqual(len(file_list), 2)
     for file_name in gfile.ListDirectory(logdir):
       if gfile.IsDirectory(os.path.join(logdir, file_name)):
         self.assertEqual(file_name, 'plugins')
+      else:
+        self.assertTrue(file_name.endswith('.profile-empty'))
     profile_dir = os.path.join(logdir, 'plugins', 'profile')
     run = gfile.ListDirectory(profile_dir)[0]
     hostname = socket.gethostname()
@@ -82,7 +84,7 @@ class ProfilerTest(test_util.TensorFlowTestCase):
 
     profiler.stop()
     file_list = gfile.ListDirectory(logdir)
-    self.assertEqual(len(file_list), 1)
+    self.assertEqual(len(file_list), 2)
 
   def test_context_manager_with_options(self):
     logdir = self.get_temp_dir()
@@ -96,7 +98,7 @@ class ProfilerTest(test_util.TensorFlowTestCase):
       self.assertAllEqual(15, product)
 
     file_list = gfile.ListDirectory(logdir)
-    self.assertEqual(len(file_list), 1)
+    self.assertEqual(len(file_list), 2)
 
 
 if __name__ == '__main__':

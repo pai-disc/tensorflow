@@ -421,8 +421,7 @@ void GraphMgr::ExecuteAsync(
     const NamedTensors& in, WorkerSession* session,
     StepStatsCollector* collector, MutableRunGraphResponseWrapper* response,
     CancellationManager* cancellation_manager,
-    tsl::CoordinationServiceAgent* coordination_service_agent,
-    StatusCallback done) {
+    CoordinationServiceAgent* coordination_service_agent, StatusCallback done) {
   const uint64 start_time_usecs = Env::Default()->NowMicros();
   profiler::TraceMeProducer activity(
       // To TraceMeConsumers in ExecutorState::Process/Finish or RunGraphDone.
@@ -519,8 +518,7 @@ void GraphMgr::StartParallelExecutors(
     CollectiveExecutor::Handle* ce_handle, StepStatsCollector* collector,
     CostGraphDef* cost_graph, CancellationManager* cancellation_manager,
     WorkerSession* session, int64_t start_time_usecs,
-    tsl::CoordinationServiceAgent* coordination_service_agent,
-    StatusCallback done) {
+    CoordinationServiceAgent* coordination_service_agent, StatusCallback done) {
   const int num_units = item->units.size();
   CHECK_GE(num_units, 1);
   ScopedStepContainer* step_container = new ScopedStepContainer(

@@ -23,10 +23,11 @@ limitations under the License.
 #include "tensorflow/compiler/xla/stream_executor/cuda/cuda_platform_id.h"
 #include "tensorflow/compiler/xla/stream_executor/cuda/cuda_stream.h"
 #include "tensorflow/compiler/xla/stream_executor/device_memory.h"
-#include "tensorflow/compiler/xla/stream_executor/platform/initialize.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/env.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/initialize.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/status.h"
 #include "tensorflow/compiler/xla/stream_executor/platform/logging.h"
 #include "tensorflow/compiler/xla/stream_executor/rng.h"
-#include "tensorflow/tsl/platform/status.h"
 // clang-format off
 #include "third_party/gpus/cuda/include/curand.h"
 // clang-format on
@@ -230,7 +231,7 @@ bool GpuRng::SetSeed(Stream* stream, const uint8_t* seed, uint64_t seed_bytes) {
 }  // namespace gpu
 
 void initialize_curand() {
-  tsl::Status status =
+  port::Status status =
       PluginRegistry::Instance()->RegisterFactory<PluginRegistry::RngFactory>(
           cuda::kCudaPlatformId, gpu::kGpuRandPlugin, "cuRAND",
           [](internal::StreamExecutorInterface* parent) -> rng::RngSupport* {

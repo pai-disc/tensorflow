@@ -17,13 +17,10 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdint>
-#include <map>
-#include <memory>
-#include <string>
 
 #include "absl/strings/str_cat.h"
-#include "tensorflow/tsl/lib/math/math_util.h"
-#include "tensorflow/tsl/platform/numbers.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/human_readable.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/mathutil.h"
 
 namespace stream_executor {
 
@@ -37,7 +34,6 @@ DeviceDescription::DeviceDescription()
       runtime_version_(kUndefinedString),
       pci_bus_id_(kUndefinedString),
       name_(kUndefinedString),
-      model_str_(kUndefinedString),
       thread_dim_limit_(kUninitializedUint64, kUninitializedUint64,
                         kUninitializedUint64),
       block_dim_limit_(kUninitializedUint64, kUninitializedUint64,
@@ -68,7 +64,6 @@ std::unique_ptr<std::map<std::string, std::string>> DeviceDescription::ToMap()
   result["Runtime Version"] = runtime_version();
   result["PCI bus ID"] = pci_bus_id_;
   result["Device Name"] = name_;
-  result["Device Description"] = model_str_;
 
   const ThreadDim &thread_dim = thread_dim_limit();
   result["ThreadDim Limit"] =
@@ -84,14 +79,14 @@ std::unique_ptr<std::map<std::string, std::string>> DeviceDescription::ToMap()
 
   result["Device Address Bits"] = absl::StrCat(device_address_bits());
   result["Device Memory Size"] =
-      tsl::strings::HumanReadableNumBytes(device_memory_size());
+      port::HumanReadableNumBytes::ToString(device_memory_size());
   result["Memory Bandwidth"] = absl::StrCat(
-      tsl::strings::HumanReadableNumBytes(memory_bandwidth_), "/s");
+      port::HumanReadableNumBytes::ToString(memory_bandwidth_), "/s");
 
   result["Shared Memory Per Core"] =
-      tsl::strings::HumanReadableNumBytes(shared_memory_per_core_);
+      port::HumanReadableNumBytes::ToString(shared_memory_per_core_);
   result["Shared Memory Per Block"] =
-      tsl::strings::HumanReadableNumBytes(shared_memory_per_block_);
+      port::HumanReadableNumBytes::ToString(shared_memory_per_block_);
 
   result["Clock Rate GHz"] = absl::StrCat(clock_rate_ghz());
 
@@ -141,11 +136,15 @@ bool ThreadDimOk(const DeviceDescription &device_description,
   return ok;
 }
 
+uint64_t DivideCeil(uint64_t x, uint64_t y) {
+  return port::MathUtil::CeilOfRatio(x, y);
+}
+
 void CalculateDimensionality(const DeviceDescription &device_description,
                              int64_t element_count, int64_t *threads_per_block,
                              int64_t *block_count) {
   *threads_per_block = device_description.threads_per_block_limit();
-  *block_count = tsl::MathUtil::CeilOfRatio(element_count, *threads_per_block);
+  *block_count = port::MathUtil::CeilOfRatio(element_count, *threads_per_block);
   if (*block_count == 1) {
     CHECK_LE(element_count, *threads_per_block);
     *threads_per_block = element_count;

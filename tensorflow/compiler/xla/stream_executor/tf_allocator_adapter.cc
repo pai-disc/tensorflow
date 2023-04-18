@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/stream_executor/tf_allocator_adapter.h"
 
 #include "absl/synchronization/mutex.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/error.h"
 #include "tensorflow/compiler/xla/stream_executor/stream.h"
 #include "tensorflow/compiler/xla/stream_executor/stream_executor.h"
 #include "tensorflow/tsl/platform/errors.h"
@@ -33,7 +34,7 @@ TfAllocatorAdapter::TfAllocatorAdapter(tsl::Allocator *wrapped,
 
 TfAllocatorAdapter::~TfAllocatorAdapter() {}
 
-tsl::StatusOr<OwningDeviceMemory> TfAllocatorAdapter::Allocate(
+port::StatusOr<OwningDeviceMemory> TfAllocatorAdapter::Allocate(
     int device_ordinal, uint64_t size, bool retry_on_failure,
     int64_t memory_space) {
   CHECK_EQ(memory_space, 0);
@@ -51,13 +52,13 @@ tsl::StatusOr<OwningDeviceMemory> TfAllocatorAdapter::Allocate(
   return OwningDeviceMemory(DeviceMemoryBase(data, size), device_ordinal, this);
 }
 
-tsl::Status TfAllocatorAdapter::Deallocate(int device_ordinal,
-                                           DeviceMemoryBase mem) {
+port::Status TfAllocatorAdapter::Deallocate(int device_ordinal,
+                                            DeviceMemoryBase mem) {
   wrapped_->DeallocateRaw(mem.opaque());
   return ::tsl::OkStatus();
 }
 
-tsl::StatusOr<Stream *> TfAllocatorAdapter::GetStream(int device_ordinal) {
+port::StatusOr<Stream *> TfAllocatorAdapter::GetStream(int device_ordinal) {
   CHECK_EQ(stream_->parent()->device_ordinal(), device_ordinal);
   return stream_;
 }

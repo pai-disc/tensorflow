@@ -27,7 +27,6 @@ from tensorflow.python.eager import context
 from tensorflow.python.eager import monitoring
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import tensor_conversion_registry
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -1088,7 +1087,7 @@ for _name in _op_list:
   setattr(_LazyEvalTensor, _name, _make_op_method(_name))
 
 
-tensor_conversion_registry.register_tensor_conversion_function(
+ops.register_tensor_conversion_function(
     _LazyEvalTensor,
     lambda val, dtype, name, as_ref: val._as_tensor(dtype, name, as_ref)  # pylint: disable=protected-access
     )

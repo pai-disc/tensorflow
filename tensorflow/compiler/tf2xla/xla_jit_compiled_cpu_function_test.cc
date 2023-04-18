@@ -292,26 +292,27 @@ TEST(XlaJitCompiledCpuFunction, CanCompileWithAdditionalPlatform) {
 
     const string& Name() const override { return name_; }
 
-    tsl::StatusOr<std::unique_ptr<se::DeviceDescription>> DescriptionForDevice(
-        int ordinal) const override {
+    se::port::StatusOr<std::unique_ptr<se::DeviceDescription>>
+    DescriptionForDevice(int ordinal) const override {
       return std::unique_ptr<se::DeviceDescription>(nullptr);
     }
 
-    tsl::StatusOr<se::StreamExecutor*> ExecutorForDevice(int ordinal) override {
+    se::port::StatusOr<se::StreamExecutor*> ExecutorForDevice(
+        int ordinal) override {
       return nullptr;
     }
 
-    tsl::StatusOr<se::StreamExecutor*> ExecutorForDeviceWithPluginConfig(
+    se::port::StatusOr<se::StreamExecutor*> ExecutorForDeviceWithPluginConfig(
         int ordinal, const se::PluginConfig& config) override {
       return nullptr;
     }
 
-    tsl::StatusOr<se::StreamExecutor*> GetExecutor(
+    se::port::StatusOr<se::StreamExecutor*> GetExecutor(
         const se::StreamExecutorConfig& config) override {
       return nullptr;
     }
 
-    tsl::StatusOr<std::unique_ptr<se::StreamExecutor>> GetUncachedExecutor(
+    se::port::StatusOr<std::unique_ptr<se::StreamExecutor>> GetUncachedExecutor(
         const se::StreamExecutorConfig& config) override {
       return std::unique_ptr<se::StreamExecutor>(nullptr);
     }

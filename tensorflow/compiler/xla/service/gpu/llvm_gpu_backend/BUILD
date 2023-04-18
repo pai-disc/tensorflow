@@ -1,6 +1,6 @@
-load("//tensorflow/compiler/xla:xla.bzl", "xla_cc_test")
 load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
 load("//tensorflow:tensorflow.bzl",
+     "tf_cc_test",
      "tf_copts",
 )
 load(
@@ -23,10 +23,12 @@ package_group(
 cc_library(
     name = "llvm_gpu_backend",
     srcs = [
+        "dump_ir_pass.cc",
         "gpu_backend_lib.cc",
         "utils.cc",
     ],
     hdrs = [
+        "dump_ir_pass.h",
         "gpu_backend_lib.h",
         "utils.h",
     ],
@@ -47,7 +49,6 @@ cc_library(
         "@llvm-project//llvm:IRReader",
         "@llvm-project//llvm:MC",
         "@llvm-project//llvm:Linker",
-        "@llvm-project//llvm:Passes",
         "@llvm-project//llvm:NVPTXCodeGen",  # buildcleaner: keep
         "@llvm-project//llvm:ObjCARC",  # buildcleaner: keep
         "@llvm-project//llvm:Scalar",
@@ -58,7 +59,6 @@ cc_library(
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/compiler/xla:types",
         "//tensorflow/compiler/xla:util",
-        "//tensorflow/tsl/platform:cuda_libdevice_path",
         "//tensorflow/compiler/xla/service:hlo_module_config",
         "//tensorflow/compiler/xla/service/gpu:gpu_types",
         "//tensorflow/compiler/xla/service/llvm_ir:llvm_command_line_options",
@@ -73,7 +73,7 @@ cc_library(
     ]),
 )
 
-xla_cc_test(
+tf_cc_test(
     name = "utils_test",
     size = "small",
     srcs = ["utils_test.cc"],

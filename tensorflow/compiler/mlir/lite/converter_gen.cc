@@ -249,7 +249,7 @@ static void EmitGetBuiltinOpCode(const std::vector<Record *> &defs,
        << "    return tflite::BuiltinOperator_" << operator_name << ";\n";
   }
 
-  os << "  return std::nullopt;\n"
+  os << "  return llvm::None;\n"
         "}\n";
 }
 
@@ -335,7 +335,7 @@ static void EmitBuildOperator(const std::vector<Record *> &defs,
        << "fbb);\n";
   }
 
-  os << "  return std::nullopt;\n"
+  os << "  return llvm::None;\n"
         "}\n";
 }
 
@@ -499,7 +499,7 @@ static bool RuntimeVerifierWriterMain(raw_ostream &os, RecordKeeper &records) {
        << "::VerifyTflRuntimeConstraints(::mlir::Operation *op, bool "
           "emit_error_on_verify_fail) {\n";
     os << "  auto top = cast<" << op.getCppClassName() << ">(op); (void)top;\n";
-    verify_ctx.addSubst("_op", "top");
+    verify_ctx.withOp("top");
 
     for (int i = 0, e = op.getNumOperands(); i < e; ++i) {
       auto &value = op.getOperand(i);

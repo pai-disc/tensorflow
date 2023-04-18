@@ -25,7 +25,6 @@ limitations under the License.
 #include "flatbuffers/buffer.h"  // from @flatbuffers
 #include "flatbuffers/flatbuffer_builder.h"  // from @flatbuffers
 #include "tensorflow/lite/experimental/acceleration/configuration/configuration_generated.h"
-#include "tensorflow/lite/experimental/acceleration/mini_benchmark/benchmark_result_evaluator.h"
 #include "tensorflow/lite/experimental/acceleration/mini_benchmark/embedded_mobilenet_model.h"
 #include "tensorflow/lite/experimental/acceleration/mini_benchmark/embedded_mobilenet_validation_model.h"
 #include "tensorflow/lite/experimental/acceleration/mini_benchmark/mini_benchmark_test_helper.h"
@@ -37,20 +36,16 @@ namespace acceleration {
 namespace {
 
 using ::flatbuffers::FlatBufferBuilder;
-using ::flatbuffers::GetRoot;
-
-class CustomResultEvaluator : public AbstractBenchmarkResultEvaluator {
- public:
-  bool HasPassedAccuracyCheck(const BenchmarkResult& result) override {
-    return true;
-  }
-};
 
 class BlockingValidatorRunnerTest : public ::testing::Test {
  protected:
   void SetUp() override {
     MiniBenchmarkTestHelper helper;
     should_perform_test_ = helper.should_perform_test();
+
+    if (!should_perform_test_) {
+      return;
+    }
     options_.model_path = helper.DumpToTempFile(
         "mobilenet_quant_with_validation.tflite",
         g_tflite_acceleration_embedded_mobilenet_validation_model,
@@ -59,18 +54,13 @@ class BlockingValidatorRunnerTest : public ::testing::Test {
 
     options_.data_directory_path = ::testing::TempDir();
     options_.storage_path = ::testing::TempDir() + "/storage_path.fb";
+    (void)unlink(options_.storage_path.c_str());
     options_.per_test_timeout_ms = 5000;
 
     plain_model_path_ = MiniBenchmarkTestHelper::DumpToTempFile(
         "mobilenet_quant.tflite",
         g_tflite_acceleration_embedded_mobilenet_model,
         g_tflite_acceleration_embedded_mobilenet_model_len);
-  }
-
-  void TearDown() override {
-    if (should_perform_test_) {
-      ASSERT_EQ(unlink(options_.storage_path.c_str()), 0);
-    }
   }
 
   std::string plain_model_path_;
@@ -93,14 +83,12 @@ TEST_F(BlockingValidatorRunnerTest, SucceedWithEmbeddedValidation) {
   fbb.Finish(CreateTFLiteSettings(fbb));
 #endif  // __ANDROID__
 
-  std::vector<FlatBufferBuilder> results = runner.TriggerValidation(
+  std::vector<const BenchmarkEvent*> results = runner.TriggerValidation(
       {flatbuffers::GetRoot<TFLiteSettings>(fbb.GetBufferPointer())});
   EXPECT_THAT(results, testing::Not(testing::IsEmpty()));
   for (auto& result : results) {
-    const BenchmarkEvent* event =
-        GetRoot<BenchmarkEvent>(result.GetBufferPointer());
-    EXPECT_EQ(event->event_type(), BenchmarkEventType_END);
-    EXPECT_TRUE(event->result()->ok());
+    EXPECT_EQ(result->event_type(), BenchmarkEventType_END);
+    EXPECT_TRUE(result->result()->ok());
   }
 }
 
@@ -119,8 +107,6 @@ TEST_F(BlockingValidatorRunnerTest, SucceedWithFdModelCustomValidation) {
   options_.model_offset = 0;
   options_.custom_input_batch_size = 3;
   options_.custom_input_data = {std::vector<uint8_t>(3 * 224 * 224 * 3, 1)};
-  CustomResultEvaluator evaluator;
-  options_.benchmark_result_evaluator = &evaluator;
 
   BlockingValidatorRunner runner(options_);
   ASSERT_EQ(runner.Init(), kMinibenchmarkSuccess);
@@ -131,16 +117,13 @@ TEST_F(BlockingValidatorRunnerTest, SucceedWithFdModelCustomValidation) {
   fbb.Finish(CreateTFLiteSettings(fbb));
 #endif  // __ANDROID__
 
-  std::vector<FlatBufferBuilder> results = runner.TriggerValidation(
+  std::vector<const BenchmarkEvent*> results = runner.TriggerValidation(
       {flatbuffers::GetRoot<TFLiteSettings>(fbb.GetBufferPointer())});
   EXPECT_THAT(results, testing::Not(testing::IsEmpty()));
   for (auto& result : results) {
-    const BenchmarkEvent* event =
-        GetRoot<BenchmarkEvent>(result.GetBufferPointer());
-    EXPECT_EQ(event->event_type(), BenchmarkEventType_END);
+    EXPECT_EQ(result->event_type(), BenchmarkEventType_END);
   }
 }
-
 #ifndef __ANDROID__
 TEST_F(BlockingValidatorRunnerTest, SucceedWhenRunningMultipleTimes) {
   if (!should_perform_test_) {
@@ -155,46 +138,32 @@ TEST_F(BlockingValidatorRunnerTest, SucceedWhenRunningMultipleTimes) {
 
   int num_runs = 3;
   for (int i = 0; i < num_runs; i++) {
-    std::vector<FlatBufferBuilder> results = runner.TriggerValidation(
-        {flatbuffers::GetRoot<TFLiteSettings>(fbb.GetBufferPointer()),
-         flatbuffers::GetRoot<TFLiteSettings>(fbb.GetBufferPointer())});
+    std::vector<const BenchmarkEvent*> results = runner.TriggerValidation(
+        {flatbuffers::GetRoot<TFLiteSettings>(fbb.GetBufferPointer())});
     EXPECT_THAT(results, testing::Not(testing::IsEmpty()));
     for (auto& result : results) {
-      const BenchmarkEvent* event =
-          GetRoot<BenchmarkEvent>(result.GetBufferPointer());
-      EXPECT_EQ(event->event_type(), BenchmarkEventType_END);
-      EXPECT_TRUE(event->result()->ok());
+      EXPECT_EQ(result->event_type(), BenchmarkEventType_END);
+      EXPECT_TRUE(result->result()->ok());
     }
   }
 }
 #endif  // !__ANDROID__
 
-TEST_F(BlockingValidatorRunnerTest, ReturnErrorWhenTimedOut) {
+TEST_F(BlockingValidatorRunnerTest, ReturnEmptyWhenTimedOut) {
   if (!should_perform_test_) {
     std::cerr << "Skipping test";
     return;
   }
+
   options_.per_test_timeout_ms = 100;
   BlockingValidatorRunner runner(options_);
   ASSERT_EQ(runner.Init(), kMinibenchmarkSuccess);
   FlatBufferBuilder fbb;
   fbb.Finish(CreateTFLiteSettings(fbb));
 
-  std::vector<FlatBufferBuilder> results = runner.TriggerValidation(
+  std::vector<const BenchmarkEvent*> results = runner.TriggerValidation(
       {flatbuffers::GetRoot<TFLiteSettings>(fbb.GetBufferPointer())});
-  EXPECT_THAT(results, testing::SizeIs(1));
-  for (auto& result : results) {
-    const BenchmarkEvent* event =
-        GetRoot<BenchmarkEvent>(result.GetBufferPointer());
-    EXPECT_EQ(event->event_type(), BenchmarkEventType_ERROR);
-#ifdef __ANDROID__
-    EXPECT_EQ(event->error()->mini_benchmark_error_code(),
-              kMinibenchmarkCommandTimedOut);
-#else
-    EXPECT_EQ(event->error()->mini_benchmark_error_code(),
-              kMinibenchmarkCompletionEventMissing);
-#endif
-  }
+  EXPECT_THAT(results, testing::IsEmpty());
 }
 
 }  // namespace

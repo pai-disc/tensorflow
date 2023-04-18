@@ -50,10 +50,8 @@ void StripFunction(func::FuncOp func) {
   }
 
   for (int i = 0; i < func.getNumArguments(); ++i) {
-    llvm::ArrayRef<mlir::NamedAttribute> attrs =
-        mlir::function_interface_impl::getArgAttrs(func, i);
     auto stripAttrs = llvm::to_vector<4>(llvm::make_filter_range(
-        attrs,
+        func.getArgAttrs(i),
         [](NamedAttribute namedAttr) { return ShouldStripAttr(namedAttr); }));
     for (auto namedAttr : stripAttrs) {
       func.removeArgAttr(i, namedAttr.getName());

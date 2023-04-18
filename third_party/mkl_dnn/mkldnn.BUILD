@@ -1,15 +1,18 @@
 exports_files(["LICENSE"])
 
-load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load(
+    "@org_tensorflow//third_party:common.bzl",
+    "template_rule",
+)
 
-expand_template(
+template_rule(
     name = "mkldnn_config_h",
+    src = "include/mkldnn_config.h.in",
     out = "include/mkldnn_config.h",
     substitutions = {
         "#cmakedefine MKLDNN_CPU_BACKEND MKLDNN_BACKEND_${MKLDNN_CPU_BACKEND}": "#define MKLDNN_CPU_BACKEND MKLDNN_BACKEND_NATIVE",
         "#cmakedefine MKLDNN_GPU_BACKEND MKLDNN_BACKEND_${MKLDNN_GPU_BACKEND}": "#define MKLDNN_GPU_BACKEND MKLDNN_BACKEND_NONE",
     },
-    template = "include/mkldnn_config.h.in",
 )
 
 # Create the file mkldnn_version.h with MKL-DNN version numbers.
@@ -22,8 +25,9 @@ expand_template(
 # TODO(bhavanis): MKL-DNN minor version needs to be updated for MKL-DNN v1.x.
 # The current version numbers will work only if MKL-DNN v0.21 is used.
 
-expand_template(
+template_rule(
     name = "mkldnn_version_h",
+    src = "include/mkldnn_version.h.in",
     out = "include/mkldnn_version.h",
     substitutions = {
         "@MKLDNN_VERSION_MAJOR@": "0",
@@ -31,7 +35,6 @@ expand_template(
         "@MKLDNN_VERSION_PATCH@": "3",
         "@MKLDNN_VERSION_HASH@": "N/A",
     },
-    template = "include/mkldnn_version.h.in",
 )
 
 cc_library(
@@ -47,7 +50,7 @@ cc_library(
     ]) + [":mkldnn_version_h"],
     hdrs = glob(["include/*"]),
     copts = select({
-        "@org_tensorflow//tensorflow/tsl:windows": [],
+        "@org_tensorflow//tensorflow:windows": [],
         "//conditions:default": ["-fexceptions"],
     }) + [
         "-DMKLDNN_THR=MKLDNN_THR_SEQ",  # Disables threading.

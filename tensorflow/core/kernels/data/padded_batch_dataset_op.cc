@@ -187,8 +187,6 @@ class PaddedBatchDatasetOp::Dataset : public DatasetBase {
     explicit Iterator(const Params& params)
         : DatasetIterator<Dataset>(params) {}
 
-    bool SymbolicCheckpointCompatible() const override { return true; }
-
     Status Initialize(IteratorContext* ctx) override {
       return dataset()->input_->MakeIterator(ctx, this, prefix(), &input_impl_);
     }
@@ -247,21 +245,17 @@ class PaddedBatchDatasetOp::Dataset : public DatasetBase {
     Status SaveInternal(SerializationContext* ctx,
                         IteratorStateWriter* writer) override {
       mutex_lock l(mu_);
-      TF_RETURN_IF_ERROR(writer->WriteScalar(
-          full_name(kExhausted), static_cast<int64_t>(!input_impl_)));
-      if (input_impl_) {
+      if (input_impl_)
         TF_RETURN_IF_ERROR(SaveInput(ctx, writer, input_impl_));
-      }
+      else
+        TF_RETURN_IF_ERROR(writer->WriteScalar(full_name(kExhausted), ""));
       return OkStatus();
     }
 
     Status RestoreInternal(IteratorContext* ctx,
                            IteratorStateReader* reader) override {
       mutex_lock l(mu_);
-      int64_t input_exhausted;
-      TF_RETURN_IF_ERROR(
-          reader->ReadScalar(full_name(kExhausted), &input_exhausted));
-      if (static_cast<bool>(input_exhausted)) {
+      if (reader->Contains(full_name(kExhausted))) {
         input_impl_.reset();
       } else {
         TF_RETURN_IF_ERROR(
@@ -297,10 +291,9 @@ class PaddedBatchDatasetOp::Dataset : public DatasetBase {
 
         for (int dim = 0; dim < padded_shape.dims(); ++dim) {
           if (padded_shape.dim_size(dim) == -1) {
-            TF_RETURN_IF_ERROR(batch_component_shape.AddDimWithStatus(0));
+            batch_component_shape.AddDim(0);
           } else {
-            TF_RETURN_IF_ERROR(batch_component_shape.AddDimWithStatus(
-                padded_shape.dim_size(dim)));
+            batch_component_shape.AddDim(padded_shape.dim_size(dim));
           }
         }
 
@@ -349,8 +342,7 @@ class PaddedBatchDatasetOp::Dataset : public DatasetBase {
         // element in the batch.
         TensorShape component_shape({});
         for (int i = 1; i < batch_component_shape.dims(); ++i) {
-          TF_RETURN_IF_ERROR(component_shape.AddDimWithStatus(
-              batch_component_shape.dim_size(i)));
+          component_shape.AddDim(batch_component_shape.dim_size(i));
         }
         auto copy_element_fn = [component_index, &batch_elements,
                                 &batch_component, &component_shape](int index) {

@@ -1,9 +1,6 @@
 load("//tensorflow:tensorflow.default.bzl", "tf_python_pybind_extension")
 
-package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    licenses = ["notice"],
-)
+package(licenses = ["notice"])
 
 tf_python_pybind_extension(
     name = "mlir_wrapper",

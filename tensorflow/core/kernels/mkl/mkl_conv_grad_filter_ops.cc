@@ -388,9 +388,7 @@ class MklConvCustomBackpropFilterOp
                         "filter_sizes shape must be rank 1 but is rank ",
                         filter_tensor.shape().dims()));
       }
-      TensorShape filter_tf_shape;
-      OP_REQUIRES_OK(
-          context, MakeFilterTfShape(context, filter_tensor, &filter_tf_shape));
+      TensorShape filter_tf_shape = MakeFilterTfShape(context, filter_tensor);
       TensorShape diff_dst_tf_shape =
           GetTfShape(context, kDiffDstIdx, native_format);
 
@@ -666,15 +664,15 @@ class MklConvCustomBackpropFilterOp
   }
 
   // Get TensorFlow shape of filter tensor.
-  Status MakeFilterTfShape(OpKernelContext* context,
-                           const Tensor& filter_tensor,
-                           TensorShape* filter_tf_shape) {
-    if (!TensorShapeUtils::IsVector(filter_tensor.shape())) {
-      return errors::InvalidArgument("filter_tensor must be a vecotr, got ",
-                                     filter_tensor.shape());
-    }
-    return TensorShapeUtils::MakeShape(filter_tensor.vec<int32>(),
-                                       filter_tf_shape);
+  TensorShape MakeFilterTfShape(OpKernelContext* context,
+                                const Tensor& filter_tensor) {
+    TensorShape filter_tf_shape;
+    CHECK_EQ(TensorShapeUtils::IsVector(filter_tensor.shape()), true);
+    CHECK_EQ(TensorShapeUtils::MakeShape(filter_tensor.vec<int32>(),
+                                         &filter_tf_shape)
+                 .ok(),
+             true);
+    return filter_tf_shape;
   }
 
   // Get Tensorflow shape of output tensor (diff_filter),

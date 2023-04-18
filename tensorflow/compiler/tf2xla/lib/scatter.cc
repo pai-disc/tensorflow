@@ -34,7 +34,6 @@ namespace tensorflow {
 StatusOr<xla::XlaOp> XlaScatter(
     const xla::XlaOp& buffer, const xla::XlaOp& updates,
     const xla::XlaOp& indices, bool indices_are_vectors,
-    bool indices_are_sorted,
     const std::function<xla::XlaOp(xla::XlaOp, xla::XlaOp, xla::XlaBuilder*)>&
         combiner,
     xla::XlaBuilder* builder) {
@@ -201,7 +200,7 @@ StatusOr<xla::XlaOp> XlaScatter(
           << "]";
 
   return xla::Scatter(buffer, indices, new_updates, combiner_computation,
-                      dim_numbers, indices_are_sorted);
+                      dim_numbers);
 }
 
 }  // namespace tensorflow

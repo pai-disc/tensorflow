@@ -16,12 +16,6 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_XLA_STREAM_EXECUTOR_LAZY_OP_RUNNER_H_
 #define TENSORFLOW_COMPILER_XLA_STREAM_EXECUTOR_LAZY_OP_RUNNER_H_
 
-#include <atomic>
-#include <memory>
-#include <string>
-#include <utility>
-
-#include "absl/base/call_once.h"
 #include "tensorflow/compiler/xla/stream_executor/dnn.h"
 #include "tensorflow/compiler/xla/stream_executor/stream.h"
 
@@ -56,10 +50,10 @@ class LazyOpRunner {
  public:
   // Construct from a pre-initialized OpRunner; all calls to GetOrCreateRunner
   // will return a pointer to exactly this runner.
-  static tsl::StatusOr<std::unique_ptr<LazyOpRunner>> FromOpRunner(
+  static port::StatusOr<std::unique_ptr<LazyOpRunner>> FromOpRunner(
       std::unique_ptr<const OpRunner<typename Op::Signature>> runner) {
     if (!runner) {
-      return tsl::errors::Internal("Null runner argument to FromOpRunner");
+      return port::InternalError("Null runner argument to FromOpRunner");
     }
     TF_ASSIGN_OR_RETURN(auto desc, runner->ToAlgorithmDesc());
     // Private constructor cannot be called by make_unique :(
@@ -81,29 +75,23 @@ class LazyOpRunner {
   // executor will be errors.
   //
   // The result is owned by LazyOpRunner.
-  tsl::StatusOr<const OpRunner<typename Op::Signature>*> GetOrCreateRunner(
+  port::StatusOr<const OpRunner<typename Op::Signature>*> GetOrCreateRunner(
       typename Op::Config config, Stream* stream) {
-    absl::call_once(once_flag_, [&] {
-      if (runner_) return;  // runner was passed via constructor argument
-
-      auto r = Op::RunnerFromAlgorithmDesc(desc_, std::move(config), stream);
-      if (!r.ok()) {
-        error_ = std::move(r).status();
-      } else {
-        runner_ = std::move(r).value();
-      }
-    });
-
-    if (!error_.ok()) return error_;
+    absl::MutexLock lock(&mu_);
+    if (!runner_) {
+      TF_ASSIGN_OR_RETURN(runner_, Op::RunnerFromAlgorithmDesc(
+                                       desc_, std::move(config), stream));
+    }
     return runner_.get();
   }
 
   // Get the contained runner with the invariant that it's already initialized.
-  tsl::StatusOr<const OpRunner<typename Op::Signature>*> GetRunner() {
-    if (auto* runner = runner_ptr_.load(std::memory_order_acquire)) {
-      return runner;
+  port::StatusOr<const OpRunner<typename Op::Signature>*> GetRunner() {
+    absl::MutexLock lock(&mu_);
+    if (!runner_) {
+      return port::InternalError("LazyOpRunner::GetRunner: not initialized");
     }
-    return tsl::errors::Internal("LazyOpRunner::GetRunner: not initialized");
+    return runner_.get();
   }
 
   bool operator==(const LazyOpRunner& other) const {
@@ -117,21 +105,12 @@ class LazyOpRunner {
  private:
   LazyOpRunner(AlgorithmDesc desc,
                std::unique_ptr<const OpRunner<typename Op::Signature>> runner)
-      : desc_(std::move(desc)),
-        error_(tsl::OkStatus()),
-        runner_(std::move(runner)),
-        runner_ptr_(runner_.get()) {}
+      : desc_(std::move(desc)), runner_(std::move(runner)) {}
 
   AlgorithmDesc desc_;
-
-  // We use absl::call_once to lazily initialize `runner_` (or `error_`).
-  absl::once_flag once_flag_;
-  tsl::Status error_;  // holds error if runner can't be initialized
-  std::unique_ptr<const OpRunner<typename Op::Signature>> runner_;
-
-  // Once we initialize `runner_` we publish a pointer through atomic so that
-  // `GetRunner` can read it without data races with initialization.
-  std::atomic<const OpRunner<typename Op::Signature>*> runner_ptr_;
+  absl::Mutex mu_;
+  std::unique_ptr<const OpRunner<typename Op::Signature>> runner_
+      ABSL_GUARDED_BY(mu_);
 };
 
 // Implementation of the concept required by LazyOpRunner, for ConvRunner.
@@ -147,7 +126,7 @@ struct ConvOp {
     const ConvolutionDescriptor& convolution_descriptor;
   };
 
-  static tsl::StatusOr<std::unique_ptr<const OpRunner<ConvSignature>>>
+  static port::StatusOr<std::unique_ptr<const OpRunner<ConvSignature>>>
   RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
                           Stream* stream) {
     return stream->ConvolveRunnerFromDesc(
@@ -173,7 +152,7 @@ struct FusedConvOp {
     ActivationMode activation_mode;
   };
 
-  static tsl::StatusOr<std::unique_ptr<const OpRunner<FusedConvSignature>>>
+  static port::StatusOr<std::unique_ptr<const OpRunner<FusedConvSignature>>>
   RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
                           Stream* stream) {
     return stream->FusedConvolveRunnerFromDesc(
@@ -195,10 +174,10 @@ struct FusedMatmulOp {
   // this feature.
   struct Config {};
 
-  static tsl::StatusOr<std::unique_ptr<const OpRunner<Signature>>>
+  static port::StatusOr<std::unique_ptr<const OpRunner<Signature>>>
   RunnerFromAlgorithmDesc(const AlgorithmDesc& desc, Config config,
                           Stream* stream) {
-    return tsl::errors::Unimplemented("Unimplemented");
+    return port::UnimplementedError("Unimplemented");
   }
 };
 

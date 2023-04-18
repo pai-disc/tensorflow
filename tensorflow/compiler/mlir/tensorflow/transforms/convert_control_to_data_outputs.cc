@@ -232,9 +232,10 @@ void AppendFunctionResults(func::FuncOp func, int num_resources,
   graph_op.erase();
   func::ReturnOp return_op = cast<func::ReturnOp>(block.getTerminator());
   int num_old_arguments = return_op.getNumOperands();
-  return_op->insertOperands(
-      num_old_arguments,
-      new_graph_op.getResults().slice(num_old_arguments, num_resources));
+  for (int i = 0; i < num_resources; ++i) {
+    return_op.operandsMutable().append(
+        new_graph_op.getResult(num_old_arguments + i));
+  }
 }
 
 // Creates a wrapper island enclosing the `sub_op` dependent on
@@ -346,7 +347,7 @@ TF::WhileOp RewriteWhileOp(TF::WhileOp while_op, int num_resource_inputs,
   // Get the dummy constant.
   OpBuilder builder(while_wrapper);
   auto loc = NameLoc::get(
-      builder.getStringAttr("chain_control_outputs@" + while_op.getBody()));
+      builder.getStringAttr("chain_control_outputs@" + while_op.body()));
   IslandOp const_wrapper = GetDummyConstant(builder, const_type, loc);
 
   // Get new operand and result types.

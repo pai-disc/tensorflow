@@ -17,12 +17,12 @@ limitations under the License.
 
 #include "absl/algorithm/container.h"
 #include "absl/functional/function_ref.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_computation.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_instructions.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_sharding.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/dot_as_convolution_util.h"
+#include "tensorflow/compiler/xla/service/hlo_computation.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_instructions.h"
+#include "tensorflow/compiler/xla/service/hlo_sharding.h"
 #include "tensorflow/compiler/xla/service/hlo_sharding_util.h"
 #include "tensorflow/compiler/xla/service/shape_inference.h"
 #include "tensorflow/compiler/xla/service/spmd/spmd_partitioner.h"
@@ -263,9 +263,10 @@ PartitionConvolutionWithSpatialDimensionHaloExchangeOnRHS(
                                   const HloSharding& rhs_sharding) {
     // We currently don't support partitioning input batch or output feature
     // dimensions.
-    return ShardCountAtDim(lhs_sharding, dnums.input_batch_dimension()) != 1 ||
-           ShardCountAtDim(rhs_sharding,
-                           dnums.kernel_output_feature_dimension()) != 1;
+    return lhs_sharding.tile_assignment().dim(dnums.input_batch_dimension()) !=
+               1 ||
+           rhs_sharding.tile_assignment().dim(
+               dnums.kernel_output_feature_dimension()) != 1;
   };
 
   if (ShapeSizeInBytes(lhs.base_shape()) < ShapeSizeInBytes(rhs.base_shape())) {
@@ -283,16 +284,18 @@ PartitionConvolutionWithSpatialDimensionHaloExchangeOnRHS(
   }
 
   if (original_hlo->feature_group_count() > 1 &&
-      (ShardCountAtDim(lhs.sharding(), dnums.input_feature_dimension()) > 1 ||
-       ShardCountAtDim(rhs.sharding(),
-                       dnums.kernel_output_feature_dimension()) > 1)) {
+      (lhs.sharding().tile_assignment().dim(dnums.input_feature_dimension()) >
+           1 ||
+       rhs.sharding().tile_assignment().dim(
+           dnums.kernel_output_feature_dimension()) > 1)) {
     return nullptr;
   }
 
   if (original_hlo->batch_group_count() > 1 &&
-      (ShardCountAtDim(lhs.sharding(), dnums.input_batch_dimension()) > 1 ||
-       ShardCountAtDim(rhs.sharding(),
-                       dnums.kernel_output_feature_dimension()) > 1)) {
+      (lhs.sharding().tile_assignment().dim(dnums.input_batch_dimension()) >
+           1 ||
+       rhs.sharding().tile_assignment().dim(
+           dnums.kernel_output_feature_dimension()) > 1)) {
     return nullptr;
   }
 
@@ -321,7 +324,7 @@ PartitionConvolutionWithSpatialDimensionHaloExchangeOnRHS(
   for (int64_t i = 0; i < dnums.input_spatial_dimensions_size(); ++i) {
     int64_t lhs_dimension = dnums.input_spatial_dimensions(i);
     int64_t rhs_dimension = dnums.kernel_spatial_dimensions(i);
-    int64_t shard_count = ShardCountAtDim(rhs.sharding(), rhs_dimension);
+    int64_t shard_count = rhs.sharding().tile_assignment().dim(rhs_dimension);
     const auto& wd = conv_window.dimensions(i);
     if (wd.base_dilation() != 1 || wd.window_reversal()) {
       return nullptr;
@@ -572,9 +575,10 @@ PartitionConvolutionWithSpatialDimensionHaloExchangeOnLHS(
 
   auto unsupported_sharding = [&](const HloSharding& lhs_sharding,
                                   const HloSharding& rhs_sharding) {
-    return ShardCountAtDim(lhs_sharding, dnums.input_batch_dimension()) != 1 ||
-           ShardCountAtDim(rhs_sharding,
-                           dnums.kernel_output_feature_dimension()) != 1;
+    return lhs_sharding.tile_assignment().dim(dnums.input_batch_dimension()) !=
+               1 ||
+           rhs_sharding.tile_assignment().dim(
+               dnums.kernel_output_feature_dimension()) != 1;
   };
 
   if (ShapeSizeInBytes(lhs.base_shape()) < ShapeSizeInBytes(rhs.base_shape())) {
@@ -592,16 +596,18 @@ PartitionConvolutionWithSpatialDimensionHaloExchangeOnLHS(
   }
 
   if (original_hlo->feature_group_count() > 1 &&
-      (ShardCountAtDim(lhs.sharding(), dnums.input_feature_dimension()) > 1 ||
-       ShardCountAtDim(rhs.sharding(),
-                       dnums.kernel_output_feature_dimension()) > 1)) {
+      (lhs.sharding().tile_assignment().dim(dnums.input_feature_dimension()) >
+           1 ||
+       rhs.sharding().tile_assignment().dim(
+           dnums.kernel_output_feature_dimension()) > 1)) {
     return nullptr;
   }
 
   if (original_hlo->batch_group_count() > 1 &&
-      (ShardCountAtDim(lhs.sharding(), dnums.input_batch_dimension()) > 1 ||
-       ShardCountAtDim(rhs.sharding(),
-                       dnums.kernel_output_feature_dimension()) > 1)) {
+      (lhs.sharding().tile_assignment().dim(dnums.input_batch_dimension()) >
+           1 ||
+       rhs.sharding().tile_assignment().dim(
+           dnums.kernel_output_feature_dimension()) > 1)) {
     return nullptr;
   }
   // Reshard LHS by exchanging halo such that each shard computes the partial
@@ -628,7 +634,7 @@ PartitionConvolutionWithSpatialDimensionHaloExchangeOnLHS(
   for (int64_t i = 0; i < dnums.input_spatial_dimensions_size(); ++i) {
     int64_t lhs_dimension = dnums.input_spatial_dimensions(i);
     int64_t rhs_dimension = dnums.kernel_spatial_dimensions(i);
-    int64_t shard_count = ShardCountAtDim(lhs.sharding(), lhs_dimension);
+    int64_t shard_count = lhs.sharding().tile_assignment().dim(lhs_dimension);
     const auto& wd = window.dimensions(i);
     if (wd.base_dilation() != 1) {
       // TODO(wangtao): support parallel dim if it is replicate here.
@@ -750,21 +756,8 @@ StatusOr<HloInstruction*> PartitionConvolutionTiledOutput(
   const auto& dnums = original_hlo->convolution_dimension_numbers();
   TF_RET_CHECK(!output_sharding.IsTileMaximal());
   // We don't currently support sharding on output feature dimension.
-  if (ShardCountAtDim(output_sharding, dnums.output_feature_dimension()) > 1) {
-    return nullptr;
-  }
-
-  if (original_hlo->feature_group_count() > 1 &&
-      (ShardCountAtDim(lhs.sharding(), dnums.input_feature_dimension()) > 1 ||
-       ShardCountAtDim(rhs.sharding(),
-                       dnums.kernel_output_feature_dimension()) > 1)) {
-    return nullptr;
-  }
-
-  if (original_hlo->batch_group_count() > 1 &&
-      (ShardCountAtDim(lhs.sharding(), dnums.input_batch_dimension()) > 1 ||
-       ShardCountAtDim(rhs.sharding(),
-                       dnums.kernel_output_feature_dimension()) > 1)) {
+  if (output_sharding.tile_assignment().dim(dnums.output_feature_dimension()) >
+      1) {
     return nullptr;
   }
 
@@ -885,6 +878,7 @@ StatusOr<HloInstruction*> PartitionConvolutionBaseCase(
           PartitionConvolutionWithSpatialDimensionHaloExchangeOnRHS(
               lhs, rhs, output_base_shape, output_sharding, create_sharded_conv,
               conv_window, original_hlo, partition_id, module, b));
+
       if (partitioned_conv) {
         return partitioned_conv;
       }
@@ -897,6 +891,7 @@ StatusOr<HloInstruction*> PartitionConvolutionBaseCase(
                         PartitionConvolutionTiledOutput(
                             lhs, rhs, output_base_shape, output_sharding,
                             create_sharded_conv, conv_window, original_hlo, b));
+
     if (partitioned_conv) {
       return partitioned_conv;
     }

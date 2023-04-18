@@ -17,15 +17,25 @@ limitations under the License.
 
 #include <memory>
 
-#include "tensorflow/compiler/xla/backends/profiler/cpu/host_tracer.h"
 #include "tensorflow/core/profiler/lib/profiler_interface.h"
 
 namespace tensorflow {
 namespace profiler {
 
-using xla::profiler::HostTracerOptions;  // NOLINT
+struct HostTracerOptions {
+  // Levels of host tracing:
+  // - Level 0 is used to disable host traces.
+  // - Level 1 enables tracing of only user instrumented (or default) TraceMe.
+  // - Level 2 enables tracing of all level 1 TraceMe(s) and instrumented high
+  //           level program execution details (expensive TF ops, XLA ops, etc).
+  //           This is the default.
+  // - Level 3 enables tracing of all level 2 TraceMe(s) and more verbose
+  //           (low-level) program execution details (cheap TF ops, etc).
+  int trace_level = 2;
+};
 
-using xla::profiler::CreateHostTracer;  // NOLINT
+std::unique_ptr<ProfilerInterface> CreateHostTracer(
+    const HostTracerOptions& options);
 
 }  // namespace profiler
 }  // namespace tensorflow

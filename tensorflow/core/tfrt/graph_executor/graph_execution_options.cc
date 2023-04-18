@@ -58,25 +58,24 @@ tensorflow::SessionOptions CreateDefaultSessionOptions(
 void UpdateTpuTargetByBridgeCompatibility(
     tensorflow::tfrt_stub::GraphExecutionOptions& options,
     const tensorflow::GraphDef& graph_def) {
-  if (options.compile_options.device_target ==
-      tensorflow::TfrtDeviceInfraTarget::kBridgeFallback) {
+  if (options.compile_options.tpu_target ==
+      tensorflow::TfrtTpuInfraTarget::kBridgeFallback) {
     auto s = tfrt::CheckTpuMlirBridgeCompatibility(graph_def);
     if (!s.ok()) {
       LOG(INFO)
           << "TFRT detected Bridge unsupported feature, using TF fallback";
-      options.compile_options.device_target =
-          tensorflow::TfrtDeviceInfraTarget::kTfFallback;
+      options.compile_options.tpu_target =
+          tensorflow::TfrtTpuInfraTarget::kTfFallback;
     } else {
-      options.compile_options.device_target =
-          tensorflow::TfrtDeviceInfraTarget::kTpurt;
+      options.compile_options.tpu_target =
+          tensorflow::TfrtTpuInfraTarget::kTpurt;
     }
   }
   if (!tfrt::CheckSpmdGraph(graph_def).ok()) {
-    options.compile_options.device_target =
-        tensorflow::TfrtDeviceInfraTarget::kTfFallback;
+    options.compile_options.tpu_target =
+        tensorflow::TfrtTpuInfraTarget::kTfFallback;
   }
-  LOG(INFO) << "TFRT uses device target "
-            << options.compile_options.device_target;
+  LOG(INFO) << "TFRT uses TPU target " << options.compile_options.tpu_target;
 }
 
 std::ostream& operator<<(std::ostream& os,

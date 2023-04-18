@@ -16,7 +16,6 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/tensorflow/transforms/bridge.h"
 
 #include <memory>
-#include <string>
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/IR/BuiltinOps.h"  // from @llvm-project
@@ -60,6 +59,9 @@ tensorflow::Status RunTFXLABridge(
   // Populate a passmanager with the list of passes that implement the bridge.
   pipeline_builder(bridge);
 
+  // Add set of passes to lower back to graph (from tf_executor).
+  TF::AddGraphExportLoweringPasses(bridge);
+
   mlir::StatusScopedDiagnosticHandler diag_handler(
       module.getContext(), /*propagate=*/false,
       /*filter_stack=*/!VLOG_IS_ON(1));
@@ -95,7 +97,6 @@ void CreateTPUBridgePipelineImpl(OpPassManager &pm) {
   // Run shape inference so that tf_executor/tf_device ops created later will
   // likely to inherit more concrete types.
   pm.addPass(TF::CreateTFShapeInferencePass());
-  pm.addNestedPass<func::FuncOp>(CreateTPUPartitionedOpConversionPass());
   pm.addNestedPass<func::FuncOp>(
       CreateTPUReorderReplicateAndPartitionedInputsPass());
   pm.addNestedPass<func::FuncOp>(TF::CreateDecomposeReduceDatasetPass());
@@ -178,8 +179,6 @@ void CreateTPUBridgePipelineImpl(OpPassManager &pm) {
   pm.addNestedPass<func::FuncOp>(
       CreateTPUResourceReadsWritesPartitioningPass());
   pm.addPass(TFDevice::CreateAnnotateParameterReplicationPass());
-  pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::TF::CreateRewriteTPUEmbeddingOpsPass());
   pm.addPass(CreateTPURewritePass());
   pm.addPass(createSymbolDCEPass());
   pm.addNestedPass<func::FuncOp>(
@@ -227,15 +226,8 @@ void CreateTPUBridgePipelineV1(OpPassManager &pm) {
 
 tensorflow::Status TPUBridge(ModuleOp module, bool enable_logging,
                              bool fallback_enabled) {
-  Status status = RunTFXLABridge(module, enable_logging, [](OpPassManager &pm) {
-    CreateTPUBridgePipeline(pm);
-    // Add set of passes to lower back to graph (from tf_executor).
-    // Use graph export pipline V2 in TPU Bridge.
-    // TODO(hanxiong): Completely replace AddGraphExportLoweringPasses with
-    // AddGraphExortLoweringPassessV2 in all the code paths (V1 compat pipeline,
-    // CPU/GPU bridge, etc.)
-    TF::AddGraphExportLoweringPassesV2(pm);
-  });
+  Status status =
+      RunTFXLABridge(module, enable_logging, CreateTPUBridgePipeline);
   tensorflow::metrics::UpdateTfMlirBridgeFirstPhaseCounter(
       "tpu", "v2", fallback_enabled, status.ok() ? "success" : "failure");
   OkOrSetErrorCounterPayload(
@@ -245,11 +237,8 @@ tensorflow::Status TPUBridge(ModuleOp module, bool enable_logging,
 }
 tensorflow::Status TPUBridgeV1Compat(ModuleOp module, bool enable_logging,
                                      bool fallback_enabled) {
-  Status status = RunTFXLABridge(module, enable_logging, [](OpPassManager &pm) {
-    CreateTPUBridgePipelineV1(pm);
-    // Add set of passes to lower back to graph (from tf_executor).
-    TF::AddGraphExportLoweringPasses(pm);
-  });
+  Status status =
+      RunTFXLABridge(module, enable_logging, CreateTPUBridgePipelineV1);
   tensorflow::metrics::UpdateTfMlirBridgeFirstPhaseCounter(
       "tpu", "v1", fallback_enabled, status.ok() ? "success" : "failure");
   return status;
@@ -266,43 +255,10 @@ void AddGraphExportLoweringPasses(OpPassManager &pm) {
   };
 
   add_pass(CreateFunctionalToExecutorDialectConversionPass());
-  add_pass(TFDevice::CreateReplicateToIslandPass(/*legacy_graph_export=*/true));
+  add_pass(TFDevice::CreateReplicateToIslandPass());
   add_pass(TFDevice::CreateReplicaIDToDeviceOrdinalPass());
-  add_pass(TFDevice::CreateParallelExecuteToIslandsPass(
-      /*legacy_graph_export=*/true));
-  add_pass(TFDevice::CreateLaunchToDeviceAttributePass(
-      /*legacy_graph_export=*/true));
-  pm.addNestedPass<func::FuncOp>(TFTPU::CreateTPUDevicePropagationPass());
-  pm.addPass(createSymbolDCEPass());
-  if (tensorflow::GetMlirCommonFlags()
-          ->tf_mlir_enable_convert_control_to_data_outputs_pass) {
-    pm.addPass(tf_executor::CreateTFExecutorConvertControlToDataOutputsPass());
-  }
-  pm.addPass(CreateVerifySuitableForExportPass());
-}
-
-void AddGraphExportLoweringPassesV2(OpPassManager &pm) {
-  // First, we need to convert from functional, to executor dialect.
-  pm.addNestedPass<func::FuncOp>(
-      CreateFunctionalToExecutorDialectConversionPass());
-
-  // Do a single pass to split the graph's single island op into an island per
-  // op as expected by the following passes.
-  pm.addNestedPass<func::FuncOp>(CreateSplitIntoIslandPerOpPass());
-
-  pm.addNestedPass<func::FuncOp>(TFDevice::CreateReplicateToIslandPass(
-      /*legacy_graph_export=*/false));
-  pm.addNestedPass<func::FuncOp>(
-      TFDevice::CreateReplicaIDToDeviceOrdinalPass());
-  pm.addNestedPass<func::FuncOp>(TFDevice::CreateParallelExecuteToIslandsPass(
-      /*legacy_graph_export=*/false));
-  pm.addNestedPass<func::FuncOp>(TFDevice::CreateLaunchToDeviceAttributePass(
-      /*legacy_graph_export=*/false));
-
-  // Do a single pass to encode necessary control deps in the IR according to
-  // the results of side effect analysis.
-  pm.addPass(tf_executor::CreateTFExecutorUpdateControlDependenciesPass());
-
+  add_pass(TFDevice::CreateParallelExecuteToIslandsPass());
+  add_pass(TFDevice::CreateLaunchToDeviceAttributePass());
   pm.addNestedPass<func::FuncOp>(TFTPU::CreateTPUDevicePropagationPass());
   pm.addPass(createSymbolDCEPass());
   if (tensorflow::GetMlirCommonFlags()
@@ -326,13 +282,15 @@ tensorflow::Status RunBridgeWithStandardPipeline(ModuleOp module,
       /*filter_stack=*/!VLOG_IS_ON(1));
 
   if (enable_logging || VLOG_IS_ON(1)) {
-    tensorflow::DumpMlirOpToFile(kStandardPipelineBefore, module, "", &bridge);
+    tensorflow::DumpMlirOpToFile("standard_pipeline_before", module, "",
+                                 &bridge);
     if (VLOG_IS_ON(2)) EnableDetailedLogging(&bridge);
   }
   LogicalResult result = bridge.run(module);
   (void)result;
   if (enable_logging || VLOG_IS_ON(1))
-    tensorflow::DumpMlirOpToFile(kStandardPipelineAfter, module, "", &bridge);
+    tensorflow::DumpMlirOpToFile("standard_pipeline_after", module, "",
+                                 &bridge);
   return diag_handler.ConsumeStatus();
 }
 
@@ -352,7 +310,6 @@ void CreateTFXLABridgePipeline(OpPassManager &pm) {
       CreateExecutorDialectToFunctionalConversionPass());
   // Guarantee all functions have one use, which enables more exact shape
   // inference.
-  pm.addPass(mlir::TF::CreateGuaranteeAllFuncsOneUsePass());
   pm.addPass(TF::CreateTFShapeInferencePass());
   // Encapsulate PartitionedCall ops within a cluster so that the composite
   // resource ops can be decomposed.
@@ -370,9 +327,9 @@ void CreateTFXLABridgePipeline(OpPassManager &pm) {
   pm.addPass(TF::CreateTFShapeInferencePass());
   pm.addNestedPass<func::FuncOp>(createCanonicalizerPass());
   pm.addPass(TFDevice::CreateResourceOpLiftingPass());
-  pm.addPass(TFDevice::CreateXlaRewritePass());
-  // Inline the cluster ops.
+  // Inline the StatefulPartitionedCallOp op based in the parent region.
   pm.addPass(TFDevice::CreateXlaInlineDeviceOpsPass());
+  pm.addPass(TFDevice::CreateXlaRewritePass());
   // Re-run the canonicalizer pass as some cleanup during resource op lifting
   // pass opens up some opportunities for canonicalization of cluster ops.
   // Specifically, we want to eliminate pass through results from the cluster
@@ -385,12 +342,8 @@ void CreateTFXLABridgePipeline(OpPassManager &pm) {
 }
 
 tensorflow::Status RunTFXLABridge(ModuleOp module, bool enable_logging) {
-  Status status = mlir::TFTPU::RunTFXLABridge(
-      module, enable_logging, [](OpPassManager &pm) {
-        CreateTFXLABridgePipeline(pm);
-        // Add set of passes to lower back to graph (from tf_executor).
-        TF::AddGraphExportLoweringPasses(pm);
-      });
+  Status status = mlir::TFTPU::RunTFXLABridge(module, enable_logging,
+                                              CreateTFXLABridgePipeline);
   tensorflow::metrics::UpdateTfMlirBridgeFirstPhaseCounter(
       /*device type*/ "cpu/gpu", /*bridge version*/ "tfxla",
       /*fallback_enabled*/ false,

@@ -17,9 +17,7 @@ limitations under the License.
 #define TENSORFLOW_PYTHON_CLIENT_TF_SESSION_HELPER_H_
 
 // Must be included first
-// clang-format off
-#include "tensorflow/tsl/python/lib/core/numpy.h" //NOLINT
-// clang-format on
+#include "tensorflow/python/lib/core/numpy.h"
 
 #include "tensorflow/c/c_api.h"
 #include "tensorflow/core/framework/graph.pb.h"

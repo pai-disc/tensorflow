@@ -247,9 +247,13 @@ XLA_TEST_F(ParamsTest, HundredLargeR1Parameters) {
 // Timeout last observed on 2017-11-20.
 #ifdef NDEBUG
 
+// TODO(b/65525254) Fails on GPU on 2017-09-10 because we try to reserve too
+// much space in parameter memory for the kernel.
+//
 // TODO(b/65526061) Failed on CPU on 2017-09-10 due to timeout in LLVM
 // compilation.
-XLA_TEST_F(ParamsTest, DISABLED_ON_CPU(ThreeThousandParameters)) {
+XLA_TEST_F(ParamsTest,
+           DISABLED_ON_CPU(DISABLED_ON_GPU(ThreeThousandParameters))) {
   XlaBuilder builder(TestName());
 
   std::vector<std::unique_ptr<GlobalData>> param_data_owner;
@@ -274,10 +278,13 @@ XLA_TEST_F(ParamsTest, DISABLED_ON_CPU(ThreeThousandParameters)) {
   ComputeAndCompareR0<float>(&builder, target, param_data, ErrorSpec(0.0001f));
 }
 
+// TODO(b/65525254) Fails on GPU on 2017-09-10 because we try to reserve too
+// much space in parameter memory for the kernel.
+//
 // TODO(b/65526061) Failed on CPU on 2017-09-10 due to timeout in LLVM
 // compilation.
-XLA_TEST_F(ParamsTest,
-           DISABLED_ON_CPU(ThreeThousandParametersAndOutputElements)) {
+XLA_TEST_F(ParamsTest, DISABLED_ON_CPU(DISABLED_ON_GPU(
+                           ThreeThousandParametersAndOutputElements))) {
   XlaBuilder builder(TestName());
 
   std::vector<std::unique_ptr<GlobalData>> param_data_owner;

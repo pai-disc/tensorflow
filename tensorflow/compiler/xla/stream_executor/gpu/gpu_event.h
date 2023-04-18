@@ -19,7 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/stream_executor/event.h"
 #include "tensorflow/compiler/xla/stream_executor/gpu/gpu_driver.h"
 #include "tensorflow/compiler/xla/stream_executor/gpu/gpu_stream.h"
-#include "tensorflow/tsl/platform/status.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/status.h"
 
 namespace stream_executor {
 namespace gpu {
@@ -33,14 +33,14 @@ class GpuEvent : public internal::EventInterface {
   ~GpuEvent() override;
 
   // Populates the CUDA-platform-specific elements of this object.
-  tsl::Status Init();
+  port::Status Init();
 
   // Deallocates any platform-specific elements of this object. This is broken
   // out (not part of the destructor) to allow for error reporting.
-  tsl::Status Destroy();
+  port::Status Destroy();
 
   // Inserts the event at the current position into the specified stream.
-  tsl::Status Record(GpuStream* stream);
+  port::Status Record(GpuStream* stream);
 
   // Polls the CUDA platform for the event's current status.
   Event::Status PollForStatus();

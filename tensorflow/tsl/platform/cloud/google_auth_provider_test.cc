@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/tsl/lib/core/status_test_util.h"
 #include "tensorflow/tsl/platform/cloud/http_request_fake.h"
 #include "tensorflow/tsl/platform/path.h"
+#include "tensorflow/tsl/platform/resource_loader.h"
 #include "tensorflow/tsl/platform/test.h"
 
 namespace tsl {
@@ -27,7 +28,7 @@ namespace tsl {
 namespace {
 
 string TestData() {
-  return io::JoinPath(testing::TslSrcRoot(), "platform", "cloud", "testdata");
+  return io::JoinPath("tensorflow", "tsl", "platform", "cloud", "testdata");
 }
 
 class FakeEnv : public EnvWrapper {
@@ -82,9 +83,11 @@ class GoogleAuthProviderTest : public ::testing::Test {
 
 TEST_F(GoogleAuthProviderTest, EnvironmentVariable_Caching) {
   setenv("GOOGLE_APPLICATION_CREDENTIALS",
-         io::JoinPath(TestData(), "service_account_credentials.json").c_str(),
+         GetDataDependencyFilepath(
+             io::JoinPath(TestData(), "service_account_credentials.json"))
+             .c_str(),
          1);
-  setenv("CLOUDSDK_CONFIG", TestData().c_str(),
+  setenv("CLOUDSDK_CONFIG", GetDataDependencyFilepath(TestData()).c_str(),
          1);  // Will not be used.
 
   auto oauth_client = new FakeOAuthClient;
@@ -121,7 +124,7 @@ TEST_F(GoogleAuthProviderTest, EnvironmentVariable_Caching) {
 }
 
 TEST_F(GoogleAuthProviderTest, GCloudRefreshToken) {
-  setenv("CLOUDSDK_CONFIG", TestData().c_str(), 1);
+  setenv("CLOUDSDK_CONFIG", GetDataDependencyFilepath(TestData()).c_str(), 1);
 
   auto oauth_client = new FakeOAuthClient;
   std::vector<HttpRequest*> requests;

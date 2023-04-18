@@ -66,8 +66,7 @@ using ExecutorPtr = std::unique_ptr<TFE_Executor, ExecutorDeleter>;
 class DeviceThread {
  public:
   // Starts a background thread waiting for `StartExecute`.
-  explicit DeviceThread(const std::string& device, const bool is_async,
-                        const int in_flight_nodes_limit)
+  explicit DeviceThread(const std::string& device, const bool is_async)
       : status_(TF_NewStatus()),
         // If the context's default exector is set to async, re-using that in
         // each thread would cause collectives to deadlock. For consistency we
@@ -76,9 +75,7 @@ class DeviceThread {
         // TODO(allenl): We should have an async API that works with the
         // parallel device.
         device_(device),
-        executor_(
-            TFE_NewExecutor(is_async, /*enable_streaming_enqueue=*/true,
-                            /*in_flight_nodes_limit=*/in_flight_nodes_limit)),
+        executor_(TFE_NewExecutor(is_async, /*enable_streaming_enqueue=*/true)),
         op_(nullptr),
         thread_(tensorflow::Env::Default()->StartThread(
             tensorflow::ThreadOptions(), "parallel_device_execute",
@@ -285,13 +282,13 @@ void DeviceThread::Execute(TFE_Context* context, const char* operation_name,
 }
 
 ParallelDevice::ParallelDevice(const std::vector<std::string>& devices,
-                               bool is_async, int in_flight_nodes_limit)
+                               const bool is_async)
     : underlying_devices_(devices),
       default_cancellation_manager_(absl::make_unique<CancellationManager>()) {
   device_threads_.reserve(devices.size());
   for (int device_index = 0; device_index < devices.size(); ++device_index) {
-    device_threads_.emplace_back(new DeviceThread(
-        devices[device_index].c_str(), is_async, in_flight_nodes_limit));
+    device_threads_.emplace_back(
+        new DeviceThread(devices[device_index].c_str(), is_async));
   }
 }
 
@@ -361,26 +358,6 @@ void ParallelDevice::StartExecute(TFE_Context* context,
     for (int input_index = 0; input_index < inputs.size(); ++input_index) {
       // Parallel tensors are divided between operations by device.
       device_inputs.push_back(inputs[input_index]->tensor(device_index));
-    }
-    device_thread->StartExecute(
-        context, operation_name, std::move(device_inputs), attributes,
-        expected_max_outputs, cancellation_manager, step_id);
-  }
-}
-
-void ParallelDevice::StartExecute(
-    TFE_Context* context, const std::vector<const TensorHandlePtr*>& inputs,
-    const char* operation_name, const TFE_OpAttrs* attributes,
-    int expected_max_outputs, CancellationManager& cancellation_manager,
-    absl::optional<int64_t> step_id) const {
-  for (int device_index = 0; device_index < underlying_devices_.size();
-       ++device_index) {
-    DeviceThread* device_thread = device_threads_[device_index].get();
-    std::vector<TFE_TensorHandle*> device_inputs;
-    device_inputs.reserve(inputs.size());
-    for (int input_index = 0; input_index < inputs.size(); ++input_index) {
-      // Parallel tensors are divided between operations by device.
-      device_inputs.push_back(inputs[input_index][device_index].get());
     }
     device_thread->StartExecute(
         context, operation_name, std::move(device_inputs), attributes,

@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
 
 #include <optional>
 #include <set>
@@ -22,13 +22,13 @@ limitations under the License.
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
-#include "tensorflow/compiler/xla/hlo/ir/dfs_hlo_visitor_with_default.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_casting_utils.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_computation.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_instructions.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/protobuf_util.h"
+#include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
 #include "tensorflow/compiler/xla/service/gpu/backend_configs.pb.h"
+#include "tensorflow/compiler/xla/service/hlo_casting_utils.h"
+#include "tensorflow/compiler/xla/service/hlo_computation.h"
+#include "tensorflow/compiler/xla/service/hlo_instructions.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/test.h"
 #include "tensorflow/compiler/xla/test_helpers.h"
@@ -858,15 +858,13 @@ TEST_F(HloInstructionTest, PreserveShardingThroughCompatibleClone) {
       })));
   auto* tuple =
       builder.AddInstruction(HloInstruction::CreateTuple({constant, constant}));
-  HloSharding tuple_sharding =
-      HloSharding::SingleTuple(tuple->shape(), sharding);
-  tuple->set_sharding(tuple_sharding);
+  tuple->set_sharding(sharding);
   // Compatible with original shape as tuple tree structure and leaf ranks are
   // identical
   auto clone_shape = ShapeUtil::MakeShape(F32, {3, 3});
   clone_shape = ShapeUtil::MakeTupleShape({clone_shape, clone_shape});
   auto tuple_clone = tuple->CloneWithNewOperands(clone_shape, {});
-  EXPECT_EQ(tuple_clone->sharding(), tuple_sharding);
+  EXPECT_EQ(tuple_clone->sharding(), sharding);
 }
 
 TEST_F(HloInstructionTest,
@@ -880,7 +878,7 @@ TEST_F(HloInstructionTest,
       })));
   auto* tuple =
       builder.AddInstruction(HloInstruction::CreateTuple({constant, constant}));
-  tuple->set_sharding(HloSharding::SingleTuple(tuple->shape(), sharding));
+  tuple->set_sharding(sharding);
   // Incompatible with original shape as tuple tree structure is different
   auto clone_shape = ShapeUtil::MakeShape(F32, {2, 2});
   clone_shape =
@@ -900,7 +898,7 @@ TEST_F(HloInstructionTest,
       })));
   auto* tuple =
       builder.AddInstruction(HloInstruction::CreateTuple({constant, constant}));
-  tuple->set_sharding(HloSharding::SingleTuple(tuple->shape(), sharding));
+  tuple->set_sharding(sharding);
   // Incompatible with original shape as tuple tree structure is different
   auto clone_shape = ShapeUtil::MakeShape(F32, {1, 2, 3});
   clone_shape = ShapeUtil::MakeTupleShape({clone_shape, clone_shape});

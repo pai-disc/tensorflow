@@ -220,8 +220,7 @@ TEST(CAPI, ExecutorContextDestructionOrder) {
     ASSERT_TRUE(TF_GetCode(status) == TF_OK) << TF_Message(status);
     TFE_DeleteContextOptions(opts);
     TFE_Executor* executor = TFE_NewExecutor(
-        /*is_async=*/false, /*enable_streaming_enqueue=*/true,
-        /*in_flight_nodes_limit=*/0);
+        /*is_async=*/false, /*enable_streaming_enqueue=*/true);
     TFE_ContextSetExecutorForThread(ctx, executor);
 
     TFE_DeleteContext(ctx);
@@ -234,8 +233,7 @@ TEST(CAPI, ExecutorContextDestructionOrder) {
     ASSERT_TRUE(TF_GetCode(status) == TF_OK) << TF_Message(status);
     TFE_DeleteContextOptions(opts);
     TFE_Executor* executor = TFE_NewExecutor(
-        /*is_async=*/false, /*enable_streaming_enqueue=*/true,
-        /*in_flight_nodes_limit=*/0);
+        /*is_async=*/false, /*enable_streaming_enqueue=*/true);
     TFE_ContextSetExecutorForThread(ctx, executor);
 
     TFE_DeleteExecutor(executor);
@@ -277,8 +275,7 @@ TEST(CAPI, Function_ident_CPU) {
   for (bool async : {false, true, false}) {
     TFE_Executor* old_executor = TFE_ContextGetExecutorForThread(ctx);
     TFE_Executor* executor = TFE_NewExecutor(
-        /*is_async=*/async, /*enable_streaming_enqueue=*/true,
-        /*in_flight_nodes_limit=*/0);
+        /*is_async=*/async, /*enable_streaming_enqueue=*/true);
     TFE_ContextSetExecutorForThread(ctx, executor);
     CHECK_EQ(TF_OK, TF_GetCode(status)) << TF_Message(status);
 
@@ -330,8 +327,7 @@ void Executor_MatMul_CPU(bool async) {
 
   TFE_Executor* old_executor = TFE_ContextGetExecutorForThread(ctx);
   TFE_Executor* executor = TFE_NewExecutor(
-      /*is_async=*/async, /*enable_streaming_enqueue=*/true,
-      /*in_flight_nodes_limit=*/0);
+      /*is_async=*/async, /*enable_streaming_enqueue=*/true);
   TFE_ContextSetExecutorForThread(ctx, executor);
 
   TFE_TensorHandle* m = TestMatrixTensorHandle(ctx);

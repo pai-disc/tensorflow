@@ -15,8 +15,6 @@ limitations under the License.
 
 #include "tensorflow/core/grappler/optimizers/data/auto_shard.h"
 
-#include <array>
-
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/match.h"
@@ -75,8 +73,7 @@ constexpr char kOutputShapes[] = "output_shapes";
 constexpr char kOutputTypes[] = "output_types";
 
 // clang-format off
-constexpr std::array<const char*, 6> kReaderDatasetOps = {
-    "ArrayRecordDataset",
+constexpr std::array<const char*, 5> kReaderDatasetOps = {
     "FixedLengthRecordDataset",
     "RecordIODataset",
     "SSTableDataset",
@@ -355,7 +352,8 @@ bool ReaderOpInFunction(const NodeDef& node,
   for (int i = 0; i < func->node_def_size(); i++) {
     NodeDef node_in_func = func->node_def(i);
     if (IsDatasetNodeOfType(node_in_func, kReaderDatasetOps) &&
-        node_in_func.input_size() > 0) {
+        node_in_func.input_size() > 0 &&
+        absl::StartsWith(node_in_func.input(0), "args_0")) {
       return true;
     }
     if (IsDatasetNodeOfType(func->node_def(i), kFuncDatasetOps) &&

@@ -44,7 +44,6 @@ from tensorflow.python.framework import function
 from tensorflow.python.framework import indexed_slices
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import sparse_tensor
-from tensorflow.python.framework import tensor_conversion_registry
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework import tensor_util
@@ -3569,7 +3568,7 @@ class _MyTuple(object):
     return iter(self._components)
 
 
-tensor_conversion_registry.register_tensor_conversion_function(
+ops.register_tensor_conversion_function(
     _MyTuple, conversion_func=lambda x, *_, **__: _TupleTensor(x))
 
 

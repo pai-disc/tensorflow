@@ -20,10 +20,7 @@ load(
     "tf_copts",
 )
 
-package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    licenses = ["notice"],
-)
+package(licenses = ["notice"])
 
 cc_library(
     name = "concrete_function",

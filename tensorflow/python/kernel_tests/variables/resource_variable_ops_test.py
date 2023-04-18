@@ -639,8 +639,7 @@ class ResourceVariableOpsTest(test_util.TensorFlowTestCase,
     read = resource_variable_ops.read_variable_op(handle, dtype=dtypes.int32)
     self.assertEqual(self.evaluate(read), [[6]])
 
-  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64,
-                            dtypes.bfloat16)
+  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64)
   @test_util.run_in_graph_and_eager_modes
   def testScatterAddVariableMethod(self, dtype):
     v = resource_variable_ops.ResourceVariable([0.0, 1.5],
@@ -653,8 +652,7 @@ class ResourceVariableOpsTest(test_util.TensorFlowTestCase,
                 indices=[1], values=constant_op.constant([2.5], dtype=dtype))))
     self.assertAllCloseAccordingToType([0.0, 4.0], self.evaluate(v))
 
-  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64,
-                            dtypes.bfloat16)
+  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64)
   @test_util.run_in_graph_and_eager_modes
   def testScatterSubVariableMethod(self, dtype):
     v = resource_variable_ops.ResourceVariable([0.0, 2.5],
@@ -667,8 +665,7 @@ class ResourceVariableOpsTest(test_util.TensorFlowTestCase,
                 indices=[1], values=constant_op.constant([1.5], dtype=dtype))))
     self.assertAllCloseAccordingToType([0.0, 1.0], self.evaluate(v))
 
-  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64,
-                            dtypes.bfloat16)
+  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64)
   @test_util.run_in_graph_and_eager_modes
   def testScatterMaxVariableMethod(self, dtype):
     v = resource_variable_ops.ResourceVariable([0.0, 4.0],
@@ -691,8 +688,7 @@ class ResourceVariableOpsTest(test_util.TensorFlowTestCase,
                 indices=[1], values=constant_op.constant([2.0], dtype=dtype))))
     self.assertAllCloseAccordingToType([0.0, 3.5], self.evaluate(v))
 
-  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64,
-                            dtypes.bfloat16)
+  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64)
   @test_util.run_in_graph_and_eager_modes
   def testScatterMinVariableMethod(self, dtype):
     v = resource_variable_ops.ResourceVariable([0.0, 4.0],
@@ -715,8 +711,7 @@ class ResourceVariableOpsTest(test_util.TensorFlowTestCase,
                 indices=[1], values=constant_op.constant([2.0], dtype=dtype))))
     self.assertAllCloseAccordingToType([0.0, 2.0], self.evaluate(v))
 
-  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64,
-                            dtypes.bfloat16)
+  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64)
   @test_util.run_in_graph_and_eager_modes
   def testScatterMulVariableMethod(self, dtype):
     v = resource_variable_ops.ResourceVariable([0.0, 4.0],
@@ -729,8 +724,7 @@ class ResourceVariableOpsTest(test_util.TensorFlowTestCase,
                 indices=[1], values=constant_op.constant([3.0], dtype=dtype))))
     self.assertAllCloseAccordingToType([0.0, 12.0], self.evaluate(v))
 
-  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64,
-                            dtypes.bfloat16)
+  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64)
   @test_util.run_in_graph_and_eager_modes
   def testScatterDivVariableMethod(self, dtype):
     v = resource_variable_ops.ResourceVariable([0.0, 6.0],
@@ -743,8 +737,7 @@ class ResourceVariableOpsTest(test_util.TensorFlowTestCase,
                 indices=[1], values=constant_op.constant([2.0], dtype=dtype))))
     self.assertAllCloseAccordingToType([0.0, 3.0], self.evaluate(v))
 
-  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64,
-                            dtypes.bfloat16)
+  @parameterized.parameters(dtypes.float16, dtypes.float32, dtypes.float64)
   @test_util.run_in_graph_and_eager_modes
   def testScatterUpdateVariableMethod(self, dtype):
     v = resource_variable_ops.ResourceVariable([0.0, 6.0],
@@ -1473,7 +1466,7 @@ class ResourceVariableOpsTest(test_util.TensorFlowTestCase,
       # least 1024 elements. Test that op determinism ensures the op is
       # deterministc.
       v = resource_variable_ops.ResourceVariable(array_ops.zeros([1024]))
-      delta = indexed_slices.IndexedSlices(
+      delta = ops.IndexedSlices(
           values=np.random.normal(size=(1_000_000,)),
           indices=array_ops.zeros((1_000_000,), dtype=np.int32),
           dense_shape=(1024,))
@@ -1695,7 +1688,6 @@ class ResourceVariableOpsTest(test_util.TensorFlowTestCase,
       dict(dtype=dtypes.bool),
       dict(dtype=dtypes.int64),
       dict(dtype=dtypes.half),
-      dict(dtype=dtypes.bfloat16),
       dict(dtype=dtypes.float32),
       dict(dtype=dtypes.double),
   ])

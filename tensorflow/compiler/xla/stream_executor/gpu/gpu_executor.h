@@ -24,25 +24,22 @@ limitations under the License.
 
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <set>
-#include <string>
 #include <type_traits>
 #include <unordered_map>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/functional/any_invocable.h"
 #include "absl/strings/string_view.h"
 #include "tensorflow/compiler/xla/stream_executor/event.h"
 #include "tensorflow/compiler/xla/stream_executor/gpu/gpu_kernel.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/status.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/statusor.h"
 #include "tensorflow/compiler/xla/stream_executor/platform.h"
 #include "tensorflow/compiler/xla/stream_executor/platform/port.h"
 #include "tensorflow/compiler/xla/stream_executor/stream_executor_internal.h"
 #include "tensorflow/compiler/xla/stream_executor/stream_executor_pimpl.h"
 #include "tensorflow/tsl/platform/fingerprint.h"
-#include "tensorflow/tsl/platform/status.h"
-#include "tensorflow/tsl/platform/statusor.h"
 
 namespace stream_executor {
 
@@ -108,26 +105,25 @@ class GpuExecutor : public internal::StreamExecutorInterface {
 
   ~GpuExecutor() override;
 
-  tsl::Status Init(int device_ordinal, DeviceOptions device_options) override;
+  port::Status Init(int device_ordinal, DeviceOptions device_options) override;
 
-  tsl::Status GetKernel(const MultiKernelLoaderSpec& spec,
-                        KernelBase* kernel) override;
-
+  port::Status GetKernel(const MultiKernelLoaderSpec& spec,
+                         KernelBase* kernel) override;
   // (supported on CUDA only)
   void UnloadKernel(const KernelBase* kernel) override;
-  tsl::Status LoadModule(const MultiModuleLoaderSpec& spec,
-                         ModuleHandle* module_handle) override;
+  port::Status LoadModule(const MultiModuleLoaderSpec& spec,
+                          ModuleHandle* module_handle) override;
   bool UnloadModule(ModuleHandle module_handle) override;
 
   // Allocates and initializes a new constant on the device with the given
   // content. Or, if a device with identical content is already on-device,
   // returns a pointer to that buffer with shared ownership.
-  tsl::StatusOr<std::shared_ptr<DeviceMemoryBase>> CreateOrShareConstant(
+  port::StatusOr<std::shared_ptr<DeviceMemoryBase>> CreateOrShareConstant(
       Stream* stream, const std::vector<uint8_t>& content) override;
 
-  tsl::Status Launch(Stream* stream, const ThreadDim& thread_dims,
-                     const BlockDim& block_dims, const KernelBase& k,
-                     const KernelArgsArrayBase& args) override;
+  port::Status Launch(Stream* stream, const ThreadDim& thread_dims,
+                      const BlockDim& block_dims, const KernelBase& k,
+                      const KernelArgsArrayBase& args) override;
 
   // (supported on CUDA only)
   int CalculateOccupancy(const DeviceDescription& device_description,
@@ -175,28 +171,29 @@ class GpuExecutor : public internal::StreamExecutorInterface {
 
   bool SynchronizeAllActivity() override;
 
-  tsl::Status SynchronousMemZero(DeviceMemoryBase* location,
+  port::Status SynchronousMemZero(DeviceMemoryBase* location,
+                                  uint64_t size) override;
+
+  port::Status SynchronousMemSet(DeviceMemoryBase* location, int value,
                                  uint64_t size) override;
 
-  tsl::Status SynchronousMemSet(DeviceMemoryBase* location, int value,
-                                uint64_t size) override;
+  port::Status SynchronousMemcpy(DeviceMemoryBase* gpu_dst,
+                                 const void* host_src, uint64_t size) override;
 
-  tsl::Status SynchronousMemcpy(DeviceMemoryBase* gpu_dst, const void* host_src,
-                                uint64_t size) override;
+  port::Status SynchronousMemcpy(void* host_dst,
+                                 const DeviceMemoryBase& gpu_src,
+                                 uint64_t size) override;
 
-  tsl::Status SynchronousMemcpy(void* host_dst, const DeviceMemoryBase& gpu_src,
-                                uint64_t size) override;
+  port::Status SynchronousMemcpyDeviceToDevice(DeviceMemoryBase* gpu_dst,
+                                               const DeviceMemoryBase& gpu_src,
+                                               uint64_t size) override;
 
-  tsl::Status SynchronousMemcpyDeviceToDevice(DeviceMemoryBase* gpu_dst,
-                                              const DeviceMemoryBase& gpu_src,
-                                              uint64_t size) override;
-
-  tsl::Status MemZero(Stream* stream, DeviceMemoryBase* location,
-                      uint64_t size) override;
-  tsl::Status Memset(Stream* stream, DeviceMemoryBase* location,
-                     uint8_t pattern, uint64_t size) override;
-  tsl::Status Memset32(Stream* stream, DeviceMemoryBase* location,
-                       uint32_t pattern, uint64_t size) override;
+  port::Status MemZero(Stream* stream, DeviceMemoryBase* location,
+                       uint64_t size) override;
+  port::Status Memset(Stream* stream, DeviceMemoryBase* location,
+                      uint8_t pattern, uint64_t size) override;
+  port::Status Memset32(Stream* stream, DeviceMemoryBase* location,
+                        uint32_t pattern, uint64_t size) override;
 
   bool Memcpy(Stream* stream, void* host_dst, const DeviceMemoryBase& gpu_src,
               uint64_t size) override;
@@ -209,7 +206,7 @@ class GpuExecutor : public internal::StreamExecutorInterface {
                             uint64_t size) override;
 
   bool HostCallback(Stream* stream,
-                    absl::AnyInvocable<tsl::Status() &&> callback) override;
+                    std::function<port::Status()> callback) override;
 
   bool AllocateStream(Stream* stream) override;
 
@@ -225,21 +222,21 @@ class GpuExecutor : public internal::StreamExecutorInterface {
 
   bool StopTimer(Stream* stream, Timer* timer) override;
 
-  tsl::Status AllocateEvent(Event* event) override;
+  port::Status AllocateEvent(Event* event) override;
 
-  tsl::Status DeallocateEvent(Event* event) override;
+  port::Status DeallocateEvent(Event* event) override;
 
-  tsl::Status RecordEvent(Stream* stream, Event* event) override;
+  port::Status RecordEvent(Stream* stream, Event* event) override;
 
-  tsl::Status WaitForEvent(Stream* stream, Event* event) override;
+  port::Status WaitForEvent(Stream* stream, Event* event) override;
 
   Event::Status PollForEventStatus(Event* event) override;
 
-  tsl::Status BlockHostUntilDone(Stream* stream) override;
+  port::Status BlockHostUntilDone(Stream* stream) override;
 
   int PlatformDeviceCount() override { return GpuDriver::GetDeviceCount(); }
 
-  tsl::Status EnablePeerAccessTo(StreamExecutorInterface* other) override;
+  port::Status EnablePeerAccessTo(StreamExecutorInterface* other) override;
 
   bool CanEnablePeerAccessTo(StreamExecutorInterface* other) override;
 
@@ -251,12 +248,12 @@ class GpuExecutor : public internal::StreamExecutorInterface {
   bool GetSymbol(const std::string& symbol_name, ModuleHandle module_handle,
                  void** mem, size_t* bytes) override;
 
-  tsl::StatusOr<std::unique_ptr<DeviceDescription>> CreateDeviceDescription()
+  port::StatusOr<std::unique_ptr<DeviceDescription>> CreateDeviceDescription()
       const override {
     return CreateDeviceDescription(device_ordinal_);
   }
 
-  static tsl::StatusOr<std::unique_ptr<DeviceDescription>>
+  static port::StatusOr<std::unique_ptr<DeviceDescription>>
   CreateDeviceDescription(int device_ordinal);
 
   bool SupportsBlas() const override;
@@ -338,8 +335,8 @@ class GpuExecutor : public internal::StreamExecutorInterface {
                                    void* data);
 
   // Collects metadata for the specified kernel.
-  tsl::Status GetKernelMetadata(GpuKernel* cuda_kernel,
-                                KernelMetadata* kernel_metadata);
+  port::Status GetKernelMetadata(GpuKernel* cuda_kernel,
+                                 KernelMetadata* kernel_metadata);
 
   // Prints to VLOG(2) information about the kernel's occupancy and how it might
   // be improved.
@@ -347,16 +344,16 @@ class GpuExecutor : public internal::StreamExecutorInterface {
                          const BlockDim& block_dims);
 
   // (supported on CUDA only)
-  tsl::Status LoadModuleFromCuBin(const char* cubin, GpuModuleHandle* module)
+  port::Status LoadModuleFromCuBin(const char* cubin, GpuModuleHandle* module)
       TF_EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
 
   // Loads the PTX text `ptx` as a CUDA module.  `ptx` must be null terminated.
   // (supported on CUDA only)
-  tsl::Status LoadModuleFromPtx(const char* ptx, GpuModuleHandle* module)
+  port::Status LoadModuleFromPtx(const char* ptx, GpuModuleHandle* module)
       TF_EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
 
   // (supported on ROCm only)
-  tsl::Status LoadModuleFromHsaco(const char* hsaco, GpuModuleHandle* module)
+  port::Status LoadModuleFromHsaco(const char* hsaco, GpuModuleHandle* module)
       TF_EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
 
   bool UnloadGpuBinary(const void* gpu_binary)

@@ -17,8 +17,7 @@ limitations under the License.
 
 #include <utility>
 
-#include "tensorflow/compiler/xla/mlir_hlo/lhlo_gpu/IR/lhlo_gpu_ops.h"
-#include "tensorflow/compiler/xla/mlir_hlo/mhlo/IR/hlo_ops.h"
+#include "tensorflow/compiler/xla/mlir_hlo/include/mlir-hlo/Dialect/lhlo_gpu/IR/lhlo_gpu_ops.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/stream_executor/dnn.h"
 #include "tensorflow/compiler/xla/types.h"
@@ -73,8 +72,6 @@ StatusOr<stream_executor::dnn::ActivationMode> ConvertConvActivationMode(
       return stream_executor::dnn::kReluX;
     case mlir::lmhlo_gpu::Activation::BandPass:
       return stream_executor::dnn::kBandPass;
-    case mlir::lmhlo_gpu::Activation::Elu:
-      return stream_executor::dnn::kElu;
     default:
       return InternalError("Unexpected activation");
   }
@@ -110,7 +107,7 @@ StatusOr<std::vector<ReplicaGroup>> ConvertReplicaGroups(
 // Convert a (N, 2) dense attribute to a list of tuples. This is the way padding
 // and source-target pairs are defined in HLO.
 StatusOr<std::vector<std::pair<int64_t, int64_t>>> ConvertNx2Attribute(
-    std::optional<mlir::DenseIntElementsAttr> optional_attr) {
+    llvm::Optional<mlir::DenseIntElementsAttr> optional_attr) {
   if (!optional_attr.has_value())
     return std::vector<std::pair<int64_t, int64_t>>{};
   mlir::DenseIntElementsAttr attr = *optional_attr;
@@ -130,7 +127,7 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> ConvertNx2Attribute(
 }
 
 StatusOr<FftType> ConvertFftType(llvm::StringRef type_string) {
-  std::optional<mlir::mhlo::FftType> type =
+  llvm::Optional<mlir::mhlo::FftType> type =
       mlir::mhlo::symbolizeEnum<mlir::mhlo::FftType>(type_string);
   if (!type) return InvalidArgument("Unknown FFT type %s", type_string.str());
 
@@ -150,7 +147,7 @@ StatusOr<FftType> ConvertFftType(llvm::StringRef type_string) {
 
 StatusOr<TriangularSolveOptions::Transpose> ConvertTranspose(
     llvm::StringRef transpose_string) {
-  std::optional<mlir::mhlo::Transpose> transpose =
+  llvm::Optional<mlir::mhlo::Transpose> transpose =
       mlir::mhlo::symbolizeTranspose(transpose_string);
   if (!transpose)
     return InvalidArgument("Unknown transpose type %s", transpose_string.str());
@@ -169,21 +166,6 @@ StatusOr<TriangularSolveOptions::Transpose> ConvertTranspose(
   }
 }
 
-StatusOr<xla::CustomCallSchedule> ConvertCustomCallSchedule(
-    mlir::mhlo::CustomCallSchedule schedule) {
-  switch (schedule) {
-    case mlir::mhlo::CustomCallSchedule::NONE:
-      return xla::CustomCallSchedule::SCHEDULE_NONE;
-    case mlir::mhlo::CustomCallSchedule::LATEST:
-      return xla::CustomCallSchedule::SCHEDULE_LATEST;
-    case mlir::mhlo::CustomCallSchedule::EARLIEST:
-      return xla::CustomCallSchedule::SCHEDULE_EARLIEST;
-    default:
-      return InvalidArgument("Unknown CustomCallSchedule enum value #%d",
-                             schedule);
-  }
-}
-
 StatusOr<xla::CustomCallApiVersion> ConvertCustomCallApiVersion(
     mlir::mhlo::CustomCallApiVersion api_version) {
   switch (api_version) {
@@ -195,8 +177,6 @@ StatusOr<xla::CustomCallApiVersion> ConvertCustomCallApiVersion(
       return xla::CustomCallApiVersion::API_VERSION_STATUS_RETURNING;
     case mlir::mhlo::CustomCallApiVersion::API_VERSION_STATUS_RETURNING_UNIFIED:
       return xla::CustomCallApiVersion::API_VERSION_STATUS_RETURNING_UNIFIED;
-    case mlir::mhlo::CustomCallApiVersion::API_VERSION_TYPED_FFI:
-      return xla::CustomCallApiVersion::API_VERSION_TYPED_FFI;
     default:
       return InvalidArgument("Unknown CustomCallApiVersion enum value #%d",
                              api_version);
@@ -204,7 +184,7 @@ StatusOr<xla::CustomCallApiVersion> ConvertCustomCallApiVersion(
 }
 
 StatusOr<std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>>
-ConvertOutputOperandAliasing(mlir::ArrayAttr aliasArrayAttr) {
+ConvertCustomCallOutputOperandAliasing(mlir::ArrayAttr aliasArrayAttr) {
   std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>> aliasInfo;
   for (auto attr : aliasArrayAttr.getValue()) {
     auto alias = attr.cast<mlir::mhlo::OutputOperandAliasAttr>();

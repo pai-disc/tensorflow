@@ -15,6 +15,7 @@ load("//tensorflow:tensorflow.default.bzl", "filegroup", "tf_cuda_cc_test", "tf_
 # For platform specific build config
 load(
     "//tensorflow/core/platform:build_config.bzl",
+    "tf_kernel_tests_linkstatic",
     "tf_protos_profiler_service",
 )
 load(
@@ -23,7 +24,6 @@ load(
 )
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = if_google(
         ["//tensorflow:internal"],
         ["//visibility:public"],
@@ -43,7 +43,6 @@ cc_library(
     name = "grpc_util",
     srcs = ["grpc_util.cc"],
     hdrs = ["grpc_util.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     linkopts = if_windows(["-DEFAULTLIB:ws2_32.lib"]),
     deps = [
         "//tensorflow/core/distributed_runtime:error_payloads",
@@ -60,17 +59,16 @@ cc_library(
     name = "grpc_client_cq_tag",
     srcs = [],
     hdrs = ["grpc_client_cq_tag.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
-        "//tensorflow/tsl/distributed_runtime/rpc:grpc_client_cq_tag",
-    ],
+        ":grpc_util",
+        "//tensorflow/core:lib",
+    ] + tf_grpc_cc_dependencies(),
 )
 
 cc_library(
     name = "grpc_state",
     srcs = ["grpc_state.cc"],
     hdrs = ["grpc_state.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_client_cq_tag",
         ":grpc_util",
@@ -79,7 +77,6 @@ cc_library(
         "//tensorflow/core:lib_internal",
         "//tensorflow/core/distributed_runtime:call_options",
         "//tensorflow/core/distributed_runtime:tensor_coding",
-        "//tensorflow/tsl/distributed_runtime/rpc:grpc_state",
     ] + tf_grpc_cc_dependencies(),
 )
 
@@ -87,7 +84,6 @@ cc_library(
     name = "grpc_remote_worker",
     srcs = ["grpc_remote_worker.cc"],
     hdrs = ["grpc_remote_worker.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_client_cq_tag",
         ":grpc_state",
@@ -108,7 +104,6 @@ cc_library(
 cc_library(
     name = "grpc_channel",
     hdrs = ["grpc_channel.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         "//tensorflow/tsl/distributed_runtime/rpc:grpc_channel",
     ],
@@ -118,7 +113,6 @@ cc_library(
     name = "grpc_tensor_coding",
     srcs = ["grpc_tensor_coding.cc"],
     hdrs = ["grpc_tensor_coding.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         "@com_google_absl//absl/flags:flag",
         "//tensorflow/core:core_cpu_internal",
@@ -134,7 +128,6 @@ cc_library(
     name = "grpc_worker_cache",
     srcs = ["grpc_worker_cache.cc"],
     hdrs = ["grpc_worker_cache.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_channel",
         ":grpc_client_cq_tag",
@@ -157,7 +150,6 @@ tf_cc_test(
     srcs = [
         "grpc_worker_cache_test.cc",
     ],
-    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_worker_cache",
         "//tensorflow/c:tf_status_headers",
@@ -175,7 +167,6 @@ cc_library(
     name = "grpc_response_cache",
     srcs = ["grpc_response_cache.cc"],
     hdrs = ["grpc_response_cache.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
@@ -187,7 +178,6 @@ tf_cuda_library(
     name = "grpc_worker_service",
     srcs = ["grpc_worker_service.cc"],
     hdrs = ["grpc_worker_service.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_response_cache",
         ":grpc_tensor_coding",
@@ -217,7 +207,6 @@ cc_library(
     name = "grpc_worker_service_impl",
     srcs = ["grpc_worker_service_impl.cc"],
     hdrs = ["grpc_worker_service_impl.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_util",
         "//tensorflow/core/distributed_runtime:tensor_coding",
@@ -229,7 +218,6 @@ cc_library(
     name = "grpc_remote_master",
     srcs = ["grpc_remote_master.cc"],
     hdrs = ["grpc_remote_master.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_master_service_impl",
         ":grpc_util",
@@ -248,7 +236,6 @@ cc_library(
     name = "grpc_master_service",
     srcs = ["grpc_master_service.cc"],
     hdrs = ["grpc_master_service.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_master_service_impl",
         ":grpc_util",
@@ -267,7 +254,6 @@ cc_library(
     name = "grpc_master_service_impl",
     srcs = ["grpc_master_service_impl.cc"],
     hdrs = ["grpc_master_service_impl.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         "//tensorflow/core/protobuf:master_proto_cc",
     ] + tf_grpc_cc_dependencies(),
@@ -277,7 +263,6 @@ cc_library(
     name = "rpc_rendezvous_mgr",
     srcs = ["rpc_rendezvous_mgr.cc"],
     hdrs = ["rpc_rendezvous_mgr.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:framework",
@@ -295,7 +280,6 @@ cc_library(
     name = "grpc_server_lib",
     srcs = ["grpc_server_lib.cc"],
     hdrs = ["grpc_server_lib.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     linkstatic = 1,  # Seems to be needed since alwayslink is broken in bazel
     deps = [
         ":grpc_channel",
@@ -333,7 +317,6 @@ cc_library(
 
 cc_library(
     name = "grpc_runtime",
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     visibility = ["//visibility:public"],
     deps = [
         ":grpc_server_lib",
@@ -346,7 +329,6 @@ tf_cc_binary(
     srcs = [
         "grpc_tensorflow_server.cc",
     ],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_server_lib",
         "//tensorflow/core:core_cpu",
@@ -371,7 +353,6 @@ cc_library(
     srcs = [
         "grpc_testlib_server.cc",
     ],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_server_lib",
         "//tensorflow/core:array_ops_op_lib",
@@ -398,7 +379,6 @@ cc_library(
 tf_cc_binary(
     name = "grpc_testlib_server",
     testonly = 1,
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [":grpc_testlib_server_main"],
 )
 
@@ -407,7 +387,6 @@ tf_cuda_library(
     testonly = 1,
     srcs = ["grpc_testlib.cc"],
     hdrs = ["grpc_testlib.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     data = [
         ":grpc_testlib_server",
     ],
@@ -428,7 +407,6 @@ cc_library(
     name = "grpc_session",
     srcs = ["grpc_session.cc"],
     hdrs = ["grpc_session.h"],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     deps = [
         ":grpc_channel",
         ":grpc_remote_master",
@@ -453,11 +431,11 @@ tf_cuda_cc_tests(
     srcs = [
         "rpc_rendezvous_mgr_test.cc",
     ],
-    # copybara:uncomment copts = ["-Wthread-safety-analysis"],
     linkopts = select({
         "//tensorflow:macos": ["-headerpad_max_install_names"],
         "//conditions:default": [],
     }),
+    linkstatic = tf_kernel_tests_linkstatic(),
     tags = tf_cuda_tests_tags() + [],
     deps = [
         ":grpc_channel",
@@ -484,7 +462,6 @@ tf_cc_test(
     name = "grpc_tensor_coding_test",
     size = "small",
     srcs = ["grpc_tensor_coding_test.cc"],
-    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
     tags = [
         "no_mac",
         "no_windows",
@@ -504,13 +481,30 @@ tf_cc_test(
     ] + tf_grpc_cc_dependencies(),
 )
 
+tf_cc_test(
+    name = "grpc_util_test",
+    size = "small",
+    srcs = ["grpc_util_test.cc"],
+    tags = [
+        "no_mac",
+    ],
+    deps = [
+        ":grpc_util",
+        "//tensorflow/core/distributed_runtime:error_payloads",
+        "//tensorflow/core/platform:errors",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "//tensorflow/core/protobuf:worker_proto_cc",
+    ] + tf_grpc_dependencies() + tf_grpc_cc_dependencies(),
+)
+
 tf_cuda_cc_test(
     name = "grpc_session_test",
     size = "medium",
     # highly variable test time. Typically ~2m, but can spike to 5+min.
     timeout = "long",
     srcs = ["grpc_session_test.cc"],
-    # copybara:uncomment extra_copts = ["-Wthread-safety-analysis"],
+    linkstatic = tf_kernel_tests_linkstatic(),
     tags = tf_cuda_tests_tags() + [
         "no_cuda_asan",  # b/176448181
         "no_oss",  # b/62956105: port conflicts.

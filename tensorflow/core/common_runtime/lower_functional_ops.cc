@@ -41,7 +41,6 @@ constexpr const char* const kLowerAsMultiDeviceFunctionAttr =
 
 constexpr const char* const kTpuReplicateAttr = "_tpu_replicate";
 constexpr const char* const kXlaClusterAttr = "_xla_compile_id";
-constexpr const char* const kXlaMustCompileAttr = "_XlaMustCompile";
 
 // Checks if boolean attribute is defined and it's value is 'true'.
 bool CheckBoolAttr(const Node* n, absl::string_view attr_name) {
@@ -70,8 +69,7 @@ bool MarkedForTpuCompilation(const Node* n) {
 }
 
 bool MarkedForXlaCompilation(const Node* n) {
-  return CheckStringAttr(n, kXlaClusterAttr) ||
-         CheckBoolAttr(n, kXlaMustCompileAttr);
+  return CheckStringAttr(n, kXlaClusterAttr);
 }
 
 bool HasArgsOrRetvals(const Graph& g) {

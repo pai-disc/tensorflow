@@ -48,6 +48,7 @@ struct FreezeAssetsPass : public impl::FreezeAssetsPassBase<FreezeAssetsPass> {
   void runOnOperation() override;
 
  private:
+  // TODO(team): should be a pass option.
   std::string saved_model_dir;
 };
 
@@ -100,9 +101,9 @@ void FreezeAssetsPass::runOnOperation() {
         // asset filepath.
         builder.setInsertionPoint(init_op);
         builder.create<TF::InitializeTableFromTextFileV2Op>(
-            init_op.getLoc(), init_op.getTableHandle(), const_op.getResult(),
-            init_op.getKeyIndex(), init_op.getValueIndex(),
-            init_op.getVocabSize(), init_op.getDelimiter());
+            init_op.getLoc(), init_op.table_handle(), const_op.getResult(),
+            init_op.key_index(), init_op.value_index(), init_op.vocab_size(),
+            init_op.delimiter());
         init_op.erase();
       }
     }

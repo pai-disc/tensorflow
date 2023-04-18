@@ -86,11 +86,11 @@ class ValueMapManager {
     return ::tensorflow::OkStatus();
   }
 
-  tensorflow::StatusOr<Value> GetValueOrCreatePlaceholder(StringRef full_name) {
+  Value GetValueOrCreatePlaceholder(StringRef full_name) {
     StringRef node_name;
     StringRef output_name = "";
     bool is_control_dep = full_name[0] == '^';
-    size_t output_num = 0;
+    int output_num = 0;
     if (is_control_dep) full_name = full_name.drop_front();
     {
       size_t colon_sep = full_name.find_first_of(':');
@@ -105,16 +105,8 @@ class ValueMapManager {
         // NOLINTNEXTLINE: type matching the API taking a reference.
         unsigned long long value;
         if (!llvm::getAsUnsignedInteger(output_name.drop_front(colon_sep + 1),
-                                        10, value)) {
-          if (LLVM_LIKELY(
-                  value <=
-                  std::numeric_limits<llvm::SmallVectorSizeType<Value>>::max() -
-                      1))
-            output_num = value;
-          else
-            return InvalidArgument("Output index ", value,
-                                   " is invalid (too large)");
-        }
+                                        10, value))
+          output_num = value;
         output_name = output_name.take_front(colon_sep);
       }
     }
@@ -179,9 +171,8 @@ Status ImportNodes(ValueMapManager value_manager,
     for (const std::string& input : node.input()) {
       if (input.empty())
         return InvalidArgument("Node '", node.name(), "' has an empty input");
-      TF_ASSIGN_OR_RETURN(Value value,
-                          value_manager.GetValueOrCreatePlaceholder(input));
-      state.operands.push_back(value);
+      state.operands.push_back(
+          value_manager.GetValueOrCreatePlaceholder(input));
     }
     // Retrieve the entry in the nodes_map for this node and infer the result
     // count from what was inferred during the first traversal above.
@@ -385,8 +376,9 @@ Status ImportGenericFunction(
     args_attrs.push_back(NamedAttrList{}.getDictionary(context));
     arg_num++;
   }
-  attrs.push_back(builder.getNamedAttr(func_op.getArgAttrsAttrName(),
-                                       builder.getArrayAttr(args_attrs)));
+  attrs.push_back(
+      builder.getNamedAttr(function_interface_impl::getArgDictAttrName(),
+                           builder.getArrayAttr(args_attrs)));
 
   // Process the results attributes now.
   int res_num = 0;
@@ -403,8 +395,9 @@ Status ImportGenericFunction(
     res_attrs.push_back(output_attrs.getDictionary(context));
     ++res_num;
   }
-  attrs.push_back(builder.getNamedAttr(func_op.getResAttrsAttrName(),
-                                       builder.getArrayAttr(res_attrs)));
+  attrs.push_back(
+      builder.getNamedAttr(function_interface_impl::getResultDictAttrName(),
+                           builder.getArrayAttr(res_attrs)));
 
   values_map.clear();
   Block* body = new Block();
@@ -479,9 +472,8 @@ Status ImportGenericFunction(
       return InvalidArgument("Function '", func.signature().name(),
                              "' has empty result name");
     }
-    TF_ASSIGN_OR_RETURN(
-        ret_vals[position->second],
-        value_manager.GetValueOrCreatePlaceholder(ret_val.second));
+    ret_vals[position->second] =
+        value_manager.GetValueOrCreatePlaceholder(ret_val.second);
   }
   for (const auto& ret_val : func.control_ret()) {
     auto position = control_output_to_position.find(ret_val.first);
@@ -495,8 +487,8 @@ Status ImportGenericFunction(
       return InvalidArgument("Function '", func.signature().name(),
                              "' has empty control result name");
     }
-    TF_ASSIGN_OR_RETURN(Value result, value_manager.GetValueOrCreatePlaceholder(
-                                          (Twine("^") + ret_val.second).str()));
+    Value result = value_manager.GetValueOrCreatePlaceholder(
+        (Twine("^") + ret_val.second).str());
     if (!result.getType().isa<ControlType>())
       return InvalidArgument("failed to map returned value ", ret_val.second,
                              ", isn't a control output");

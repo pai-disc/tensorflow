@@ -25,7 +25,7 @@ namespace TF {
 LogicalResult VerifyShapeOfReshapeOp(ArrayRef<int64_t> shape) {
   bool has_dynamic_dim = false;
   for (int64_t dim : shape) {
-    if (dim != ShapedType::kDynamic) {
+    if (dim != ShapedType::kDynamicSize) {
       if (dim < 0) return failure();
       continue;
     }

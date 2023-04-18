@@ -1,5 +1,4 @@
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//tensorflow:internal"],
     licenses = ["notice"],
 )
@@ -18,7 +17,6 @@ py_library(
         "//tensorflow/python:random_ops",
         "//tensorflow/python:tensor_util",
         "//tensorflow/python:util",
-        "//tensorflow/python/framework:type_spec_registry",
         "//tensorflow/python/ops/signal",
         "//tensorflow/python/trackable:data_structures",
         "//third_party/py/numpy",

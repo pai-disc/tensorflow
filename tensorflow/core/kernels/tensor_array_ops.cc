@@ -80,9 +80,8 @@ Status GetTensorArray(OpKernelContext* ctx, TensorArray** tensor_array) {
     TF_RETURN_IF_ERROR(GetHandle(ctx, &container, &ta_handle));
     ResourceMgr* rm = ctx->resource_manager();
     if (rm == nullptr) return errors::Internal("No resource manager.");
-    ScopedStepContainer* sc = ctx->step_container();
-    if (sc == nullptr) return errors::Internal("No step container.");
-    TF_RETURN_IF_ERROR(sc->Lookup(rm, container + ta_handle, tensor_array));
+    TF_RETURN_IF_ERROR(
+        ctx->step_container()->Lookup(rm, container + ta_handle, tensor_array));
     return OkStatus();
   } else {
     return LookupResource(ctx, HandleFromInput(ctx, 0), tensor_array);
@@ -258,6 +257,7 @@ REGISTER_KERNEL_BUILDER(Name("TensorArrayV3").Device(DEVICE_CPU),
                           TensorArrayOp);
 
 TF_CALL_int64(REGISTER_GPU);
+TF_CALL_bfloat16(REGISTER_GPU);
 TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU);
 TF_CALL_COMPLEX_TYPES(REGISTER_GPU);
 #undef REGISTER_GPU
@@ -481,6 +481,7 @@ TF_CALL_ALL_TYPES(REGISTER_WRITE);
                               .HostMemory("index"),             \
                           TensorArrayWriteOp<GPUDevice, type>);
 
+TF_CALL_bfloat16(REGISTER_GPU);
 TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU);
 TF_CALL_COMPLEX_TYPES(REGISTER_GPU);
 #undef REGISTER_GPU
@@ -569,6 +570,7 @@ TF_CALL_ALL_TYPES(REGISTER_READ)
                           TensorArrayReadOp<GPUDevice, type>);
 
 TF_CALL_int64(REGISTER_GPU);
+TF_CALL_bfloat16(REGISTER_GPU);
 TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU);
 TF_CALL_COMPLEX_TYPES(REGISTER_GPU);
 #undef REGISTER_GPU
@@ -767,6 +769,7 @@ REGISTER_GATHER_AND_PACK(qint32);
           .HostMemory("handle"),                                            \
       TensorArrayPackOrGatherOp<GPUDevice, type, false /* LEGACY_PACK */>);
 
+TF_CALL_bfloat16(REGISTER_GPU);
 TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU);
 TF_CALL_COMPLEX_TYPES(REGISTER_GPU);
 #undef REGISTER_GPU
@@ -982,6 +985,7 @@ REGISTER_CONCAT(qint32);
                               .HostMemory("handle"),             \
                           TensorArrayConcatOp<GPUDevice, type>)
 
+TF_CALL_bfloat16(REGISTER_GPU);
 TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU);
 TF_CALL_COMPLEX_TYPES(REGISTER_GPU);
 #undef REGISTER_GPU

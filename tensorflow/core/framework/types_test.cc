@@ -16,7 +16,6 @@ limitations under the License.
 #include "tensorflow/core/framework/types.h"
 
 #include "tensorflow/core/framework/type_traits.h"
-#include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/lib/strings/str_util.h"
 #include "tensorflow/core/platform/protobuf.h"
 #include "tensorflow/core/platform/test.h"
@@ -100,10 +99,6 @@ TEST(TypesTest, DataTypeFromString) {
   EXPECT_EQ(DT_QUINT8_REF, dt);
   ASSERT_TRUE(DataTypeFromString("bfloat16", &dt));
   EXPECT_EQ(DT_BFLOAT16, dt);
-  ASSERT_TRUE(DataTypeFromString("float8_e5m2", &dt));
-  EXPECT_EQ(DT_FLOAT8_E5M2, dt);
-  ASSERT_TRUE(DataTypeFromString("float8_e4m3fn", &dt));
-  EXPECT_EQ(DT_FLOAT8_E4M3FN, dt);
 }
 
 template <typename T>
@@ -133,8 +128,6 @@ TEST(TypesTest, QuantizedTypes) {
   EXPECT_FALSE(DataTypeIsQuantized(DT_INT16));
   EXPECT_FALSE(DataTypeIsQuantized(DT_INT32));
   EXPECT_FALSE(DataTypeIsQuantized(DT_BFLOAT16));
-  EXPECT_FALSE(DataTypeIsQuantized(DT_FLOAT8_E5M2));
-  EXPECT_FALSE(DataTypeIsQuantized(DT_FLOAT8_E4M3FN));
 }
 
 TEST(TypesTest, ComplexTypes) {

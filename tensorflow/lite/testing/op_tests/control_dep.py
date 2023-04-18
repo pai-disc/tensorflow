@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """Test configs for control_dep."""
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from tensorflow.lite.testing.zip_test_utils import create_tensor_data
 from tensorflow.lite.testing.zip_test_utils import make_zip_of_tests
 from tensorflow.lite.testing.zip_test_utils import register_make_test_function
@@ -37,10 +37,7 @@ def make_control_dep_tests(options):
                                                   input_tensor - 1)
     with tf.control_dependencies([assert_op]):
       out = tf.nn.conv2d(
-          input=input_tensor,
-          filters=filter_value,
-          strides=(1, 1, 1, 1),
-          padding="SAME")
+          input_tensor, filter_value, strides=(1, 1, 1, 1), padding="SAME")
       return [input_tensor], [out]
 
   def build_inputs(parameters, sess, inputs, outputs):

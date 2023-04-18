@@ -32,9 +32,7 @@ class StreamExecutorGpuDevice : public PjRtStreamExecutorDevice {
   StreamExecutorGpuDevice(int id,
                           std::unique_ptr<LocalDeviceState> local_device_state,
                           std::string device_kind, std::string device_vendor,
-                          int node_id, int slice_index = 0);
-
-  int slice_index() const;
+                          int node_id);
 
   absl::string_view device_vendor() const;
 
@@ -43,7 +41,6 @@ class StreamExecutorGpuDevice : public PjRtStreamExecutorDevice {
  private:
   std::string device_vendor_;
   std::string to_string_;
-  int slice_index_;
 };
 
 // distributed_client may be nullptr in non-distributed settings.

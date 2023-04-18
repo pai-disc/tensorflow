@@ -1,9 +1,6 @@
 load("//tensorflow:tensorflow.bzl", "py_tests")
 
-package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    licenses = ["notice"],
-)
+package(licenses = ["notice"])
 
 py_library(
     name = "summary",

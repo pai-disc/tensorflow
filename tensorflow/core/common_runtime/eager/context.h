@@ -81,6 +81,9 @@ namespace eager {
 class RemoteMgr;
 }  // namespace eager
 
+class TensorHandle;
+class EagerOperation;
+
 class EagerContext : public ImmediateExecutionContext, public core::RefCounted {
  public:
   static constexpr uint64 kInvalidContextId = 0;
@@ -296,10 +299,8 @@ class EagerContext : public ImmediateExecutionContext, public core::RefCounted {
     // if it uses local rendezvous type, which forces EagerContext to create a
     // new local rendezvous instance in the table.
     local_rendezvous_table_->Remove(-1);
-    Rendezvous* rendezvous;
-    TF_CHECK_OK(CreateRendezvousFactory()(-1, nullptr, &rendezvous));
     global_rendezvous_for_functions_ =
-        core::RefCountPtr<Rendezvous>(rendezvous);
+        core::RefCountPtr<Rendezvous>(CreateRendezvous(-1));
   }
 
   // Returns the global_rendezvous_for_functions' underlying LocalRendezvous'
@@ -307,14 +308,14 @@ class EagerContext : public ImmediateExecutionContext, public core::RefCounted {
   // returns OK.
   Status GetGlobalRendezvousForFunctionLocalRendezvousStatus();
 
-  // Returns a factory which maps from step_id to rendezvous. This closure
+  // Returns a function which maps from step_id to rendezvous. This closure
   // respects the value of `SetReuseRendezvousForFunctions` at the time the
   // closure was created, which allows the setting to be toggled around async op
   // launches.
   //
   // The caller of the returned function owns a reference to the resulting
   // Rendezvous.
-  Rendezvous::Factory RendezvousFactory() {
+  std::function<Rendezvous*(int64_t)> RendezvousCreator() {
     // There is an implicit assumption that the global_rendezvous_for_functions_
     // is always an IntraProcessRendezvous to match the behaviour of the
     // EagerContext's rendezvous.
@@ -326,17 +327,13 @@ class EagerContext : public ImmediateExecutionContext, public core::RefCounted {
         worker_env_ == nullptr &&
 #endif
         remote_device_mgr() == nullptr) {
-      return Rendezvous::Factory{[this](const int64_t step_id,
-                                        const DeviceMgr* device_mgr,
-                                        Rendezvous** r) {
+      return [this](int64_t step_id) {
         mutex_lock l(global_rendezvous_mu_);
-        // Increase the ref that owned by the caller.
         global_rendezvous_for_functions_->Ref();
-        *r = global_rendezvous_for_functions_.get();
-        return OkStatus();
-      }};
+        return global_rendezvous_for_functions_.get();
+      };
     } else {
-      return CreateRendezvousFactory();
+      return [this](int64_t step_id) { return CreateRendezvous(step_id); };
     }
   }
 
@@ -587,56 +584,27 @@ class EagerContext : public ImmediateExecutionContext, public core::RefCounted {
         TF_GUARDED_BY(table_lock_);
   };
 
-  Rendezvous::Factory CreateRendezvousFactory() const {
+  Rendezvous* CreateRendezvous(int64_t step_id) const {
     if (rendezvous_creator_ != nullptr) {
-      return Rendezvous::Factory{[this](const int64_t step_id,
-                                        const DeviceMgr* device_mgr,
-                                        Rendezvous** r) {
-        VLOG(6) << "Creating rendezvous using the rendezvous_creator_.";
-        *r = rendezvous_creator_(step_id);
-        return OkStatus();
-      }};
+      VLOG(6) << "Creating rendezvous using the rendezvous_creator_.";
+      return rendezvous_creator_(step_id);
     }
 
 #if !defined(IS_MOBILE_PLATFORM)
     if (worker_env_ != nullptr && worker_env_->rendezvous_mgr != nullptr) {
-      return Rendezvous::Factory{
-          [this](const int64_t step_id, const DeviceMgr* device_mgr,
-                 Rendezvous** r) {
-            VLOG(6)
-                << "Creating rendezvous using the worker_env's rendezvous_mgr.";
-            // TODO(hhb): Add a Create method and use it here.
-            auto* remote_r = worker_env_->rendezvous_mgr->Find(step_id);
-            remote_r->Initialize(worker_session_.get()).IgnoreError();
-            *r = remote_r;
-            return OkStatus();
-          },
-          [this](const int64_t step_id) {
-            VLOG(6) << "Cleaning up rendezvous from the rendezvous_mgr. "
-                    << "Step id: " << step_id;
-            worker_env_->rendezvous_mgr->Cleanup(step_id);
-            return OkStatus();
-          }};
+      VLOG(6) << "Creating rendezvous using the worker_env's rendezvous_mgr.";
+      auto* remote_r = worker_env_->rendezvous_mgr->Find(step_id);
+      remote_r->Initialize(worker_session_.get()).IgnoreError();
+      return remote_r;
     }
 #endif
 
     if (remote_device_mgr() == nullptr) {
-      return Rendezvous::Factory{
-          [this](const int64_t step_id, const DeviceMgr* device_mgr,
-                 Rendezvous** r) {
-            VLOG(6) << "Creating rendezvous using local_device_mgr.";
-            *r = local_rendezvous_table_->FindOrCreate(step_id,
-                                                       local_device_mgr());
-            return OkStatus();
-          },
-          [this](const int64_t step_id) {
-            VLOG(6) << "Cleaning up rendezvous from local_device_mgr.";
-            local_rendezvous_table_->Remove(step_id);
-            return OkStatus();
-          }};
+      VLOG(6) << "Creating rendezvous using local_device_mgr.";
+      return local_rendezvous_table_->FindOrCreate(step_id, local_device_mgr());
     }
 
-    return Rendezvous::Factory();
+    return nullptr;
   }
 
   ~EagerContext() override;

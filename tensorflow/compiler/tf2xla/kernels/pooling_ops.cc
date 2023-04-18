@@ -33,40 +33,14 @@ limitations under the License.
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/core/framework/bounds_check.h"
 #include "tensorflow/core/framework/op_kernel.h"
-#include "tensorflow/core/framework/op_requires.h"
 #include "tensorflow/core/framework/register_types.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/platform/errors.h"
 #include "tensorflow/core/util/determinism.h"
 #include "tensorflow/core/util/tensor_format.h"
-#include "tensorflow/tsl/platform/errors.h"
 
 namespace tensorflow {
 namespace {
-
-template <typename T>
-static Status ValidateKernelSizes(const T& ksizes) {
-  for (size_t i = 0; i < ksizes.size(); ++i) {
-    if (ksizes[i] <= 0) {
-      return errors::InvalidArgument(
-          "Sliding window ksize field for dimension ", i,
-          " must be positive but is ", ksizes[i]);
-    }
-  }
-  return OkStatus();
-}
-
-template <typename T>
-static Status ValidateStrides(const T& strides) {
-  for (size_t i = 0; i < strides.size(); ++i) {
-    if (strides[i] <= 0) {
-      return errors::InvalidArgument(
-          "Sliding window stride field for dimension ", i,
-          " must be positive but is ", strides[i]);
-    }
-  }
-  return OkStatus();
-}
 
 // Superclass of pooling ops.
 class PoolingOp : public XlaOpKernel {
@@ -109,54 +83,50 @@ class PoolingOp : public XlaOpKernel {
 
  protected:
   StatusOr<std::vector<int64_t>> GetKernelSize(XlaOpKernelContext* ctx) {
-    std::vector<int64_t> ksize;
     if (ctx->num_inputs() == 1) {
-      ksize = ksize_;
-    } else {
-      const TensorShape ksize_shape = ctx->InputShape(1);
-      // Validate input sizes.
-      if (!TensorShapeUtils::IsVector(ksize_shape)) {
-        return errors::InvalidArgument("ksize must be a vector, not shape ",
-                                       ksize_shape.DebugString());
-      }
-      if (ksize_shape.num_elements() != num_dims()) {
-        return errors::InvalidArgument(
-            "Sliding window ksize field must "
-            "specify ",
-            num_dims(), " dimensions");
-      }
-      auto status = ctx->ConstantInputAsIntVector(1, &ksize);
-      if (!status.ok()) {
-        return status;
-      }
+      return ksize_;
     }
-    TF_RETURN_IF_ERROR(ValidateKernelSizes(ksize));
+    const TensorShape ksize_shape = ctx->InputShape(1);
+    // Validate input sizes.
+    if (!TensorShapeUtils::IsVector(ksize_shape)) {
+      return errors::InvalidArgument("ksize must be a vector, not shape ",
+                                     ksize_shape.DebugString());
+    }
+    if (ksize_shape.num_elements() != num_dims()) {
+      return errors::InvalidArgument(
+          "Sliding window ksize field must "
+          "specify ",
+          num_dims(), " dimensions");
+    }
+    std::vector<int64_t> ksize;
+    auto status = ctx->ConstantInputAsIntVector(1, &ksize);
+    if (!status.ok()) {
+      return status;
+    }
     return ksize;
   }
 
   StatusOr<std::vector<int64_t>> GetStride(XlaOpKernelContext* ctx) {
-    std::vector<int64_t> stride;
     if (ctx->num_inputs() == 1) {
-      stride = stride_;
-    } else {
-      const TensorShape stride_shape = ctx->InputShape(2);
-      // Validate input sizes.
-      if (!TensorShapeUtils::IsVector(stride_shape)) {
-        return errors::InvalidArgument("stride must be a vector, not shape ",
-                                       stride_shape.DebugString());
-      }
-      if (stride_shape.num_elements() != num_dims()) {
-        return errors::InvalidArgument(
-            "Sliding window stride field must "
-            "specify ",
-            num_dims(), " dimensions");
-      }
-      auto status = ctx->ConstantInputAsIntVector(2, &stride);
-      if (!status.ok()) {
-        return status;
-      }
+      return stride_;
     }
-    TF_RETURN_IF_ERROR(ValidateStrides(stride));
+    const TensorShape stride_shape = ctx->InputShape(2);
+    // Validate input sizes.
+    if (!TensorShapeUtils::IsVector(stride_shape)) {
+      return errors::InvalidArgument("stride must be a vector, not shape ",
+                                     stride_shape.DebugString());
+    }
+    if (stride_shape.num_elements() != num_dims()) {
+      return errors::InvalidArgument(
+          "Sliding window stride field must "
+          "specify ",
+          num_dims(), " dimensions");
+    }
+    std::vector<int64_t> stride;
+    auto status = ctx->ConstantInputAsIntVector(2, &stride);
+    if (!status.ok()) {
+      return status;
+    }
     return stride;
   }
 
@@ -385,12 +355,10 @@ class MaxPoolGradOp : public XlaOpKernel {
                 errors::InvalidArgument("Sliding window ksize field must "
                                         "specify ",
                                         num_dims(), " dimensions"));
-    OP_REQUIRES_OK(ctx, ValidateKernelSizes(ksize_));
     OP_REQUIRES(ctx, stride_.size() == num_dims(),
                 errors::InvalidArgument("Sliding window strides field must "
                                         "specify ",
                                         num_dims(), " dimensions"));
-    OP_REQUIRES_OK(ctx, ValidateStrides(stride_));
 
     const TensorShape tensor_in_shape = ctx->InputShape(0);
     const TensorShape tensor_out_shape = ctx->InputShape(1);
@@ -478,13 +446,11 @@ class AvgPoolGradOp : public XlaOpKernel {
                 errors::InvalidArgument("Sliding window ksize field must "
                                         "specify ",
                                         num_dims(), " dimensions"));
-    OP_REQUIRES_OK(ctx, ValidateKernelSizes(ksize_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("strides", &stride_));
     OP_REQUIRES(ctx, stride_.size() == num_dims(),
                 errors::InvalidArgument("Sliding window strides field must "
                                         "specify ",
                                         num_dims(), " dimensions"));
-    OP_REQUIRES_OK(ctx, ValidateStrides(stride_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("padding", &padding_));
     OP_REQUIRES(ctx, padding_ != EXPLICIT,
                 errors::Unimplemented(
@@ -613,12 +579,10 @@ class MaxPoolGradGradOp : public XlaOpKernel {
                 errors::InvalidArgument("Sliding window ksize field must "
                                         "specify ",
                                         num_dims(), " dimensions"));
-    OP_REQUIRES_OK(ctx, ValidateKernelSizes(ksize_));
     OP_REQUIRES(ctx, stride_.size() == num_dims(),
                 errors::InvalidArgument("Sliding window strides field must "
                                         "specify ",
                                         num_dims(), " dimensions"));
-    OP_REQUIRES_OK(ctx, ValidateStrides(stride_));
 
     const TensorShape tensor_in_shape = ctx->InputShape(0);
     const TensorShape tensor_out_shape = ctx->InputShape(1);

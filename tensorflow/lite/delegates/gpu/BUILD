@@ -5,7 +5,6 @@ load("@build_bazel_rules_apple//apple:ios.bzl", "ios_static_framework")
 load("@build_bazel_rules_apple//apple:macos.bzl", "macos_dylib")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
@@ -40,7 +39,6 @@ cc_library(
         "//tensorflow/lite:kernel_api",
         "//tensorflow/lite:minimal_logging",
         "//tensorflow/lite/c:common",
-        "//tensorflow/lite/core/c:common",
         "//tensorflow/lite/delegates/gpu/common:convert",
         "//tensorflow/lite/delegates/gpu/common:model",
         "//tensorflow/lite/delegates/gpu/common:model_builder",
@@ -83,7 +81,6 @@ objc_library(
         "//tensorflow/lite:kernel_api",
         "//tensorflow/lite:minimal_logging",
         "//tensorflow/lite/c:common",
-        "//tensorflow/lite/core/c:common",
         "//tensorflow/lite/delegates/gpu/common:convert",
         "//tensorflow/lite/delegates/gpu/common:gpu_info",
         "//tensorflow/lite/delegates/gpu/common:model",
@@ -100,6 +97,7 @@ objc_library(
         "//tensorflow/lite/delegates/gpu/metal:metal_spatial_tensor",
         "@com_google_absl//absl/types:span",
     ],
+    alwayslink = 1,
 )
 
 objc_library(
@@ -108,6 +106,7 @@ objc_library(
     copts = ["-std=c++17"],
     sdk_frameworks = ["Metal"],
     deps = ["//tensorflow/lite/delegates/gpu:metal_delegate"],
+    alwayslink = 1,
 )
 
 # build -c opt --config android_arm64 --copt -Os --copt -DTFLITE_GPU_BINARY_RELEASE --linkopt -s --strip always :libtensorflowlite_gpu_gl.so
@@ -165,10 +164,6 @@ ios_static_framework(
 # bazel build -c opt --copt -Os --copt -DTFLITE_GPU_BINARY_RELEASE --copt -fvisibility=hidden --linkopt -s --strip always --cxxopt=-std=c++14 :tensorflow_lite_gpu_dylib --apple_platform_type=macos
 macos_dylib(
     name = "tensorflow_lite_gpu_dylib",
-    linkopts = [
-        "-all_load",
-        "-dead_strip",
-    ],
     minimum_os_version = "10.13",
     tags = [
         "manual",
@@ -221,10 +216,7 @@ cc_library(
     name = "delegate_options",
     srcs = ["delegate_options.cc"],
     hdrs = ["delegate_options.h"],
-    deps = [
-        "//tensorflow/lite/c:common",
-        "//tensorflow/lite/core/c:common",
-    ],
+    deps = ["//tensorflow/lite/c:common"],
 )
 
 cc_library(
@@ -245,13 +237,9 @@ cc_library(
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/types:span",
         "//tensorflow/lite/kernels:kernel_util",
-        "//tensorflow/lite/profiling/telemetry",
-        "//tensorflow/lite/profiling/telemetry/c:telemetry_setting_internal",
-        "//tensorflow/lite/profiling/telemetry:telemetry_status",
         "//tensorflow/lite:kernel_api",
         "//tensorflow/lite:minimal_logging",
         "//tensorflow/lite/c:common",
-        "//tensorflow/lite/core/c:common",
         "//tensorflow/lite/delegates:serialization",
         "//tensorflow/lite/delegates/gpu/cl:api",
         "//tensorflow/lite/delegates/gpu/cl:util",

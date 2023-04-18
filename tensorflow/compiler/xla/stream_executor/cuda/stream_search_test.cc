@@ -34,7 +34,7 @@ TEST_F(StreamSearchTest, NoMatchBadPtr) {
   StreamExecutorConfig config;
   config.gpu_stream = bad_ptr;
 
-  tsl::StatusOr<StreamExecutor*> found_executor =
+  port::StatusOr<StreamExecutor*> found_executor =
       GetPlatform()->GetExecutor(config);
 
   // No executor found.
@@ -42,7 +42,8 @@ TEST_F(StreamSearchTest, NoMatchBadPtr) {
 }
 
 TEST_F(StreamSearchTest, FoundPrevExecutor) {
-  tsl::StatusOr<StreamExecutor*> executor = GetPlatform()->ExecutorForDevice(0);
+  port::StatusOr<StreamExecutor*> executor =
+      GetPlatform()->ExecutorForDevice(0);
   EXPECT_TRUE(executor.ok());
 
   Stream s(*executor);
@@ -57,7 +58,8 @@ TEST_F(StreamSearchTest, FoundPrevExecutor) {
   StreamExecutorConfig c;
   c.gpu_stream = gpu_ptr;
 
-  tsl::StatusOr<StreamExecutor*> found_executor = GetPlatform()->GetExecutor(c);
+  port::StatusOr<StreamExecutor*> found_executor =
+      GetPlatform()->GetExecutor(c);
   EXPECT_TRUE(found_executor.ok());
   EXPECT_EQ(*found_executor, *executor);
 

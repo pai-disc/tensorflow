@@ -150,10 +150,9 @@ def _DepthwiseConv2dNativeBackpropFilterGrad(op, grad):
 @ops.RegisterGradient("Conv3D")
 def _Conv3DGrad(op, grad):
   data_format = op.get_attr("data_format").decode()
-  shape_0, shape_1 = array_ops.shape_n([op.inputs[0], op.inputs[1]])
   return [
       nn_ops.conv3d_backprop_input_v2(
-          shape_0,
+          array_ops.shape(op.inputs[0]),
           op.inputs[1],
           grad,
           dilations=op.get_attr("dilations"),
@@ -162,7 +161,7 @@ def _Conv3DGrad(op, grad):
           data_format=data_format),
       nn_ops.conv3d_backprop_filter_v2(
           op.inputs[0],
-          shape_1,
+          array_ops.shape(op.inputs[1]),
           grad,
           dilations=op.get_attr("dilations"),
           strides=op.get_attr("strides"),

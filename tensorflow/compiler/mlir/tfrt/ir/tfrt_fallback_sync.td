@@ -32,7 +32,8 @@ def FallbackSync_Dialect : Dialect {
   }];
 
   let cppNamespace = "::tfrt::fallback_sync";
-  let useFoldAPI = kEmitFoldAdaptorFolder;
+
+  let emitAccessorPrefix = kEmitAccessorPrefix_Prefixed;
 }
 
 class FallbackSync_Op<string mnemonic, list<Trait> traits = []> :
@@ -83,7 +84,7 @@ def GetResourceOp : FallbackSync_Op<"get_resource",
   let assemblyFormat = "attr-dict `:` type($results)";
 }
 
-def CreateOp: FallbackSync_Op<"createop", []> {
+def CreateOp: FallbackSync_Op<"createop", [CoreRT_TypedAttributeTrait]> {
   let summary = "The Fallback CreateOp";
 
   let description = [{
@@ -101,16 +102,17 @@ def CreateOp: FallbackSync_Op<"createop", []> {
   }];
 
   let arguments = (ins
-    StrAttr:$node_def,
-    I32Attr:$op_key
+    I64Attr:$num_args,
+    ArrayAttr:$op_attrs,
+    I64Attr:$op_key,
+    StrAttr:$op_name
   );
 
   let results = (outs);
-
-  let assemblyFormat = "attr-dict";
 }
 
-def SyncExecuteOp : FallbackSync_Op<"executeop", [Pure]> {
+def SyncExecuteOp : FallbackSync_Op<"executeop",
+    [Pure, CoreRT_TypedAttributeTrait]> {
   let summary = "The Fallback Sync ExecuteOp";
   let description = [{
     The ExecuteOp executes an operation on the specified device.
@@ -122,14 +124,28 @@ def SyncExecuteOp : FallbackSync_Op<"executeop", [Pure]> {
   }];
 
   let arguments = (ins
-    Variadic<TFTensorType>,
-    StrAttr:$node_def,
-    I32Attr:$op_key
+    Variadic<TFTensorType>:$operands,
+    ArrayAttr:$op_attrs,
+    I64Attr:$op_key,
+    StrAttr:$op_name
   );
 
-  let results = (outs Variadic<TFTensorType>);
+  let results = (outs
+    Variadic<TFTensorType>:$results
+  );
 
-  let assemblyFormat = "`(`operands`)` attr-dict `:` functional-type(operands, results)";
+  let extraClassDeclaration = [{
+    void getOpAttrs(SmallVectorImpl<std::pair<StringRef, Attribute>>* op_attrs);
+  }];
+
+  let builders = [
+    OpBuilder<(ins "ArrayRef<Type>":$results, "ValueRange":$operands,
+      "ArrayRef<std::pair<StringRef, Attribute>>":$op_attrs,
+      "StringRef":$op_name)>];
+
+  let hasVerifier = 1;
+
+  let hasCustomAssemblyFormat = 1;
 }
 
 

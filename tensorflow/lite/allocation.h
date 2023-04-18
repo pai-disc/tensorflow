@@ -13,7 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 /// \file
-///
 /// Memory management for TF Lite.
 #ifndef TENSORFLOW_LITE_ALLOCATION_H_
 #define TENSORFLOW_LITE_ALLOCATION_H_

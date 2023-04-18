@@ -5,11 +5,9 @@ load("//tensorflow:tensorflow.bzl", "tf_gen_op_wrapper_py")
 
 default_visibility = [
     "//tensorflow/dtensor:dtensor-internal",
-    "//third_party/py/jax_tpu_embedding:__subpackages__",
 ]
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = default_visibility,
     licenses = ["notice"],
 )
@@ -43,9 +41,12 @@ pytype_strict_library(
     srcs = ["api.py"],
     srcs_version = "PY3",
     deps = [
+        ":config",
         ":dtensor_device",
         ":gen_dtensor_ops",
         ":layout",
+        "//tensorflow/python:config",
+        "//tensorflow/python:device",
         "//tensorflow/python/eager:context",
         "//tensorflow/python/framework:ops",
         "//tensorflow/python/util:tf_export",
@@ -138,21 +139,6 @@ pytype_strict_library(
 )
 
 pytype_strict_library(
-    name = "numpy_util",
-    srcs = ["numpy_util.py"],
-    deps = [
-        ":api",
-        ":layout",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:sparse_ops",
-        "//tensorflow/python:stateless_random_ops",
-        "//tensorflow/python/eager/polymorphic_function",
-        "//tensorflow/python/types",
-        "//third_party/py/numpy",
-    ],
-)
-
-pytype_strict_library(
     name = "save_restore",
     srcs = ["save_restore.py"],
     srcs_version = "PY3",
@@ -191,7 +177,6 @@ pytype_strict_library(
         "//tensorflow/python/framework:dtypes",
         "//tensorflow/python/framework:ops",
         "//tensorflow/python/framework:sparse_tensor",
-        "//tensorflow/python/framework:tensor_util",
         "//third_party/py/numpy",
     ],
 )

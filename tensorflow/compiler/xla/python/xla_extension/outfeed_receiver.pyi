@@ -34,5 +34,4 @@ class OutfeedReceiverForPython:
       builder: XlaBuilder,
       token: XlaOp,
       consumer_id: int,
-      arrays: Sequence[XlaOp],
-      device_idx: int) -> XlaOp: ...
+      arrays: Sequence[XlaOp]) -> XlaOp: ...

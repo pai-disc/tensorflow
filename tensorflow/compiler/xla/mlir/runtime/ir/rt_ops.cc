@@ -36,24 +36,24 @@ using llvm::Optional;
 //===----------------------------------------------------------------------===//
 
 void ExportOp::build(OpBuilder &builder, OperationState &result,
-                     FunctionOpInterface function_ref) {
+                     func::FuncOp function_ref) {
   result.addAttribute("function_ref", SymbolRefAttr::get(function_ref));
 }
 
 void ExportOp::build(OpBuilder &builder, OperationState &result,
-                     FunctionOpInterface function_ref, unsigned ordinal) {
+                     func::FuncOp function_ref, unsigned ordinal) {
   build(builder, result, function_ref);
   result.addAttribute("ordinal", builder.getI32IntegerAttr(ordinal));
 }
 
 LogicalResult ExportOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   Operation *op = getOperation();
-  auto func = symbolTable.lookupNearestSymbolFrom<FunctionOpInterface>(
+  auto func = symbolTable.lookupNearestSymbolFrom<func::FuncOp>(
       op, getFunctionRefAttr());
 
   // Function reference must reference a valid FuncOp operation.
   if (!func) {
-    return op->emitError() << "func op named '" << getFunctionRef()
+    return op->emitError() << "func.func op named '" << getFunctionRef()
                            << "' not found for export";
   }
 
@@ -65,16 +65,16 @@ Optional<unsigned> ExportOp::ordinal() {
   return llvm::None;
 }
 
-FunctionOpInterface ExportOp::exported(mlir::SymbolTable &sym_table) {
-  return sym_table.lookupNearestSymbolFrom<FunctionOpInterface>(
-      getOperation(), getFunctionRefAttr());
+mlir::func::FuncOp ExportOp::exported(mlir::SymbolTable &sym_table) {
+  return sym_table.lookupNearestSymbolFrom<func::FuncOp>(getOperation(),
+                                                         getFunctionRefAttr());
 }
 
 //===----------------------------------------------------------------------===//
 // TraceOp
 //===----------------------------------------------------------------------===//
 
-void TraceOp::getSuccessorRegions(std::optional<unsigned> index,
+void TraceOp::getSuccessorRegions(Optional<unsigned> index,
                                   ArrayRef<Attribute> operands,
                                   SmallVectorImpl<RegionSuccessor> &regions) {
   // If the predecessor is the TraceOp, branch into the body.
@@ -122,8 +122,8 @@ void TraceOp::build(OpBuilder &builder, OperationState &result,
 //===----------------------------------------------------------------------===//
 
 MutableOperandRange YieldOp::getMutableSuccessorOperands(
-    std::optional<unsigned> index) {
-  return getArgumentsMutable();
+    Optional<unsigned> index) {
+  return operandsMutable();
 }
 
 }  // namespace runtime

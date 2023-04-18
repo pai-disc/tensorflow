@@ -31,17 +31,9 @@ limitations under the License.
 #include "absl/types/optional.h"
 #include "tensorflow/tsl/platform/logging.h"
 #include "tensorflow/tsl/platform/macros.h"
-#include "tensorflow/tsl/platform/platform.h"
 #include "tensorflow/tsl/platform/stack_frame.h"
 #include "tensorflow/tsl/platform/types.h"
 #include "tensorflow/tsl/protobuf/error_codes.pb.h"
-
-// Include appropriate platform-dependent parts of status.
-#if defined(PLATFORM_GOOGLE)
-#include "tensorflow/tsl/platform/google/status.h"  // IWYU pragma: export
-#else
-#include "tensorflow/tsl/platform/default/status.h"  // IWYU pragma: export
-#endif
 
 namespace tsl {
 
@@ -49,7 +41,32 @@ namespace tsl {
 class [[nodiscard]] Status;
 #endif
 
-typedef SourceLocationImpl SourceLocation;
+#if ABSL_HAVE_BUILTIN(__builtin_LINE) && ABSL_HAVE_BUILTIN(__builtin_FILE)
+#define TF_INTERNAL_HAVE_BUILTIN_LINE_FILE 1
+#endif
+
+struct SourceLocation {
+  uint32_t line;
+  const char* file_name;
+
+#ifdef TF_INTERNAL_HAVE_BUILTIN_LINE_FILE
+  static SourceLocation current(uint32_t line = __builtin_LINE(),
+                                const char* file_name = __builtin_FILE()) {
+    SourceLocation loc;
+    loc.line = line;
+    loc.file_name = file_name;
+    return loc;
+  }
+#else
+  static SourceLocation current(uint32_t line = 0,
+                                const char* file_name = nullptr) {
+    SourceLocation loc;
+    loc.line = line;
+    loc.file_name = file_name;
+    return loc;
+  }
+#endif
+};
 
 namespace errors {
 typedef ::tensorflow::error::Code Code;
@@ -78,6 +95,14 @@ class Status {
   Status(Status&& s, SourceLocation loc = SourceLocation::current()) noexcept;
   Status& operator=(Status&& s) noexcept;
 #endif  // SWIG
+
+  // Prefer using OkStatus().
+#ifndef SWIG
+  ABSL_DEPRECATED(
+      "Use `OkStatus()` (preferred) or `Status()` (which is backward "
+      "compatible with TF v2.9 and lower) instead.")
+#endif
+  static Status OK() { return Status(); }
 
   /// Returns true iff the status indicates success.
   bool ok() const { return (state_ == nullptr); }
@@ -163,7 +188,7 @@ class Status {
   // any existing payload for that `type_url`.
   //
   // This function does nothing if the Status is ok.
-  void SetPayload(absl::string_view type_url, absl::Cord payload);
+  void SetPayload(absl::string_view type_url, absl::string_view payload);
 
   // Erases the payload corresponding to the `type_url` key.  Returns `true` if
   // the payload was present.
@@ -191,8 +216,6 @@ class Status {
   absl::Span<const SourceLocation> GetSourceLocations() const;
 
  private:
-  friend Status FromAbslStatus(const absl::Status& s, SourceLocation loc);
-
   void MaybeAddSourceLocation(SourceLocation loc);
 
   static const std::string& empty_string();
@@ -204,7 +227,7 @@ class Status {
 
     tsl::error::Code code;
     std::string msg;
-    std::unordered_map<std::string, absl::Cord> payloads;
+    std::unordered_map<std::string, std::string> payloads;
     absl::InlinedVector<SourceLocation, 4> source_locations;
     std::vector<StackFrame> stack_trace;
   };
@@ -223,10 +246,8 @@ class Status {
 // usage of `OkStatus()` when constructing such an OK status.
 Status OkStatus();
 
-Status FromAbslStatus(const absl::Status& s,
-                      SourceLocation loc = SourceLocation::current());
-absl::Status ToAbslStatus(const ::tsl::Status& s,
-                          SourceLocation loc = SourceLocation::current());
+Status FromAbslStatus(const absl::Status& s);
+absl::Status ToAbslStatus(const ::tsl::Status& s);
 
 // TODO(b/197552541) Move this namespace to errors.h.
 namespace errors {
@@ -258,7 +279,7 @@ class StatusGroup {
   // otherwise one payload value will be chosen in an unspecified but
   // deterministic order.
   // NOTE: The payload marking derived statuses as derived will not be returned.
-  std::unordered_map<std::string, absl::Cord> GetPayloads() const;
+  std::unordered_map<std::string, std::string> GetPayloads() const;
 
   // Return a merged status with combined child status messages with a summary.
   Status as_summary_status() const;

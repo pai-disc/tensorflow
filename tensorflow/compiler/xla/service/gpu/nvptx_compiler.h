@@ -25,7 +25,6 @@ limitations under the License.
 #include "absl/container/node_hash_map.h"
 #include "tensorflow/compiler/xla/service/gpu/gpu_compiler.h"
 #include "tensorflow/compiler/xla/statusor.h"
-#include "tensorflow/compiler/xla/stream_executor/device_description.h"
 
 namespace xla {
 namespace gpu {
@@ -36,17 +35,15 @@ void WarnIfBadDriverJITVersion();
 class NVPTXCompiler : public GpuCompiler {
  public:
   NVPTXCompiler();
+  ~NVPTXCompiler() override {}
 
   Status OptimizeHloConvolutionCanonicalization(
-      HloModule* hlo_module, GpuVersion gpu_version,
-      se::dnn::VersionInfo dnn_version,
+      HloModule* hlo_module, se::StreamExecutor* stream_exec,
       se::DeviceMemoryAllocator* device_allocator) override;
 
   Status OptimizeHloPostLayoutAssignment(
       HloModule* hlo_module, se::StreamExecutor* stream_exec,
-      se::DeviceMemoryAllocator* device_allocator,
-      const GpuTargetConfig& gpu_target_config,
-      const AutotuneResults* autotune_results) override;
+      se::DeviceMemoryAllocator* device_allocator) override;
 
   HloDataflowAnalysis::CanShareBuffer GetCanShareBuffer() override;
 
@@ -54,7 +51,7 @@ class NVPTXCompiler : public GpuCompiler {
 
   StatusOr<std::pair<std::string, std::vector<uint8_t>>> CompileTargetBinary(
       const HloModuleConfig& module_config, llvm::Module* llvm_module,
-      GpuVersion gpu_version, bool relocatable,
+      GpuVersion gpu_version, se::StreamExecutor* stream_exec, bool relocatable,
       const HloModule* debug_module) override;
 
  private:
@@ -63,8 +60,7 @@ class NVPTXCompiler : public GpuCompiler {
 
   StatusOr<std::vector<uint8_t>> LinkModules(
       se::StreamExecutor* stream_exec,
-      std::vector<std::vector<uint8_t>> modules,
-      const DebugOptions& debug_options) override;
+      std::vector<std::vector<uint8_t>> modules) override;
 
   absl::Mutex mutex_;
 
@@ -81,8 +77,8 @@ class NVPTXCompiler : public GpuCompiler {
   // Tries to compile the given ptx string to cubin.  Returns a vector with the
   // compiled cubin.  If compilation was unsuccessful, returns an empty vector.
   std::vector<uint8_t> CompileGpuAsmOrGetCachedResult(
-      const std::string& ptx, se::CudaComputeCapability cc,
-      const HloModuleConfig& hlo_module_config, absl::string_view module_name,
+      se::StreamExecutor* stream_exec, const std::string& ptx,
+      se::CudaComputeCapability cc, const HloModuleConfig& hlo_module_config,
       bool relocatable);
 
   // The compilation_cache_ map is a cache from {ptx string, cc_major, cc_minor}

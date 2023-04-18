@@ -149,7 +149,8 @@ struct FusionPass : public impl::FusionBase<FusionPass> {
     // Use TopDownTraversal for compile time reasons.
     mlir::GreedyRewriteConfig grc;
     grc.useTopDownTraversal = true;
-    (void)applyPatternsAndFoldGreedily(op, std::move(patterns), grc);
+    (void)applyPatternsAndFoldGreedily(op->getRegions(), std::move(patterns),
+                                       grc);
   }
 };
 

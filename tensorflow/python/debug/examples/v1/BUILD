@@ -1,7 +1,4 @@
-package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    licenses = ["notice"],
-)
+package(licenses = ["notice"])
 
 py_binary(
     name = "debug_fibonacci",
@@ -125,7 +122,6 @@ sh_test(
     ],
     tags = [
         "no_windows",
-        "noasan",
         "v1only",
     ],
 )

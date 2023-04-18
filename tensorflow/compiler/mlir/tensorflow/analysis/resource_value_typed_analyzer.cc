@@ -118,7 +118,7 @@ LogicalResult ResourceAnalyzer::AnalyzeRegion(Region& region) {
       return;
     }
     if (auto assign_variable = dyn_cast<TF::AssignVariableOp>(op)) {
-      SetPotentiallyWritten(assign_variable.getResource());
+      SetPotentiallyWritten(assign_variable.resource());
       return;
     }
     if (auto call = dyn_cast<CallOpInterface>(op)) {
@@ -131,29 +131,29 @@ LogicalResult ResourceAnalyzer::AnalyzeRegion(Region& region) {
     if (auto if_op = dyn_cast<TF::IfOp>(op)) {
       for (auto callee : {if_op.then_function(), if_op.else_function()}) {
         PropagatePotentiallyWrittenUpFromCallee(callee.getRegion(),
-                                                if_op.getInput());
+                                                if_op.input());
       }
       return;
     }
     if (auto if_op = dyn_cast<TF::IfRegionOp>(op)) {
-      PropagatePotentiallyWrittenUpFromCallee(if_op.getThenBranch(),
+      PropagatePotentiallyWrittenUpFromCallee(if_op.then_branch(),
                                               if_op.getODSOperands(1));
-      PropagatePotentiallyWrittenUpFromCallee(if_op.getElseBranch(),
+      PropagatePotentiallyWrittenUpFromCallee(if_op.else_branch(),
                                               if_op.getODSOperands(1));
       return;
     }
     if (auto while_op = dyn_cast<TF::WhileOp>(op)) {
       for (auto callee : {while_op.cond_function(), while_op.body_function()}) {
         PropagatePotentiallyWrittenUpFromCallee(callee.getRegion(),
-                                                while_op.getInput());
+                                                while_op.input());
       }
       return;
     }
     if (auto while_op = dyn_cast<TF::WhileRegionOp>(op)) {
-      PropagatePotentiallyWrittenUpFromCallee(while_op.getCond(),
-                                              while_op.getInput());
-      PropagatePotentiallyWrittenUpFromCallee(while_op.getBody(),
-                                              while_op.getInput());
+      PropagatePotentiallyWrittenUpFromCallee(while_op.cond(),
+                                              while_op.input());
+      PropagatePotentiallyWrittenUpFromCallee(while_op.body(),
+                                              while_op.input());
       return;
     }
     // For all other ops, we assume it mutates all resources it uses, so

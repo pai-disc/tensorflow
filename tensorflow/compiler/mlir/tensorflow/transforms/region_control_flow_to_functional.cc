@@ -17,8 +17,6 @@ limitations under the License.
 // the TensorFlow dialect to their functional counterparts, i.e.,
 // tf.IfRegion ->  tf.If and tf.WhileRegion -> tf.While
 
-#include <optional>
-
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
@@ -187,13 +185,13 @@ void ExtractSingleBlockRegion(Region& region, StringRef name,
 // does not conform to this pattern.
 llvm::Optional<func::CallOp> IsSingleCallRegion(Region& region,
                                                 bool allow_to_bool = false) {
-  if (!llvm::hasSingleElement(region)) return std::nullopt;
+  if (!llvm::hasSingleElement(region)) return llvm::None;
 
   Block& block = region.front();
   auto it = block.rbegin();
   YieldOp yield = dyn_cast<YieldOp>(*it++);
 
-  if (it == block.rend()) return std::nullopt;
+  if (it == block.rend()) return llvm::None;
 
   // Operation which is expected to consume all the call results.
   Operation* call_consumer = yield;
@@ -201,28 +199,28 @@ llvm::Optional<func::CallOp> IsSingleCallRegion(Region& region,
   // Allow a single ToBoolOp between the call and the yield (valid only
   // when the yield has a single operand)
   if (allow_to_bool && yield.getNumOperands() == 1 && isa<ToBoolOp>(*it)) {
-    if (it->getResult(0) != yield.getOperand(0)) return std::nullopt;
+    if (it->getResult(0) != yield.getOperand(0)) return llvm::None;
     call_consumer = cast<ToBoolOp>(*it);
     it++;
-    if (it == block.rend()) return std::nullopt;
+    if (it == block.rend()) return llvm::None;
   }
 
   // Check if there is a Call before the Yield.
   func::CallOp call = dyn_cast<func::CallOp>(*it++);
-  if (!call) return std::nullopt;
+  if (!call) return llvm::None;
 
   // All call results should feed into expected consumer
   // All results of the call should feed into the yield.
   if (call.getNumResults() != call_consumer->getNumOperands())
-    return std::nullopt;
+    return llvm::None;
 
   for (auto res_it : llvm::zip(call.getResults(), call_consumer->getOperands()))
-    if (std::get<0>(res_it) != std::get<1>(res_it)) return std::nullopt;
+    if (std::get<0>(res_it) != std::get<1>(res_it)) return llvm::None;
 
   // There can only be non-truncating cast op's prior to the call.
   for (; it != block.rend(); ++it) {
     CastOp cast = dyn_cast<CastOp>(*it);
-    if (!cast || cast.getTruncate()) return std::nullopt;
+    if (!cast || cast.Truncate()) return llvm::None;
   }
 
   return call;
@@ -248,7 +246,7 @@ bool MatchCallArgs(func::CallOp first, func::CallOp second,
         // Consider cast compatibility in case
         //    %cast = "tf.Cast"(%0) : (tensor<2xi64>) -> tensor<2xf32>
         // is skipped.
-        if (cast_op.getSrcT() != cast_op.getDstT()) {
+        if (cast_op.SrcT() != cast_op.DstT()) {
           break;
         }
         value = cast_op.getOperand();
@@ -288,12 +286,13 @@ struct TrivialTransformInfo {
                        ArgMatcherFn arg_matcher) {
     if (!first_call || !second_call) return;
 
-    if (!MatchCallArgs(first_call.value(), second_call.value(), arg_matcher))
+    if (!MatchCallArgs(first_call.getValue(), second_call.getValue(),
+                       arg_matcher))
       return;
 
     can_transform = true;
-    callee_names = {first_call.value().getCallee(),
-                    second_call.value().getCallee()};
+    callee_names = {first_call.getValue().getCallee(),
+                    second_call.getValue().getCallee()};
   }
 };
 
@@ -311,8 +310,8 @@ LogicalResult RegionControlFlowToFunctional::ConvertIfOp(IfRegionOp if_region) {
     return true;
   };
 
-  const TrivialTransformInfo tti(IsSingleCallRegion(if_region.getThenBranch()),
-                                 IsSingleCallRegion(if_region.getElseBranch()),
+  const TrivialTransformInfo tti(IsSingleCallRegion(if_region.then_branch()),
+                                 IsSingleCallRegion(if_region.else_branch()),
                                  if_arg_matcher);
 
   std::string then_name, else_name;
@@ -323,8 +322,8 @@ LogicalResult RegionControlFlowToFunctional::ConvertIfOp(IfRegionOp if_region) {
     else_name = tti.callee_names[1].str();
   } else {
     // Collect external values that are used within the else and then bodies.
-    extern_values = CollectExternValues(if_region.getThenBranch(),
-                                        if_region.getElseBranch());
+    extern_values =
+        CollectExternValues(if_region.then_branch(), if_region.else_branch());
 
     // These external values need to be added as inputs to the generated If. The
     // order is determined by the order of these values the `extern_vales`.
@@ -333,32 +332,30 @@ LogicalResult RegionControlFlowToFunctional::ConvertIfOp(IfRegionOp if_region) {
     // and outline the `then` and `else` regions by moving the bodies of these
     // regions into these functions. Replace tf.yield with a regular return.
     if (if_region->hasAttrOfType<StringAttr>(kThenFuncNameAttr) &&
-        !if_region.get_thenFuncNameAttr().getValue().empty()) {
+        !if_region._then_func_nameAttr().getValue().empty()) {
       then_name =
-          mapper.GetUniqueName(if_region.get_thenFuncNameAttr().getValue())
+          mapper.GetUniqueName(if_region._then_func_nameAttr().getValue())
               .str();
     } else {
       then_name = GetName(if_region, "_then");
     }
-    ExtractSingleBlockRegion(if_region.getThenBranch(), then_name,
-                             extern_values, worklist,
-                             /*extern_values_passthrough=*/false);
+    ExtractSingleBlockRegion(if_region.then_branch(), then_name, extern_values,
+                             worklist, /*extern_values_passthrough=*/false);
 
     if (if_region->hasAttrOfType<StringAttr>(kElseFuncNameAttr) &&
-        !if_region.get_elseFuncNameAttr().getValue().empty()) {
+        !if_region._else_func_nameAttr().getValue().empty()) {
       else_name =
-          mapper.GetUniqueName(if_region.get_elseFuncNameAttr().getValue())
+          mapper.GetUniqueName(if_region._else_func_nameAttr().getValue())
               .str();
     } else {
       else_name = GetName(if_region, "_else");
     }
-    ExtractSingleBlockRegion(if_region.getElseBranch(), else_name,
-                             extern_values, worklist,
-                             /*extern_values_passthrough=*/false);
+    ExtractSingleBlockRegion(if_region.else_branch(), else_name, extern_values,
+                             worklist, /*extern_values_passthrough=*/false);
   }
 
   // Look through ToBool operations for the condition.
-  Value cond = if_region.getCond();
+  Value cond = if_region.cond();
   auto to_bool = dyn_cast_or_null<ToBoolOp>(cond.getDefiningOp());
   if (to_bool) cond = to_bool.getOperand();
 
@@ -368,7 +365,7 @@ LogicalResult RegionControlFlowToFunctional::ConvertIfOp(IfRegionOp if_region) {
   OpBuilder builder(if_region);
   auto if_op = builder.create<IfOp>(
       if_region.getLoc(), if_region.getResultTypes(), cond, extern_values,
-      then_name, else_name, if_region.getIsStateless());
+      then_name, else_name, if_region.is_stateless());
   CopyAndOverrideAttributes(if_region, if_op, &builder);
 
   if_region.replaceAllUsesWith(if_op.getResults());
@@ -402,8 +399,8 @@ LogicalResult RegionControlFlowToFunctional::ConvertWhileOp(
   };
 
   const TrivialTransformInfo tti(
-      IsSingleCallRegion(while_region.getCond(), /*allow_to_bool=*/true),
-      IsSingleCallRegion(while_region.getBody()), while_arg_matcher);
+      IsSingleCallRegion(while_region.cond(), /*allow_to_bool=*/true),
+      IsSingleCallRegion(while_region.body()), while_arg_matcher);
 
   // All existing inputs to while region are inputs to the functional while.
   auto new_inputs = llvm::to_vector<4>(while_region.getOperands());
@@ -425,16 +422,16 @@ LogicalResult RegionControlFlowToFunctional::ConvertWhileOp(
     // to the region arguments, all these external references need to be added
     // as function arguments.
     llvm::SmallVector<Value, 4> extern_values =
-        CollectExternValues(while_region.getCond(), while_region.getBody());
+        CollectExternValues(while_region.cond(), while_region.body());
 
     // Outline the `cond` and `body` regions by moving the bodies of these
     // regions into new functions. Replace tf.yield with a regular return.
     cond_name = GetName(while_region, "_cond");
-    ExtractSingleBlockRegion(while_region.getCond(), cond_name, extern_values,
+    ExtractSingleBlockRegion(while_region.cond(), cond_name, extern_values,
                              worklist, /*extern_values_passthrough=*/false);
 
     body_name = GetName(while_region, "_body");
-    ExtractSingleBlockRegion(while_region.getBody(), body_name, extern_values,
+    ExtractSingleBlockRegion(while_region.body(), body_name, extern_values,
                              worklist, /*extern_values_passthrough=*/true);
 
     // All extern values become additional inputs and additional output types
@@ -448,8 +445,8 @@ LogicalResult RegionControlFlowToFunctional::ConvertWhileOp(
   OpBuilder builder(while_region);
   auto while_op = builder.create<WhileOp>(
       while_region.getLoc(), new_result_types, new_inputs, cond_name, body_name,
-      while_region.getParallelIterations(), while_region.getIsStateless(),
-      while_region.getShapeInvariant());
+      while_region.parallel_iterations(), while_region.is_stateless(),
+      while_region.shape_invariant());
   CopyAndOverrideAttributes(while_region, while_op, &builder);
 
   // Redirect old results to new results.

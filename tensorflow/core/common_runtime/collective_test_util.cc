@@ -25,7 +25,6 @@ limitations under the License.
 #include "tensorflow/core/framework/device_attributes.pb.h"
 #include "tensorflow/core/framework/device_base.h"
 #include "tensorflow/core/framework/op_kernel.h"
-#include "tensorflow/core/nccl/collective_communicator.h"
 #include "tensorflow/core/platform/refcount.h"
 #include "tensorflow/core/public/session_options.h"
 
@@ -141,8 +140,7 @@ std::vector<std::unique_ptr<Device>> CreateGPUDevices() {
 }  // namespace
 
 std::unique_ptr<CollectiveTestEnv> CreateCollectiveTestEnv(
-    int num_workers, int num_devices_per_worker, DeviceType device_type,
-    bool use_nccl) {
+    int num_workers, int num_devices_per_worker, DeviceType device_type) {
   auto test_env = std::make_unique<CollectiveTestEnv>();
   test_env->param_resolver = std::make_unique<TestParamResolver>();
   // We don't create CollecticeExecutor from the CollecticeExecutorMgr so we
@@ -179,10 +177,6 @@ std::unique_ptr<CollectiveTestEnv> CreateCollectiveTestEnv(
   test_env->col_exec.reset(new BaseCollectiveExecutor(
       test_env->col_exec_mgr.get(), test_env->remote_access, kStepId,
       test_env->device_mgr.get(), test_env->work_queue));
-  if (use_nccl) {
-    ConfigProto config_proto;
-    test_env->nccl_communicator = MaybeCreateNcclCommunicator(config_proto);
-  }
 
   return test_env;
 }
@@ -341,7 +335,7 @@ Status RunCollective(CollectiveTestEnv* test_env, CollectiveParams* col_params,
   core::ScopedUnref unref_dev_ctx(dev_ctx);
   op_params.op_device_context = dev_ctx;
   int forward_from = 0;
-  op_params.forward_from_array = input == output ? &forward_from : nullptr;
+  op_params.forward_from_array = &forward_from;
   AllocatorAttributes generic_alloc_attr;
   op_params.output_attr_array = &generic_alloc_attr;
   op_params.resource_manager = device->resource_manager();
@@ -356,7 +350,7 @@ Status RunCollective(CollectiveTestEnv* test_env, CollectiveParams* col_params,
 
   string exec_key = strings::StrCat(col_params->instance.instance_key, ":0:0");
   auto col_ctx = std::make_shared<CollectiveContext>(
-      test_env->col_exec.get(), test_env->nccl_communicator.get(),
+      test_env->col_exec.get(), /*nccl_communicator*/ nullptr,
       test_env->device_mgr.get(), &ctx, &op_params, col_params, exec_key,
       kStepId, &input_buffer, &output_buffer);
   TF_RETURN_IF_ERROR(collective_impl->InitializeCollectiveContext(col_ctx));

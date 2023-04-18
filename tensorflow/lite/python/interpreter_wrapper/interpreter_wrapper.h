@@ -34,10 +34,7 @@ struct TfLiteDelegate;
 // We forward declare TFLite classes here to avoid exposing them to SWIG.
 namespace tflite {
 class MutableOpResolver;
-
-namespace impl {
 class FlatBufferModel;
-}
 
 namespace interpreter_wrapper {
 
@@ -45,7 +42,7 @@ class PythonErrorReporter;
 
 class InterpreterWrapper {
  public:
-  using Model = impl::FlatBufferModel;
+  using Model = FlatBufferModel;
 
   // SWIG caller takes ownership of pointer.
   static InterpreterWrapper* CreateWrapperCPPFromFile(
@@ -78,19 +75,17 @@ class InterpreterWrapper {
   PyObject* ResizeInputTensor(int i, PyObject* value, bool strict,
                               int subgraph_index);
 
-  int NumTensors(int subgraph_index) const;
-  std::string TensorName(int tensor_index, int subgraph_index) const;
-  PyObject* TensorType(int tensor_index, int subgraph_index) const;
-  PyObject* TensorSize(int tensor_index, int subgraph_index) const;
-  PyObject* TensorSizeSignature(int tensor_index, int subgraph_index) const;
-  PyObject* TensorSparsityParameters(int tensor_index,
-                                     int subgraph_index) const;
+  int NumTensors() const;
+  std::string TensorName(int i) const;
+  PyObject* TensorType(int i) const;
+  PyObject* TensorSize(int i) const;
+  PyObject* TensorSizeSignature(int i) const;
+  PyObject* TensorSparsityParameters(int i) const;
   // Deprecated in favor of TensorQuantizationScales, below.
-  PyObject* TensorQuantization(int tensor_index, int subgraph_index) const;
-  PyObject* TensorQuantizationParameters(int tensor_index,
-                                         int subgraph_index) const;
-  PyObject* SetTensor(int tensor_index, PyObject* value, int subgraph_index);
-  PyObject* GetTensor(int tensor_index, int subgraph_index) const;
+  PyObject* TensorQuantization(int i) const;
+  PyObject* TensorQuantizationParameters(int i) const;
+  PyObject* SetTensor(int i, PyObject* value, int subgraph_index);
+  PyObject* GetTensor(int i, int subgraph_index) const;
   PyObject* GetSubgraphIndexFromSignature(const char* signature_key);
   PyObject* GetSignatureDefs() const;
   PyObject* ResetVariableTensors();

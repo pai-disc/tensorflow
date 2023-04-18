@@ -28,8 +28,7 @@ TEST(EagerOperationTest, DeviceName) {
   auto ctx = new EagerContext(
       SessionOptions(),
       tensorflow::ContextDevicePlacementPolicy::DEVICE_PLACEMENT_SILENT, false,
-      &device_mgr, false, nullptr, nullptr, nullptr,
-      /*run_eager_op_as_function=*/true);
+      &device_mgr, false, nullptr, nullptr);
 
   auto op = new EagerOperation(ctx);
 
@@ -54,8 +53,7 @@ TEST(EagerOperationTest, EagerFunctionParamsAndStepId) {
   auto ctx = new EagerContext(
       SessionOptions(),
       tensorflow::ContextDevicePlacementPolicy::DEVICE_PLACEMENT_SILENT, false,
-      &device_mgr, false, nullptr, nullptr, nullptr,
-      /*run_eager_op_as_function=*/true);
+      &device_mgr, false, nullptr, nullptr);
 
   tensorflow::FunctionDef function_def;
   CHECK(tensorflow::protobuf::TextFormat::ParseFromString(

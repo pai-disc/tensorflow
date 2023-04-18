@@ -21,17 +21,16 @@ limitations under the License.
 #include <iterator>
 #include <memory>
 #include <numeric>
-#include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_instruction.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_opcode.h"
-#include "tensorflow/compiler/xla/hlo/ir/hlo_schedule.h"
 #include "tensorflow/compiler/xla/service/async_collective_creator.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
+#include "tensorflow/compiler/xla/service/hlo_opcode.h"
+#include "tensorflow/compiler/xla/service/hlo_schedule.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/tsl/lib/core/status_test_util.h"
 
@@ -1359,7 +1358,7 @@ ENTRY entry {
 
 TEST_F(LatencyHidingSchedulerTest,
        BalanceChainedCollectivePermutesLoopedEinsum) {
-  std::string hlo_string = R"(
+  absl::string_view hlo_string = R"(
 HloModule module, is_scheduled=true
 
 %fused_computation.1793 (param_0.4944: s32[16], param_1.5648: u32[], param_2.3959: u32[], param_3.3338: u32[], param_4.2302: u32[]) -> (s32[1], s32[1], s32[1], s32[1]) {
@@ -1460,8 +1459,6 @@ HloModule module, is_scheduled=true
   %slice.1245 = bf16[1,4,288,8,1024,1,1]{4,2,0,3,1,6,5:T(8,128)(2,1)} slice(bf16[2,4,288,8,1024,1,1]{4,2,0,3,1,6,5:T(8,128)(2,1)} %param_1.265), slice={[1:2], [0:4], [0:288], [0:8], [0:1024], [0:1], [0:1]}
   ROOT %add.3080 = bf16[1,4,288,8,1024,1,1]{4,2,0,3,1,6,5:T(8,128)(2,1)} add(bf16[1,4,288,8,1024,1,1]{4,2,0,3,1,6,5:T(8,128)(2,1)} %param_0.240, bf16[1,4,288,8,1024,1,1]{4,2,0,3,1,6,5:T(8,128)(2,1)} %slice.1245)
 }
-)";
-  hlo_string += R"(
 
 ENTRY entry {
   %param.163 = (bf16[1,20,256,16,4,288,1]{2,5,1,4,3,6,0:T(8,128)(2,1)}, bf16[8,1024,1,20,256,1,1]{4,1,3,0,6,5,2:T(8,128)(2,1)}, bf16[1,4,288,8,1024,1,1]{4,2,3,1,6,5,0:T(8,128)(2,1)}, bf16[1,4,288,8,1024,1,1]{4,2,0,3,1,6,5:T(8,128)(2,1)}, u32[]{:T(128)}) parameter(0)
@@ -1613,7 +1610,7 @@ ENTRY entry {
 
 TEST_F(LatencyHidingSchedulerTest,
        BalanceChainedCollectivePermutesLoopedEinsum2) {
-  std::string hlo_string = R"(
+  absl::string_view hlo_string = R"(
 HloModule module, is_scheduled=true
 
 %fused_computation.1851 (param_0.5170: s32[32], param_1.5848: u32[], param_2.4103: u32[], param_3.3513: u32[], param_4.2356: u32[]) -> (s32[1], s32[1], s32[1], s32[1]) {
@@ -1714,8 +1711,7 @@ HloModule module, is_scheduled=true
   %slice.1125 = bf16[1,576,16,1024,1,1]{3,1,0,2,5,4:T(8,128)(2,1)} slice(bf16[2,576,16,1024,1,1]{3,1,0,2,5,4:T(8,128)(2,1)} %param_1.298), slice={[1:2], [0:576], [0:16], [0:1024], [0:1], [0:1]}
   ROOT %add.3122 = bf16[1,576,16,1024,1,1]{3,1,0,2,5,4:T(8,128)(2,1)} add(bf16[1,576,16,1024,1,1]{3,1,0,2,5,4:T(8,128)(2,1)} %param_0.250, bf16[1,576,16,1024,1,1]{3,1,0,2,5,4:T(8,128)(2,1)} %slice.1125)
 }
-)";
-  hlo_string += R"(
+
 ENTRY entry {
   %constant.4782 = u32[]{:T(128)} constant(16)
   %constant.4661 = u32[]{:T(128)} constant(2)
@@ -1807,7 +1803,7 @@ ENTRY entry {
 
 TEST_F(LatencyHidingSchedulerTest,
        BalanceChainedCollectivePermutesLoopedEinsum3) {
-  std::string hlo_string = R"(
+  absl::string_view hlo_string = R"(
 HloModule module, is_scheduled=true
 
 %fused_computation.1799 (param_0.4926: s32[16], param_1.5709: u32[], param_2.3976: u32[], param_3.3386: u32[], param_4.2299: u32[]) -> (s32[1], s32[1], s32[1], s32[1]) {
@@ -1902,8 +1898,7 @@ HloModule module, is_scheduled=true
   %bitcast.596 = bf16[8,2048,1,36,256,1]{4,1,3,0,5,2:T(8,128)(2,1)} bitcast(bf16[8,2048,1,36,256,1,1]{4,1,6,5,3,2,0:T(8,128)(2,1)} %convolution.171)
   ROOT %add.3143 = bf16[8,2048,1,36,256,1]{4,1,3,0,5,2:T(8,128)(2,1)} add(bf16[8,2048,1,36,256,1]{4,1,3,0,5,2:T(8,128)(2,1)} %add.3146, bf16[8,2048,1,36,256,1]{4,1,3,0,5,2:T(8,128)(2,1)} %bitcast.596)
 }
-)";
-  hlo_string += R"(
+
 ENTRY entry {
   %constant.4735 = u32[]{:T(128)} constant(2)
   %constant.4598 = u32[]{:T(128)} constant(15)
@@ -2347,102 +2342,6 @@ ENTRY entry {
   // we are trying to overlap would go beyond the overlap limit.
   EXPECT_LT(GetIndex(new_instruction_sequence, "all-gather-start.1"),
             GetIndex(new_instruction_sequence, "while"));
-}
-
-TEST_F(LatencyHidingSchedulerTest, AllToAllAsyncBalance) {
-  absl::string_view hlo_string = R"(
-HloModule module, is_scheduled=true
-
-async_computation {
-  p = f32[2,8,256,256] parameter(0)
-  ROOT ata = f32[2,8,256,256] all-to-all(p), dimensions={0}, replica_groups={{0,1}}
-}
-
-async_computation.2 {
-  p.2 = f32[2,8,256,256] parameter(0)
-  ROOT ata.1 = f32[2,8,256,256] all-to-all(p.2), dimensions={0}, replica_groups={{0,1}}
-}
-
-
-ENTRY %module {
-  %constant.19 = u32[] constant(0)
-  %replica_id = u32[]{:T(128)} replica-id()
-  %convert = f32[]{:T(128)} convert(u32[]{:T(128)} %replica_id)
-  %color_operand.1 = f32[2,8,256,256]{3,2,1,0} broadcast(
-    f32[]{:T(128)} %convert), dimensions={}
-  %color_operand.2 = f32[2,8,256,256]{3,2,1,0} broadcast(
-    f32[]{:T(128)} %convert), dimensions={}
-  %ata-start = ((f32[2,8,256,256]), f32[2,8,256,256], u32[], u32[]) async-start(
-    f32[2,8,256,256] %color_operand.1), calls=async_computation,
-    metadata={op_type="AllToAll" op_name="ata0"}
-  %ata-start.2 = ((f32[2,8,256,256]), f32[2,8,256,256], u32[], u32[]) async-start(
-    f32[2,8,256,256] %color_operand.2), calls=async_computation.2,
-    metadata={op_type="AllToAll" op_name="ata1"}
-  %ata-done = f32[2,8,256,256] async-done(%ata-start), calls=async_computation,
-    metadata={op_type="AllToAll" op_name="ata0"}
-  %ata-done-bc = f32[16,256,256] bitcast(f32[2,8,256,256] %ata-done),
-    metadata={op_type="Bitcast" op_name="ata0"}
-  %ata-done.2 = f32[2,8,256,256] async-done(%ata-start.2), calls=async_computation.2,
-    metadata={op_type="AllToAll" op_name="ata1"}
-  %ata-done-bc.2 = f32[16,256,256] bitcast(f32[2,8,256,256] %ata-done.2),
-    metadata={op_type="Bitcast" op_name="ata1"}
-  p0 = f32[16,64,256]{2,1,0} parameter(0)
-  p1 = f32[16,64,256]{2,1,0} parameter(1)
-  p2 = f32[16,256,256]{2,1,0} parameter(2)
-  p3 = f32[16,256,256]{2,1,0} parameter(3)
-  c0 = f32[16,256,256]{2,1,0} convolution(p0, p1),
-    window={size=16 stride=15 lhs_dilate=16}, dim_labels=0fb_0io->0fb,
-    metadata={op_type="AllToAll" op_name="c0"}
-  c1 = f32[16,256,256]{2,1,0} convolution(p0, p1),
-    window={size=16 stride=15 lhs_dilate=16}, dim_labels=0fb_0io->0fb,
-    metadata={op_type="AllToAll" op_name="c1"}
-  a2 = f32[16,256,256]{2,1,0} add(c1, c0)
-  ROOT t = (f32[16,256,256], f32[16,256,256], f32[16,256,256]) tuple(a2, %ata-done-bc.2, %ata-done-bc)
-}
-)";
-
-  TF_ASSERT_OK_AND_ASSIGN(auto hlo_module, ParseHloText(hlo_string));
-  HloSchedule& module_schedule = hlo_module->schedule();
-  EXPECT_TRUE(hlo_module->has_entry_computation());
-  HloComputation* entry_computation = hlo_module->entry_computation();
-  std::vector<HloInstruction*> original_instruction_sequence =
-      module_schedule.sequence(entry_computation).instructions();
-
-  EXPECT_TRUE(RunScheduler(hlo_module.get()).ok());
-  std::vector<HloInstruction*> new_instruction_sequence =
-      module_schedule.sequence(entry_computation).instructions();
-
-  if (VLOG_IS_ON(1)) {
-    for (auto* new_i : new_instruction_sequence) {
-      VLOG(1) << new_i->ToString();
-    }
-  }
-  // We expect that the scheduling would look like this:
-  //   %ar-start = async-start()
-  //   %c0 = convolution()
-  //   %ar-done = async-done()
-  //   %ar-start.2 = all-reduce-start()
-  //   %c1 = convolution()
-  //   %ar-done.2 = f32[2,8,256,256]{3,2,1,0} async-done()
-  // This means that the asyncs are balanced over the two convolutions
-  // rather than being unbalanced (one of the two asyncs overlaps with
-  // both the convolutons and the other with nothing).
-  EXPECT_LT(GetOpcodeIndexUsingMetaData(HloOpcode::kConvolution,
-                                        new_instruction_sequence, "c0"),
-            GetOpcodeIndexUsingMetaData(HloOpcode::kAsyncDone,
-                                        new_instruction_sequence, "ata0"));
-  EXPECT_GT(GetOpcodeIndexUsingMetaData(HloOpcode::kConvolution,
-                                        new_instruction_sequence, "c0"),
-            GetOpcodeIndexUsingMetaData(HloOpcode::kAsyncStart,
-                                        new_instruction_sequence, "ata0"));
-  EXPECT_LT(GetOpcodeIndexUsingMetaData(HloOpcode::kConvolution,
-                                        new_instruction_sequence, "c1"),
-            GetOpcodeIndexUsingMetaData(HloOpcode::kAsyncDone,
-                                        new_instruction_sequence, "ata1"));
-  EXPECT_GT(GetOpcodeIndexUsingMetaData(HloOpcode::kConvolution,
-                                        new_instruction_sequence, "c1"),
-            GetOpcodeIndexUsingMetaData(HloOpcode::kAsyncStart,
-                                        new_instruction_sequence, "ata1"));
 }
 
 }  // namespace xla

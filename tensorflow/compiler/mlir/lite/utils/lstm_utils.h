@@ -211,9 +211,6 @@ class ConvertLayerNormalizedLSTMCellSimpleToFusedLSTM
 LogicalResult ConvertKerasLSTMLayer(mlir::func::FuncOp func_op,
                                     OpBuilder* builder);
 
-LogicalResult ConvertKerasLSTMLayer(mlir::func::FuncOp func_op,
-                                    OpBuilder* builder, bool indy);
-
 }  // end namespace TFL
 }  // end namespace mlir
 

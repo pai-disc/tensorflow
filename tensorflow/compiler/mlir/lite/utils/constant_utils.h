@@ -22,13 +22,13 @@ limitations under the License.
 #include "mlir/IR/Location.h"  // from @llvm-project
 #include "mlir/IR/Operation.h"  // from @llvm-project
 #include "mlir/IR/PatternMatch.h"  // from @llvm-project
-#include "tensorflow/tsl/platform/statusor.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/statusor.h"
 
 namespace mlir {
 namespace TFL {
 
 // Returns a Constant op with a single value.
-tsl::StatusOr<arith::ConstantOp> CreateConstOpWithSingleValue(
+stream_executor::port::StatusOr<arith::ConstantOp> CreateConstOpWithSingleValue(
     PatternRewriter* rewriter, Location loc, ShapedType shaped_type, int value);
 
 }  // namespace TFL

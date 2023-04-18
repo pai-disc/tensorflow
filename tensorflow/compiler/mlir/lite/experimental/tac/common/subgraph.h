@@ -16,7 +16,6 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_MLIR_LITE_EXPERIMENTAL_TAC_COMMON_SUBGRAPH_H_
 #define TENSORFLOW_COMPILER_MLIR_LITE_EXPERIMENTAL_TAC_COMMON_SUBGRAPH_H_
 
-#include <optional>
 #include <string>
 
 #include "llvm/ADT/StringRef.h"
@@ -41,7 +40,7 @@ constexpr char kInterfaceNameAttr[] = "tac.interface_name";
 
 inline llvm::Optional<std::string> GetInterFaceName(Operation* op) {
   auto name_attr = op->getAttrOfType<StringAttr>(kInterfaceNameAttr);
-  if (!name_attr) return std::nullopt;
+  if (!name_attr) return llvm::None;
   return name_attr.getValue().str();
 }
 

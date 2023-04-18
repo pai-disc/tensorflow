@@ -16,10 +16,8 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/mlir_graph_optimization_pass.h"
 
 #include <memory>
-#include <vector>
 
 #include "mlir/IR/Builders.h"  // from @llvm-project
-#include "tensorflow/core/framework/tensor_testutil.h"
 #include "tensorflow/core/platform/test.h"
 
 namespace tensorflow {
@@ -90,25 +88,6 @@ class ModifyMlirModulePass : public MlirOptimizationPass {
 
   Status run_status_;
 };
-
-FunctionDef XTimesTwo() {
-  const Tensor kTwo = test::AsScalar<int64>(2);
-  return FunctionDefHelper::Define(
-      // Name
-      "XTimesTwo",
-      // Args
-      {"x: T"},
-      // Return values
-      {"y: T"},
-      // Attr def
-      {"T: {float, double, int32, int64}"},
-      // Nodes
-      {
-          {{"two"}, "Const", {}, {{"value", kTwo}, {"dtype", DT_INT64}}},
-          {{"scale"}, "Cast", {"two"}, {{"SrcT", DT_INT64}, {"DstT", "$T"}}},
-          {{"y"}, "Mul", {"x", "scale"}, {{"T", "$T"}}},
-      });
-}
 
 class MlirGraphOptimizationPassTest : public Test {
  public:
@@ -191,14 +170,6 @@ TEST_F(MlirGraphOptimizationPassTest, OptimizationPassFailsDisabledFallback) {
   Init(Status(error::Code::ABORTED, "aborted"),
        {MlirOptimizationPassState::Disabled,
         MlirOptimizationPassState::FallbackEnabled});
-
-  // We expect the result graph to be exactly the same as the original graph
-  // so we define the `graph_` by the following `flib` in this test point
-  // instead of the way we do in the Init method.
-  FunctionDefLibrary flib;
-  *flib.add_function() = XTimesTwo();
-  FunctionLibraryDefinition flib_def(OpRegistry::Global(), flib);
-  graph_ = std::make_unique<Graph>(flib_def);
 
   GraphDef original_graph_def;
   graph_->ToGraphDef(&original_graph_def);

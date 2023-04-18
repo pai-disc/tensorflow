@@ -70,10 +70,8 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/lite/quantization/quantization_utils.h"
 #include "tensorflow/compiler/mlir/lite/utils/convert_type.h"
 #include "tensorflow/compiler/mlir/lite/utils/low_bit_utils.h"
-#include "tensorflow/compiler/mlir/lite/utils/size_utils.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_attributes.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
-#include "tensorflow/compiler/mlir/tensorflow/ir/tf_saved_model.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_types.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/convert_tensor.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/dynamic_shape_utils.h"
@@ -112,9 +110,6 @@ namespace errors = tensorflow::errors;
 namespace tfl = mlir::TFL;
 
 namespace {
-
-using ::mlir::tf_saved_model::kTfSavedModelExportedNamesAttr;
-using ::mlir::tf_saved_model::kTfSavedModelIndexPathAttr;
 
 bool IsQuantized(const TensorT& tensor) {
   return (tensor.quantization != nullptr) &&
@@ -854,8 +849,7 @@ StatusOr<Operation*> ConvertOp(
 
       mlir::SmallVector<mlir::Attribute, 4> shape;
       for (auto s : new_shape) {
-        shape.push_back(
-            builder.getI32IntegerAttr(mlir::TFL::ConvertToTfliteSize(s)));
+        shape.push_back(builder.getI32IntegerAttr(static_cast<int32_t>(s)));
       }
       auto output_shape = DenseElementsAttr::get(shape_type, shape);
       auto shape_op = builder.create<tfl::ConstOp>(loc, output_shape);
@@ -912,8 +906,9 @@ StatusOr<Operation*> ConvertOp(
         int32_t dim_size = 0;
         for (const auto& dim :
              llvm::enumerate(shape_attr.getValues<llvm::APInt>())) {
-          shape.push_back(builder.getI32IntegerAttr(
-              mlir::TFL::ConvertToTfliteSize(dim.value().getSExtValue())));
+          const int64_t size = dim.value().getSExtValue();
+          shape.push_back(
+              builder.getI32IntegerAttr(static_cast<int32_t>(size)));
           ++dim_size;
         }
         auto shape_type = tensorflow::GetTypeFromTFTensorShape(
@@ -1123,6 +1118,8 @@ void SetSignature(
     FuncOp func, const tflite::SignatureDefT* signature,
     const std::vector<std::unique_ptr<tflite::TensorT>>& tensors) {
   auto* context = func->getContext();
+  static const char kSignatureDefIndexPath[] = "tf_saved_model.index_path";
+  static const char kExportedNameAttr[] = "tf_saved_model.exported_names";
   static const char kEntryFunctionAttributes[] = "tf.entry_function";
 
   auto dict_attr =
@@ -1143,7 +1140,7 @@ void SetSignature(
       return;
     }
     func.setArgAttr(
-        arg_index, kTfSavedModelIndexPathAttr,
+        arg_index, kSignatureDefIndexPath,
         mlir::ArrayAttr::get(context, {mlir::StringAttr::get(
                                           context, input_pair.value()->name)}));
   }
@@ -1158,14 +1155,14 @@ void SetSignature(
       func->emitWarning("Invalid signature tensors specified.");
       return;
     }
-    func.setResultAttr(arg_index, kTfSavedModelIndexPathAttr,
+    func.setResultAttr(arg_index, kSignatureDefIndexPath,
                        mlir::ArrayAttr::get(
                            context, {mlir::StringAttr::get(
                                         context, output_pair.value()->name)}));
     seen_indices.insert(arg_index);
   }
   func->setAttr(
-      kTfSavedModelExportedNamesAttr,
+      kExportedNameAttr,
       mlir::ArrayAttr::get(
           context, {mlir::StringAttr::get(context, signature->signature_key)}));
 }

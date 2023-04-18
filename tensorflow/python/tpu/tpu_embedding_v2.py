@@ -181,7 +181,7 @@ class TPUEmbedding(autotrackable.AutoTrackable):
       strategy.run(tpu_step, args=(tpu_features, ))
 
   @tf.function
-  def evaluation_step(dataset_iterator, num_steps):
+  def evalution_step(dataset_iterator, num_steps):
     def tpu_step(tpu_features):
       activations = embedding.dequeue()
       model_output = model(activations)
@@ -325,7 +325,7 @@ class TPUEmbedding(autotrackable.AutoTrackable):
 
     if self._using_tpu:
       # Extract a list of callable learning rates also in fixed order. Each
-      # table in the config proto will get an index into this list, and we will
+      # table in the config proto will get a index into this list and we will
       # pass this list in the same order after evaluation to the
       # send_tpu_embedding_gradients op.
       self._dynamic_learning_rates = []
@@ -890,15 +890,6 @@ class TPUEmbedding(autotrackable.AutoTrackable):
         # Add one dimension to the last axis.
         sample_indices = array_ops.pad(
             sample_indices, paddings=[[0, 0], [0, 1]])
-    else:
-      if feature.max_sequence_length > 0:
-        logging.warning(
-            (
-                "Input tensor is rank %d which is above 2, the"
-                " max_sequence_length setting will be ignored."
-            ),
-            tensor.shape.rank,
-        )
     indices.append(sample_indices)
     values.append(math_ops.cast(tensor.values, dtypes.int64))
     # If we have weights they must be a SparseTensor.
@@ -1016,9 +1007,9 @@ class TPUEmbedding(autotrackable.AutoTrackable):
           "Current graph {} does not match graph which contains "
           "TPUReplicateContext {}. This is most likely due to the fact that "
           "enqueueing embedding data is called inside control flow or a "
-          "tf.function inside `strategy.run`. This is not supported because "
-          "outside compilation fails to extract the enqueue ops as the head of "
-          "a computation.".format(ops.get_default_graph(), graph))
+          "nested function inside `strategy.run`. This is not supported "
+          "because outside compilation fails to extract the enqueue ops as "
+          "head of computation.".format(ops.get_default_graph(), graph))
     return in_tpu_ctx
 
   def _raise_error_for_non_direct_inputs(self, features):
@@ -1111,7 +1102,7 @@ class TPUEmbedding(autotrackable.AutoTrackable):
            a. If feature config has max_sequence_length equals 0 or output shape
               set (the max_sequence_length setting will be ignored), the
               output shape will be the input shape excluding the last dimension.
-           b. Otherwise, if the tensor is rank 2, the output shape will be input
+           b. Otherwize if the tensor is rank 2, the output shape will be input
               shape  with last dimension set as max_sequence_length. If the
               tensor is above rank 2, the output shape will be the input shape
               excluding the last dimension and the last dimension of the output
@@ -1272,6 +1263,10 @@ class TPUEmbedding(autotrackable.AutoTrackable):
         if name is not None:
           _add_key_attr(enqueue_op, name)
 
+        # Ensure that this op has outbound control flow, otherwise it won't be
+        # executed.
+        ops.get_default_graph().control_outputs.append(enqueue_op)
+
       tpu.outside_compilation(generate_enqueue_ops)
 
     elif device is None:
@@ -1301,6 +1296,7 @@ class TPUEmbedding(autotrackable.AutoTrackable):
           if name is not None:
             _add_key_attr(enqueue_op, name)
           enqueue_ops.append(enqueue_op)
+      ops.get_default_graph().control_outputs.extend(enqueue_ops)
     else:
       mode_override = "train" if training else "inference"
       device_spec = tf_device.DeviceSpec.from_string(device)
@@ -1317,6 +1313,7 @@ class TPUEmbedding(autotrackable.AutoTrackable):
         # Apply the name tag to the op.
         if name is not None:
           _add_key_attr(enqueue_op, name)
+        ops.get_default_graph().control_outputs.append(enqueue_op)
 
   def _get_input_shapes(self, tensors,
                         in_tpu_context: bool) -> List[TensorShape]:

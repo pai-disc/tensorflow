@@ -890,30 +890,9 @@ REGISTER_OP("RandomDataset")
                                                            "output_types"))
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       shape_inference::ShapeHandle unused;
-      // seed, and seed2 should be scalars.
+      // buffer_size, seed, and seed2 should be scalars.
       TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 0, &unused));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 0, &unused));
-      return shape_inference::ScalarShape(c);
-    });
-
-REGISTER_OP("RandomDatasetV2")
-    .Input("seed: int64")
-    .Input("seed2: int64")
-    .Input("seed_generator: resource")
-    .Output("handle: variant")
-    .Attr("rerandomize_each_iteration: bool = false")
-    .Attr("output_types: list(type) >= 1")
-    .Attr("output_shapes: list(shape) >= 1")
-    .Attr("metadata: string = ''")
-    .SetDoNotOptimize()
-    .SetTypeConstructor(full_type::VariadicTensorContainer(TFT_DATASET,
-                                                           "output_types"))
-    .SetShapeFn([](shape_inference::InferenceContext* c) {
-      shape_inference::ShapeHandle unused;
-      // seed, seed2, and seed_generator should be scalars.
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 0, &unused));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 0, &unused));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 0, &unused));
       return shape_inference::ScalarShape(c);
     });
 
@@ -1511,14 +1490,6 @@ REGISTER_OP("DataServiceDatasetV4")
     .SetTypeConstructor(full_type::VariadicTensorContainer(TFT_DATASET,
                                                            "output_types"))
     .SetShapeFn(shape_inference::ScalarShape);
-
-REGISTER_OP("DistributedSave")
-    .Input("dataset: variant")
-    .Input("directory: string")
-    .Input("address: string")
-    .Attr("metadata: string = ''")
-    .SetIsStateful()
-    .SetShapeFn(shape_inference::NoOutputs);
 
 REGISTER_OP("RegisterDataset")
     .Input("dataset: variant")

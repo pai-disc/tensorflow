@@ -30,24 +30,22 @@ constexpr int32_t kDeferredCoreSelectionReserved = -8193;
 class TPUOrdinalSelector : TPUOrdinalSelectorInterface {
  public:
   explicit TPUOrdinalSelector(int num_cores_per_replica = 1) {
-    stream_executor::tpu::OpsApiFn()->TfTpuOrdinalSelector_CreateFn(
-        &ordinal_selector_, num_cores_per_replica);
+    OpsApiFn()->TfTpuOrdinalSelector_CreateFn(&ordinal_selector_,
+                                              num_cores_per_replica);
   }
   ~TPUOrdinalSelector() override {
-    stream_executor::tpu::OpsApiFn()->TfTpuOrdinalSelector_DestroyFn(
-        ordinal_selector_);
+    OpsApiFn()->TfTpuOrdinalSelector_DestroyFn(ordinal_selector_);
   }
   int64_t GetOrdinal(absl::optional<uint64> key, int64_t* req_id) override {
     int64_t ordinal;
-    stream_executor::tpu::OpsApiFn()->TfTpuOrdinalSelector_GetOrdinalFn(
-        ordinal_selector_, key, req_id, &ordinal);
+    OpsApiFn()->TfTpuOrdinalSelector_GetOrdinalFn(ordinal_selector_, key,
+                                                  req_id, &ordinal);
     return ordinal;
   }
   void DequeueFromCoreSelector(int32_t device_ordinal,
                                int64_t req_id) override {
-    stream_executor::tpu::OpsApiFn()
-        ->TfTpuOrdinalSelector_DequeueFromCoreSelectorFn(
-            ordinal_selector_, device_ordinal, req_id);
+    OpsApiFn()->TfTpuOrdinalSelector_DequeueFromCoreSelectorFn(
+        ordinal_selector_, device_ordinal, req_id);
   }
 
  private:

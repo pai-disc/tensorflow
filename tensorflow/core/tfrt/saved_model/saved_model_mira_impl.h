@@ -32,9 +32,9 @@ namespace tfrt_stub {
 
 class SavedModelMiraImpl final : public SavedModel {
  public:
-  tensorflow::StatusOr<std::unique_ptr<SavedModel>> LoadSavedModel(
+  static std::unique_ptr<SavedModel> LoadSavedModel(
       Options options, absl::string_view saved_model_dir,
-      const std::unordered_set<std::string>& tags);
+      const std::unordered_set<std::string>& tags, tensorflow::Status* status);
 };
 
 }  // namespace tfrt_stub

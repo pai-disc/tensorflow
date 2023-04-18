@@ -17,7 +17,7 @@ if(TARGET flatbuffers OR flatbuffers_POPULATED)
   return()
 endif()
 
-include(OverridableFetchContent)
+include(FetchContent)
 
 OverridableFetchContent_Declare(
   flatbuffers

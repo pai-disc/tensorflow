@@ -15,10 +15,10 @@ limitations under the License.
 
 #include <array>
 
+#include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/xla/service/hlo_verifier.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/compiler/xla/tests/test_macros.h"
-#include "tensorflow/compiler/xla/tests/test_utils.h"
 #include "tensorflow/tsl/platform/test.h"
 
 namespace xla {
@@ -27,10 +27,6 @@ namespace {
 class TokenHloTest : public HloTestBase {};
 
 XLA_TEST_F(TokenHloTest, SingleTokenInstruction) {
-  if (IsMlirLoweringEnabled()) {
-    // The MLIR pipeline doesn't support returning tokens.
-    GTEST_SKIP() << "Returning tokens unsupported by MLIR";
-  }
   std::unique_ptr<HloModule> module = CreateNewVerifiedModule();
   auto builder = HloComputation::Builder(TestName());
   builder.AddInstruction(HloInstruction::CreateToken());
@@ -42,10 +38,6 @@ XLA_TEST_F(TokenHloTest, SingleTokenInstruction) {
 }
 
 XLA_TEST_F(TokenHloTest, TokenInTuple) {
-  if (IsMlirLoweringEnabled()) {
-    // The MLIR pipeline doesn't support returning tokens.
-    GTEST_SKIP() << "Returning tokens unsupported by MLIR";
-  }
   std::unique_ptr<HloModule> module = CreateNewVerifiedModule();
   auto builder = HloComputation::Builder(TestName());
   auto token = builder.AddInstruction(HloInstruction::CreateToken());
@@ -60,10 +52,6 @@ XLA_TEST_F(TokenHloTest, TokenInTuple) {
 }
 
 XLA_TEST_F(TokenHloTest, TokenTree) {
-  if (IsMlirLoweringEnabled()) {
-    // The MLIR pipeline doesn't support returning tokens.
-    GTEST_SKIP() << "Returning tokens unsupported by MLIR";
-  }
   std::unique_ptr<HloModule> module = CreateNewVerifiedModule();
   auto builder = HloComputation::Builder(TestName());
   auto token0 = builder.AddInstruction(HloInstruction::CreateToken());
@@ -212,10 +200,6 @@ ENTRY %TokenInConditional (param.3: pred[]) -> s32[] {
 }
 
 XLA_TEST_F(TokenHloTest, AddDependency) {
-  if (IsMlirLoweringEnabled()) {
-    // This test generates invalid HLO. The after-all op only takes tokens.
-    GTEST_SKIP() << "Invalid HLO unsupported by MLIR";
-  }
   std::string module_string = R"(
 HloModule AddDependency, is_scheduled=true
 
@@ -244,10 +228,6 @@ ENTRY %AddDependency (p0: f32[], p1: f32[]) -> f32[] {
 }
 
 XLA_TEST_F(TokenHloTest, AddDependencyOfConstant) {
-  if (IsMlirLoweringEnabled()) {
-    // This test generates invalid HLO. The after-all op only takes tokens.
-    GTEST_SKIP() << "Invalid HLO unsupported by MLIR";
-  }
   std::string module_string = R"(
 HloModule AddDependencyOfConstant, is_scheduled=true
 
@@ -286,11 +266,6 @@ ENTRY %AddDependency (p: f32[3]) -> f32[3] {
 }
 
 XLA_TEST_F(TokenHloTest, TupleShapedAddDependency) {
-  if (IsMlirLoweringEnabled()) {
-    // This test generates invalid MHLO. The add-dependency op doesn't take
-    // tuples.
-    GTEST_SKIP() << "Invalid MHLO";
-  }
   std::string module_string = R"(
 HloModule TupleShapedAddDependency, is_scheduled=true
 ENTRY %TupleShapedAddDependency (p0: f32[3], p1: f32[3]) -> f32[3] {

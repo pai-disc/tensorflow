@@ -27,11 +27,12 @@ limitations under the License.
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
 #include "tensorflow/cc/saved_model/loader.h"
 #include "tensorflow/compiler/mlir/tensorflow/translate/mlir_import_options.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/statusor.h"
 
 namespace tensorflow {
 
-using tsl::Status;
-using tsl::StatusOr;
+using stream_executor::port::Status;
+using stream_executor::port::StatusOr;
 
 // TODO(antiagainst): Directly manipulating files in library functions is not
 // a good idea. We should pass in a string/stream here.

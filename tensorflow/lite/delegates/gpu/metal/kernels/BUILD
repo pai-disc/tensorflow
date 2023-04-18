@@ -11,7 +11,6 @@ load(
 )
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
@@ -199,7 +198,6 @@ objc_library(
     sdk_frameworks = ["XCTest"],
     deps = [
         ":test_util",
-        "//tensorflow/lite/delegates/gpu/common:status",
         "//tensorflow/lite/delegates/gpu/common/tasks:elementwise_test_util",
     ],
 )

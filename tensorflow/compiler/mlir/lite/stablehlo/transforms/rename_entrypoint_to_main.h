@@ -21,11 +21,13 @@ limitations under the License.
 #include "mlir/Pass/Pass.h"  // from @llvm-project
 
 namespace mlir {
-namespace odml {
+namespace TFL {
+namespace mhlo {
 
 std::unique_ptr<Pass> CreateRenameEntrypointToMainPass();
 
-}  // namespace odml
+}  // namespace mhlo
+}  // namespace TFL
 }  // namespace mlir
 
 #endif  // TENSORFLOW_COMPILER_MLIR_LITE_STABLEHLO_TRANSFORMS_RENAME_ENTRYPOINT_TO_MAIN_H_

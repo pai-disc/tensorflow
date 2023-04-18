@@ -1,7 +1,6 @@
 load("//tensorflow:tensorflow.bzl", "if_google")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
     licenses = ["notice"],
 )
 

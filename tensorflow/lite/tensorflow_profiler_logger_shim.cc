@@ -73,12 +73,4 @@ TFLITE_ATTRIBUTE_WEAK void OnTfLiteArenaDealloc(int subgraph_index,
                                                 int arena_id,
                                                 size_t num_bytes) {}
 
-// No-op for the weak symbol. Overridden by a strong symbol in
-// tensorflow_profiler_logger.cc.
-TFLITE_ATTRIBUTE_WEAK void PauseHeapMonitoring(bool pause) {}
-
-// No-op for the weak symbol. Overridden by a strong symbol in
-// tensorflow_profiler_logger.cc.
-TFLITE_ATTRIBUTE_WEAK void OnTfLiteInterpreterEnd() {}
-
 }  // namespace tflite

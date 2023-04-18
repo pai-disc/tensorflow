@@ -20,7 +20,7 @@ limitations under the License.
 #include "tensorflow/lite/core/api/profiler.h"
 #include "tensorflow/lite/profiling/telemetry/telemetry_status.h"
 
-namespace tflite::telemetry {
+namespace tflite {
 
 void TelemetryReportEvent(TfLiteContext* context, const char* event_name,
                           TfLiteStatus status) {
@@ -65,15 +65,13 @@ void TelemetryReportDelegateOpEvent(TfLiteContext* context, const char* op_name,
   }
 }
 
-void TelemetryReportSettings(
-    TfLiteContext* context, const char* setting_name,
-    const TfLiteTelemetryInterpreterSettings* settings) {
+void TelemetryReportSettings(TfLiteContext* context, const char* setting_name,
+                             const TelemetryInterpreterSettings& settings) {
   auto* profiler = reinterpret_cast<Profiler*>(context->profiler);
   if (profiler) {
-    TfLiteTelemetrySettings telemetry_settings{};
-    telemetry_settings.source =
-        static_cast<uint32_t>(TelemetrySource::TFLITE_INTERPRETER);
-    telemetry_settings.data = reinterpret_cast<const void*>(settings);
+    TelemetrySettings telemetry_settings;
+    telemetry_settings.source = TelemetrySource::TFLITE_INTERPRETER;
+    telemetry_settings.data = reinterpret_cast<const void*>(&settings);
     profiler->AddEventWithData(
         setting_name, Profiler::EventType::TELEMETRY_REPORT_SETTINGS,
         reinterpret_cast<const void*>(&telemetry_settings));
@@ -86,8 +84,8 @@ void TelemetryReportDelegateSettings(TfLiteContext* context,
                                      const void* settings) {
   auto* profiler = reinterpret_cast<Profiler*>(context->profiler);
   if (profiler) {
-    TfLiteTelemetrySettings telemetry_settings{};
-    telemetry_settings.source = static_cast<uint32_t>(source);
+    TelemetrySettings telemetry_settings;
+    telemetry_settings.source = source;
     telemetry_settings.data = settings;
     profiler->AddEventWithData(
         setting_name, Profiler::EventType::TELEMETRY_DELEGATE_REPORT_SETTINGS,
@@ -95,4 +93,4 @@ void TelemetryReportDelegateSettings(TfLiteContext* context,
   }
 }
 
-}  // namespace tflite::telemetry
+}  // namespace tflite
