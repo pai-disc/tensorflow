@@ -48,7 +48,7 @@ class GpuStream : public internal::StreamInterface {
 
   // Explicitly initialize the CUDA resources associated with this stream, used
   // by StreamExecutor::AllocateStream().
-  bool Init();
+  virtual bool Init();
 
   void SetPriority(StreamPriority priority) override {
     stream_priority_ = priority;
@@ -62,7 +62,7 @@ class GpuStream : public internal::StreamInterface {
 
   // Explicitly destroy the CUDA resources associated with this stream, used by
   // StreamExecutor::DeallocateStream().
-  void Destroy();
+  virtual void Destroy();
 
   // Returns true if no work is pending or executing on the stream.
   bool IsIdle() const;
@@ -77,7 +77,9 @@ class GpuStream : public internal::StreamInterface {
   // Precond: this GpuStream has been allocated (otherwise passing a nullptr
   // into the NVIDIA library causes difficult-to-understand faults).
   GpuStreamHandle gpu_stream() const {
-    DCHECK(gpu_stream_ != nullptr);
+    // NB(xiafei.qiuxf): Comment out the DCHECK below, since it may be nullptr in
+    //                   case of pytorch.
+    // DCHECK(gpu_stream_ != nullptr);
     return const_cast<GpuStreamHandle>(gpu_stream_);
   }
 
@@ -86,7 +88,8 @@ class GpuStream : public internal::StreamInterface {
 
   GpuExecutor* parent() const { return parent_; }
 
- private:
+  // private previously, change to protected to make subclass possible
+ protected:
   GpuExecutor* parent_;         // Executor that spawned this stream.
   GpuStreamHandle gpu_stream_;  // Wrapped CUDA stream handle.
   std::variant<StreamPriority, int> stream_priority_;

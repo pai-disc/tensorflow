@@ -65,6 +65,9 @@ struct FfiStateVector {
   // If FFI module instantiates state for each execution, the state vector will
   // be the owner of that state for the duration of execution.
   std::vector<OwnedFfiState> per_execution_state;
+  FfiStateVector(const FfiStateVector&) = delete;
+  FfiStateVector() = default;
+  FfiStateVector(FfiStateVector&&) = default;
 };
 
 // FfiModulesState is a container that owns the FFI modules state.

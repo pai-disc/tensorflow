@@ -31,6 +31,12 @@ limitations under the License.
 namespace xla {
 namespace gpu {
 
+Status LinkWithBitcodeVector(
+    llvm::Module* module, const std::vector<std::string>& bitcode_path_vector);
+
+std::vector<std::string> GetROCDLPaths(std::string amdgpu_version,
+                                       const std::string& rocdl_dir_path);
+
 namespace nvptx {
 
 std::string CantFindCudaMessage(absl::string_view msg,

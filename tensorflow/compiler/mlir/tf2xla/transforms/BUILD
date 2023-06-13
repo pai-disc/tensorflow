@@ -174,7 +174,35 @@ cc_library(
         "@llvm-project//mlir:TransformUtils",
         "@stablehlo//:chlo_ops",
     ] + if_static(["//tensorflow/tsl/platform:tensor_float_32_utils"]),
+# Removed after rebasing-20230613
+#     ],
+#     alwayslink = 1,
+# )
 )
+
+# Removed after rebasing-20230613
+# cc_library(
+#     name = "adjust_layout",
+#     srcs = [
+#         "transforms/adjust_layout.cc",
+#     ],
+#     hdrs = [
+#         "transforms/adjust_layout.h",
+#     ],
+#     deps = [
+#         "//tensorflow/compiler/xla:shape_util",
+#         "//tensorflow/compiler/xla/mlir_hlo",
+#         "//tensorflow/compiler/xla/stream_executor/tpu:c_api_conversions",
+#         "//tensorflow/compiler/xla/stream_executor/tpu:tpu_api",
+#         "//tensorflow/compiler/xla/translate/mhlo_to_hlo:type_to_shape",
+#         "@com_google_absl//absl/types:span",
+#         "@llvm-project//llvm:Support",
+#         "@llvm-project//mlir:FuncDialect",
+#         "@llvm-project//mlir:IR",
+#         "@llvm-project//mlir:Pass",
+#         "@llvm-project//mlir:Support",
+#     ],
+# )
 
 cc_library(
     name = "xla_legalize_targets",

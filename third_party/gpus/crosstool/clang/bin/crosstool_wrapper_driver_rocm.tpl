@@ -32,6 +32,7 @@ HIP_RUNTIME_LIBRARY = '%{hip_runtime_library}'
 ROCR_RUNTIME_PATH = '%{rocr_runtime_path}'
 ROCR_RUNTIME_LIBRARY = '%{rocr_runtime_library}'
 VERBOSE = '%{crosstool_verbose}'=='1'
+USING_DCU = '%{using_dcu}'==str(True)
 
 def Log(s):
   print('gpus/crosstool: {0}'.format(s))
@@ -239,6 +240,10 @@ def main():
     gpu_linker_flags.append('-L' + HIP_RUNTIME_PATH)
     gpu_linker_flags.append('-Wl,-rpath=' + HIP_RUNTIME_PATH)
     gpu_linker_flags.append('-l' + HIP_RUNTIME_LIBRARY)
+    if USING_DCU:
+        gpu_linker_flags.append('-lstdc++')
+    else:
+        gpu_linker_flags.append('-lamd_comgr')
     gpu_linker_flags.append("-lrt")
     gpu_linker_flags.append("-lstdc++")
 

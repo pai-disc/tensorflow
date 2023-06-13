@@ -28,7 +28,6 @@ limitations under the License.
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
-#include "third_party/eigen3/Eigen/Core"
 #include "tensorflow/compiler/xla/stream_executor/cuda/cuda_activation.h"
 #include "tensorflow/compiler/xla/stream_executor/cuda/cuda_diagnostics.h"
 #include "tensorflow/compiler/xla/stream_executor/cuda/cuda_driver.h"
@@ -49,6 +48,7 @@ limitations under the License.
 #include "tensorflow/tsl/platform/errors.h"
 #include "tensorflow/tsl/platform/tensor_float_32_utils.h"
 #include "tensorflow/tsl/util/env_var.h"
+#include "third_party/eigen3/Eigen/Core"
 
 // clang-format off
 #include "third_party/gpus/cudnn/cudnn.h"

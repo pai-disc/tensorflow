@@ -22,15 +22,16 @@ limitations under the License.
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
-#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
-#include "mlir/IR/PatternMatch.h"  // from @llvm-project
-#include "mlir/Pass/Pass.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
-#include "mlir/Support/LogicalResult.h"  // from @llvm-project
+#include "mlir/Dialect/Func/IR/FuncOps.h"       // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"                 // from @llvm-project
+#include "mlir/IR/BuiltinTypes.h"               // from @llvm-project
+#include "mlir/IR/PatternMatch.h"               // from @llvm-project
+#include "mlir/Pass/Pass.h"                     // from @llvm-project
+#include "mlir/Support/LLVM.h"                  // from @llvm-project
+#include "mlir/Support/LogicalResult.h"         // from @llvm-project
 #include "mlir/Transforms/DialectConversion.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_types.h"
+#include "tensorflow/compiler/mlir/tensorflow/utils/convert_tensor.h"
 
 #define DEBUG_TYPE "xla-legalize-tf-types"
 
@@ -96,9 +97,9 @@ class TfTypeConverter : public TypeConverter {
 // An Op is illegal iff it contains an illegalType.
 class TfTypeConversionTarget : public ConversionTarget {
  public:
-  explicit TfTypeConversionTarget(MLIRContext &ctx, TfTypeConverter &converter)
+  explicit TfTypeConversionTarget(MLIRContext& ctx, TfTypeConverter& converter)
       : ConversionTarget(ctx), converter_(converter) {
-    markUnknownOpDynamicallyLegal([this](Operation *op) {
+    markUnknownOpDynamicallyLegal([this](Operation* op) {
       // The FuncOp type can contain types that the op's operand and result
       // types do not contain.
       if (auto func = dyn_cast<func::FuncOp>(op)) {
@@ -109,20 +110,20 @@ class TfTypeConversionTarget : public ConversionTarget {
   }
 
  private:
-  TfTypeConverter &converter_;
+  TfTypeConverter& converter_;
 };
 
 class TfTypePattern : public ConversionPattern {
  public:
-  TfTypePattern(MLIRContext *ctx, TypeConverter &converter)
+  TfTypePattern(MLIRContext* ctx, TypeConverter& converter)
       : ConversionPattern(converter, MatchAnyOpTypeTag(), 1, ctx) {}
 
   // The dialect conversion framework will call this matchAndRewrite on each
   // Operation in the IR tree. This call matchAndRewrite needs to update the
   // Operation's results and child regions.
   LogicalResult matchAndRewrite(
-      Operation *op, ArrayRef<Value> operands,
-      ConversionPatternRewriter &rewriter) const override {
+      Operation* op, ArrayRef<Value> operands,
+      ConversionPatternRewriter& rewriter) const override {
     // Update the results.
     llvm::SmallVector<Type, 4> new_results;
     if (failed(getTypeConverter()->convertTypes(op->getResultTypes(),
@@ -132,10 +133,27 @@ class TfTypePattern : public ConversionPattern {
     // Update the regions. The dialect conversion framework wants new regions to
     // be created and updated, rather than updating the old op. Thus we use an
     // OperationState so we can add regions to the new up.
+    auto attrs = llvm::to_vector(op->getAttrs());
+    for (auto& attr : attrs) {
+      if (auto elemsAttr = attr.getValue().dyn_cast<ElementsAttr>()) {
+        auto type = elemsAttr.getType();
+        auto newType = ToLegalType(type);
+        if (newType == type) continue;
+
+        tensorflow::Tensor out;
+        if (tensorflow::ConvertToTensor(elemsAttr, &out) !=
+            tensorflow::OkStatus())
+          return failure();
+        ArrayRef<char> data(static_cast<char*>(out.data()), out.TotalBytes());
+        auto newAttr = DenseElementsAttr::getFromRawBuffer(
+            cast<ShapedType>(newType), data);
+        attr.setValue(newAttr);
+      }
+    }
     OperationState state(op->getLoc(), op->getName().getStringRef(), operands,
-                         new_results, op->getAttrs(), op->getSuccessors());
-    for (Region &region : op->getRegions()) {
-      Region &new_region = *state.addRegion();
+                         new_results, attrs, op->getSuccessors());
+    for (Region& region : op->getRegions()) {
+      Region& new_region = *state.addRegion();
       rewriter.inlineRegionBefore(region, new_region, new_region.begin());
       if (failed(rewriter.convertRegionTypes(&new_region, *getTypeConverter())))
         return failure();

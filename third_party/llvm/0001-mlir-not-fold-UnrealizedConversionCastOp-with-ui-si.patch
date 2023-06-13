@@ -1,0 +1,32 @@
+diff --git a/mlir/lib/IR/BuiltinDialect.cpp b/mlir/lib/IR/BuiltinDialect.cpp
+index af94c5e..1d15b6e 100644
+--- a/mlir/lib/IR/BuiltinDialect.cpp
++++ b/mlir/lib/IR/BuiltinDialect.cpp
+@@ -298,6 +298,27 @@ UnrealizedConversionCastOp::fold(ArrayRef<Attribute> attrOperands,
+   if (operands.empty())
+     return failure();
+
++  bool has_signed_or_unsigned = false;
++  for (Type t : operands.getType()) {
++    if (t.isa<IntegerType>() &&
++        (t.cast<IntegerType>().isUnsignedInteger() ||
++         t.cast<IntegerType>().isSignedInteger())) {
++      has_signed_or_unsigned = true;
++      break;
++    }
++  }
++  for (Type t : results.getType()) {
++    if (t.isa<IntegerType>() &&
++        (t.cast<IntegerType>().isUnsignedInteger() ||
++         t.cast<IntegerType>().isSignedInteger())) {
++      has_signed_or_unsigned = true;
++      break;
++    }
++  }
++  if (has_signed_or_unsigned) {
++    return failure();
++  }
++
+   // Check that the input is a cast with results that all feed into this
+   // operation, and operand types that directly match the result types of this
+   // operation.

@@ -138,7 +138,8 @@ rocblas_operation RocblasAdjointOp() {
                                         : rocblas_operation_transpose;
 }
 
-#if TF_ROCM_VERSION >= 40500
+// #if TF_ROCM_VERSION >= 40500
+#if 0
 using gpuSolverOp_t = hipsolverOperation_t;
 using gpuSolverFill_t = hipsolverFillMode_t;
 using gpuSolverSide_t = hipsolverSideMode_t;

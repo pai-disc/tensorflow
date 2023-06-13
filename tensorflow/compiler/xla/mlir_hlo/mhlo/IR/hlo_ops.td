@@ -2206,6 +2206,7 @@ def MHLO_ClampOp : MHLO_ShapedInterfaceOp<"clamp", [Pure,
   );
   let results = (outs MHLO_Tensor:$result);
 
+  let hasVerifier = 1;
   let hasFolder = 1;
 
   let assemblyFormat = [{
@@ -2478,7 +2479,10 @@ def MHLO_CustomCallOp: MHLO_Op<"custom_call",
   }];
 }
 
-def MHLO_DotOp: MHLO_Op<"dot", [Pure]> {
+// def MHLO_DotOp: MHLO_Op<"dot", [Pure]> { // The community one
+def MHLO_DotOp: MHLO_Op<"dot", [Pure, 
+    DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+    ["reifyReturnTypeShapes"]>]> {
   let summary = "Dot operation";
   let description = [{
     This operation is on its way out of StableHLO, so it is not included in
@@ -3027,6 +3031,21 @@ def MHLO_ReverseOp: MHLO_Op<"reverse",
     MHLO_Tensor:$operand,
     I64ElementsAttr:$dimensions
   );
+
+  // DISC-Begin
+  let extraClassDeclaration = [{
+    LogicalResult reifyReturnTypeShapes(
+        OpBuilder& builder, ValueRange operands,
+        SmallVectorImpl<Value>& reifiedReturnShapes) {
+      return ::mlir::hlo::deriveShapeFromOperand(&builder, getOperation(),
+                                                 operands.front(),
+                                                 &reifiedReturnShapes);
+    }
+    static bool isCompatibleReturnTypes(TypeRange l, TypeRange r) {
+      return mlir::hlo::isCompatibleForHloTypeInference(l, r);
+    }
+  }];
+  // DISC-end
 
   let hasVerifier = 1;
 
@@ -3702,7 +3721,10 @@ def MHLO_DynamicGatherOp: MHLO_Op<"dynamic_gather",
   let hasCanonicalizer = 1;
 }
 
-def MHLO_DynamicConvOp : MHLO_Op<"dynamic_conv", [Pure]> {
+// def MHLO_DynamicConvOp : MHLO_Op<"dynamic_conv", [Pure]> { // The community one
+def MHLO_DynamicConvOp : MHLO_Op<"dynamic_conv", [Pure, 
+    DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+    ["reifyReturnTypeShapes"]>]> {
   let summary = "DynamicConv operation";
   let description = [{
     This operation is a work in progress, so it is not yet included in

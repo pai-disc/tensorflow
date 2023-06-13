@@ -27,8 +27,8 @@ limitations under the License.
 #ifndef TF_OPS
 #define TF_OPS
 
-include "tensorflow/compiler/mlir/tensorflow/ir/tf_generated_ops.td"
-include "tensorflow/compiler/mlir/tensorflow/ir/tf_op_base.td"
+include "external/org_tensorflow/tensorflow/compiler/mlir/tensorflow/ir/tf_generated_ops.td"
+include "external/org_tensorflow/tensorflow/compiler/mlir/tensorflow/ir/tf_op_base.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"

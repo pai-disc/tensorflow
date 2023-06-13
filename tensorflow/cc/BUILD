@@ -762,7 +762,7 @@ tf_gen_op_wrappers_cc(
         "function_ops",
     ],
     pkg = "//tensorflow/core",
-    visibility = ["//tensorflow:internal"],
+    visibility = ["//visibility:public"],
 )
 
 tf_gen_op_wrappers_cc(

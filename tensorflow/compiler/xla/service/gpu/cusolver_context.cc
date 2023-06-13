@@ -66,7 +66,7 @@ struct GpuComplexT<std::complex<double>*> {
 
 using gpuStream_t = hipStream_t;
 
-#if TF_ROCM_VERSION >= 40500
+#if TF_ROCM_VERSION >= 40500 && (!TENSORFLOW_USE_DCU)
 #define GPU_SOLVER_CONTEXT_PREFIX se::wrap::hipsolver
 #define GPU_SOLVER_PREFIX se::wrap::hipsolver
 
@@ -161,7 +161,7 @@ Status ConvertStatus(cusolverStatus_t status) {
   }
 }
 #else
-#if TF_ROCM_VERSION >= 40500
+#if (TF_ROCM_VERSION >= 40500) && (!TENSORFLOW_USE_DCU)
 hipsolverFillMode_t GpuBlasUpperLower(se::blas::UpperLower uplo) {
   switch (uplo) {
     case se::blas::UpperLower::kUpper:

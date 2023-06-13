@@ -32,8 +32,7 @@ load("//tensorflow/compiler/xla/service:xla_compile.bzl", "xla_aot_compile_cpu",
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 
 package(
-    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
-    default_visibility = [":friends"],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 

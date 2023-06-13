@@ -205,12 +205,14 @@ def _find_rocrand_config(rocm_install_path):
       version_file_path = os.path.join(path, f)
       if os.path.exists(version_file_path):
         version_file = version_file_path
-        break
+        try:
+          version_number = _get_header_version(version_file, "ROCRAND_VERSION")
+        except ConfigError as e:
+          continue
+        return version_number
     if not version_file:
       raise ConfigError(
           "rocrand version file not found in {}".format(possible_version_files))
-    version_number = _get_header_version(version_file, "ROCRAND_VERSION")
-    return version_number
 
   rocrand_config = {
       "rocrand_version_number": rocrand_version_number(rocm_install_path)
@@ -422,11 +424,12 @@ def find_rocm_config():
   result.update(_find_rocblas_config(rocm_install_path))
   result.update(_find_rocrand_config(rocm_install_path))
   result.update(_find_rocfft_config(rocm_install_path))
-  if result["rocm_version_number"] >= 40100:
+  enable_dcu = os.environ.get("TF_NEED_DCU", 0)
+  if (enable_dcu != "1") and (result["rocm_version_number"] >= 40100):
     result.update(_find_hipfft_config(rocm_install_path))
   result.update(_find_roctracer_config(rocm_install_path))
   result.update(_find_hipsparse_config(rocm_install_path))
-  if result["rocm_version_number"] >= 40500:
+  if (enable_dcu != "1") and result["rocm_version_number"] >= 40500:
     result.update(_find_hipsolver_config(rocm_install_path))
   result.update(_find_rocsolver_config(rocm_install_path))
 

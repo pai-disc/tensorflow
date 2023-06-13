@@ -119,6 +119,9 @@ tf_cc_binary(
         "@llvm-project//mlir:ToLLVMIRTranslation",
     ] + if_llvm_system_z_available([
         "@llvm-project//llvm:SystemZCodeGen",  # fixdeps: keep
+    ]) + if_cuda_is_configured([
+        "@local_config_cuda//cuda:cuda_headers",
+        "@local_config_cuda//cuda:cuda_driver",
     ]),
 )
 

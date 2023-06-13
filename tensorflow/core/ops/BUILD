@@ -99,6 +99,7 @@ tf_gen_op_libs(
     deps = [
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_all_cc",
+	"//tensorflow/tsl/protobuf:protos_all_cc",
     ],
 )
 
@@ -138,6 +139,7 @@ tf_gen_op_libs(
     deps = [
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_all_cc",
+	"//tensorflow/tsl/protobuf:protos_all_cc",
     ],
 )
 

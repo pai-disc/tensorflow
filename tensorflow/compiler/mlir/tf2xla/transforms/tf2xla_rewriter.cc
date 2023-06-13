@@ -29,24 +29,24 @@ limitations under the License.
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
+#include "mlir/Dialect/Func/IR/FuncOps.h"               // from @llvm-project
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"  // from @llvm-project
-#include "mlir/Dialect/Tensor/IR/Tensor.h"  // from @llvm-project
-#include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
-#include "mlir/IR/Diagnostics.h"  // from @llvm-project
-#include "mlir/IR/IRMapping.h"  // from @llvm-project
-#include "mlir/IR/Location.h"  // from @llvm-project
-#include "mlir/IR/Operation.h"  // from @llvm-project
-#include "mlir/IR/OwningOpRef.h"  // from @llvm-project
-#include "mlir/IR/PatternMatch.h"  // from @llvm-project
-#include "mlir/IR/Types.h"  // from @llvm-project
-#include "mlir/IR/Value.h"  // from @llvm-project
-#include "mlir/Pass/Pass.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
-#include "mlir/Support/LogicalResult.h"  // from @llvm-project
-#include "mlir/Transforms/DialectConversion.h"  // from @llvm-project
+#include "mlir/Dialect/Tensor/IR/Tensor.h"              // from @llvm-project
+#include "mlir/IR/Builders.h"                           // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"                         // from @llvm-project
+#include "mlir/IR/BuiltinTypes.h"                       // from @llvm-project
+#include "mlir/IR/Diagnostics.h"                        // from @llvm-project
+#include "mlir/IR/IRMapping.h"                          // from @llvm-project
+#include "mlir/IR/Location.h"                           // from @llvm-project
+#include "mlir/IR/Operation.h"                          // from @llvm-project
+#include "mlir/IR/OwningOpRef.h"                        // from @llvm-project
+#include "mlir/IR/PatternMatch.h"                       // from @llvm-project
+#include "mlir/IR/Types.h"                              // from @llvm-project
+#include "mlir/IR/Value.h"                              // from @llvm-project
+#include "mlir/Pass/Pass.h"                             // from @llvm-project
+#include "mlir/Support/LLVM.h"                          // from @llvm-project
+#include "mlir/Support/LogicalResult.h"                 // from @llvm-project
+#include "mlir/Transforms/DialectConversion.h"          // from @llvm-project
 #include "tensorflow/compiler/mlir/op_or_arg_name_mapper.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tpu_embedding_ops_registry.h"
@@ -347,6 +347,7 @@ LogicalResult Tf2XlaRewriter::LegalizeOp() {
   tensorflow::OpKernel* op_kernel_raw;
   status = params_.function_library->CreateKernel(props, &op_kernel_raw);
   if (!status.ok()) {
+    // TODO: it fails for SigmoidGrad op of static shape. To fix.
     return op_->emitRemark()
            << "failed to create tf2xla kernel: " << status.ToString();
   }
@@ -396,17 +397,17 @@ LogicalResult Tf2XlaRewriter::LegalizeOp() {
 
   if (failed(VerifyOpResults(op_context))) return failure();
 
-    StatusOr<mhlo::TupleOp> tuple_result_or_status =
-        CompileWithHloImporter(op_context);
-    if (!tuple_result_or_status.ok()) {
-      return op_->emitRemark() << tuple_result_or_status.status().ToString();
-    }
-    mhlo::TupleOp tuple_result = tuple_result_or_status.value();
+  StatusOr<mhlo::TupleOp> tuple_result_or_status =
+      CompileWithHloImporter(op_context);
+  if (!tuple_result_or_status.ok()) {
+    return op_->emitRemark() << tuple_result_or_status.status().ToString();
+  }
+  mhlo::TupleOp tuple_result = tuple_result_or_status.value();
 
-    llvm::SmallVector<Value> output_values;
-    if (failed(GetKernelOutputs(op_context, tuple_result, output_values))) {
-      return failure();
-    }
+  llvm::SmallVector<Value> output_values;
+  if (failed(GetKernelOutputs(op_context, tuple_result, output_values))) {
+    return failure();
+  }
 
   rewriter_.replaceOp(op_, output_values);
   return success();

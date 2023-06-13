@@ -33,9 +33,9 @@ def LmhloStructuredInterface : OpInterface<"LmhloOp"> {
       /*args=*/(ins),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{
-        /// By default, the result buffer is the last operand 
+        /// By default, the result buffer is the last operand
         unsigned num_operands = this->getOperation()->getNumOperands();
-        if (num_operands > 1) {
+        if (num_operands >= 1) {
           return this->getOperation()->getOperand(num_operands - 1);
         }
         return nullptr;
