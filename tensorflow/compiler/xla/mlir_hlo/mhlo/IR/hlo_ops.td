@@ -1686,9 +1686,9 @@ def MHLO_DynamicSliceOp: MHLO_Op<"dynamic_slice",
   let hasCanonicalizer = 1;
 }
 
-def MHLO_DynamicUpdateSliceOp: MHLO_Op<"dynamic_update_slice",
+def MHLO_DynamicUpdateSliceOp: MHLO_ShapedInterfaceOp<"dynamic_update_slice",
       [Pure, AllElementTypesMatch<["operand", "update", "result"]>,
-       InferTensorType]> {
+       DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
   let summary = "Dynamic Update Slice operator";
   let description = [{
     DynamicUpdateSlice generates a result which is the value of the input array
