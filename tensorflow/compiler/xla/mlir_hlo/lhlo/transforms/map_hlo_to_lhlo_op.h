@@ -105,6 +105,7 @@ MAP_HLO_TO_LHLO(XorOp);
 MAP_HLO_TO_LHLO(ReverseOp);
 MAP_HLO_TO_LHLO(RoundNearestEvenOp);
 MAP_HLO_TO_LHLO(RoundOp);
+MAP_HLO_TO_LHLO(DynamicUpdateSliceOp);
 
 #undef MAP_HLO_TO_LHLO
 
