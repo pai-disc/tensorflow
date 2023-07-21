@@ -119,6 +119,7 @@ LogicalResult convertResults(Operation* op, SmallVectorImpl<Value>& results,
       for (auto operand : ArrayRef<Value>(results).take_front(numOperands)) {
         auto operandType = operand.getType().dyn_cast<MemRefType>();
         if (!operandType) return failure();
+
         tensorOperands.push_back(rewriter.create<bufferization::ToTensorOp>(
             op->getLoc(),
             RankedTensorType::get(operandType.getShape(),
@@ -155,6 +156,7 @@ class HloToLhloOpConverter : public BaseOpConversion<HloOpTy> {
     return success();
   }
 };
+
 
 // This specialization exists so that LMHLO's Dot can be given a specific set of
 // dimension numbers, when lowering from MHLO's Dot, which does not have
@@ -501,7 +503,8 @@ void populateDynamicHloToLhloConversionPattern(
                    HloToLhloOpConverter<mhlo::DynamicIotaOp>,
                    HloToLhloOpConverter<mhlo::DynamicPadOp>,
                    HloToLhloOpConverter<mhlo::DynamicReshapeOp>,
-                   HloToLhloOpConverter<mhlo::RealDynamicSliceOp>
+                   HloToLhloOpConverter<mhlo::RealDynamicSliceOp>,
+                   HloToLhloOpConverter<mhlo::DynamicUpdateSliceOp>
   >(*converter, context);
   // clang-format on
 }
@@ -573,6 +576,7 @@ void populateHloToLhloConversionPattern(
       HloToLhloOpConverter<mhlo::TanhOp>,
       HloToLhloOpConverter<mhlo::TransposeOp>,
       HloToLhloOpConverter<mhlo::XorOp>,
+      HloToLhloOpConverter<mhlo::DynamicUpdateSliceOp>,
       HloToLhloReduceLikeOpConverter<mhlo::ReduceOp>,
       HloToLhloReduceLikeOpConverter<mhlo::ReduceWindowOp>,
       HloToLhloReturnOpConverter

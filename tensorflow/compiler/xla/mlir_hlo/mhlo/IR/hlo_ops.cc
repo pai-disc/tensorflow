@@ -16,7 +16,6 @@ limitations under the License.
 // This file defines the operations used in the MHLO dialect.
 
 #include "mhlo/IR/hlo_ops.h"
-
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -1542,15 +1541,23 @@ LogicalResult DynamicIotaOp::reifyReturnTypeShapes(
 //===----------------------------------------------------------------------===//
 // DynamicUpdateSliceOp
 //===----------------------------------------------------------------------===//
-
-LogicalResult DynamicUpdateSliceOp::inferReturnTypeComponents(
-    MLIRContext*, std::optional<Location> location, ValueShapeRange operands,
-    DictionaryAttr attributes, OpaqueProperties, RegionRange regions,
-    SmallVectorImpl<ShapedTypeComponents>& inferredReturnShapes) {
+LogicalResult DynamicUpdateSliceOp::inferReturnTypes(
+    MLIRContext*, std::optional<Location> location, ValueRange operands, 
+    DictionaryAttr attributes, RegionRange regions,
+    SmallVectorImpl<Type>& inferredReturnTypes) {
   DynamicUpdateSliceOp::Adaptor adaptor(operands, attributes, {}, regions);
-  return hlo::inferDynamicUpdateSliceOp(
-      location, adaptor.getOperand(), adaptor.getUpdate(),
-      adaptor.getStartIndices(), inferredReturnShapes);
+  RankedTensorType operandType =
+      adaptor.getOperand().getType().dyn_cast<RankedTensorType>();
+  inferredReturnTypes.push_back(operandType);
+  return success();
+}
+
+LogicalResult DynamicUpdateSliceOp::reifyReturnTypeShapes(
+    OpBuilder& builder, ValueRange operands,
+    SmallVectorImpl<Value>& reifiedReturnShapes) {
+  DynamicUpdateSliceOp::Adaptor adaptor(operands);
+  return hlo::deriveShapeFromOperand(&builder, getOperation(), operands.front(),
+                                     &reifiedReturnShapes);
 }
 
 OpFoldResult DynamicUpdateSliceOp::fold(FoldAdaptor /*adaptor*/) {

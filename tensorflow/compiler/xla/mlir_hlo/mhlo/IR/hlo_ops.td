@@ -1862,10 +1862,10 @@ def MHLO_DynamicSliceOp: MHLO_Op<"dynamic_slice",
   let hasCanonicalizer = 1;
 }
 
-def MHLO_DynamicUpdateSliceOp: MHLO_Op<"dynamic_update_slice",
+def MHLO_DynamicUpdateSliceOp: MHLO_ShapedInterfaceOp<"dynamic_update_slice",
       [Pure, AllElementTypesMatch<["operand", "update", "result"]>,
-       InferTensorType]> {
-  let summary = "DynamicUpdateSlice operation";
+       DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+  let summary = "DynamicUpdateSlice operator";
   let description = [{
     Produces a `result` tensor which is equal to the `operand` tensor except
     that the slice starting at `start_indices` is updated with the values in
