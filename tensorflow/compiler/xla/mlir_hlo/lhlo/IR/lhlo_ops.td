@@ -709,7 +709,7 @@ def LHLO_DynamicSliceOp: LHLO_Op<"dynamic_slice",
   );
 }
 
-def LHLO_DynamicUpdateSliceOp: LHLO_Op<"dynamic-update-slice", []> {
+def LHLO_DynamicUpdateSliceOp: LHLO_Op<"dynamic_update_slice", []> {
   let summary = "Dynamic Update Slice operator";
   let description = [{
     DynamicUpdateSlice generates a result which is the value of the input array
