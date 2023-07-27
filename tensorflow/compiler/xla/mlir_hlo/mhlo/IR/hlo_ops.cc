@@ -1541,9 +1541,10 @@ LogicalResult DynamicIotaOp::reifyReturnTypeShapes(
 //===----------------------------------------------------------------------===//
 // DynamicUpdateSliceOp
 //===----------------------------------------------------------------------===//
+
 LogicalResult DynamicUpdateSliceOp::inferReturnTypes(
     MLIRContext*, std::optional<Location> location, ValueRange operands, 
-    DictionaryAttr attributes, RegionRange regions,
+    DictionaryAttr attributes, OpaqueProperties, RegionRange regions,
     SmallVectorImpl<Type>& inferredReturnTypes) {
   DynamicUpdateSliceOp::Adaptor adaptor(operands, attributes, {}, regions);
   RankedTensorType operandType =
