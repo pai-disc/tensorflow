@@ -106,7 +106,7 @@ MAP_HLO_TO_LHLO(ReverseOp);
 MAP_HLO_TO_LHLO(RoundNearestEvenOp);
 MAP_HLO_TO_LHLO(RoundOp);
 MAP_HLO_TO_LHLO(DynamicUpdateSliceOp);
-
+MAP_HLO_TO_LHLO(ScatterOp);
 #undef MAP_HLO_TO_LHLO
 
 }  // namespace mhlo
