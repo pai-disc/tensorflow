@@ -187,12 +187,10 @@ struct HloCanonicalizeReductionPass
         // column reduction having following form:
         // Suppose nelems = ProdutionOp(ShapeOp(I)), We convert I into
         // shape `[nelems, 1]`.
-        // TODO(disc): this may have performance issue. Implements a reduce to
-        // scalar schedule if necessary.
         newOperandDims.push_back(nelemToReduce);
         newOperandDims.push_back(nelemToKeep);
         attr = DenseIntElementsAttr::get(
-            RankedTensorType::get({1}, b.getIntegerType(64)), {0ll});
+            RankedTensorType::get({2}, b.getIntegerType(64)), {0ll, 1ll});
       } else if (dimsToReduce[0] == 0) {
         // case a) column reduction
         newOperandDims.push_back(nelemToReduce);
@@ -219,17 +217,15 @@ struct HloCanonicalizeReductionPass
                                   elemTy),
             operand, newOperandShape));
       }
-      auto newOp =
-          b.create<ReduceOp>(loc, newOperands, op.getInitValues(), attr);
+      auto newOp = b.create<ReduceOp>(loc, newOperands, op.getInitValues(), attr);
       newOp.getBody().takeBody(op.getBody());
 
       SmallVector<Value, 4> newResults;
       if (dimsToKeep.empty()) {
         // case c) reduce to scalar
         // reshape rank 1 tensor with size 1 to a rank 0 tensor
-        for (Value result : newOp.getResults()) {
-          newResults.push_back(b.create<ReshapeOp>(
-              loc, RankedTensorType::get({}, elemTy), result));
+        for (Value result: newOp.getResults()) {
+          newResults.push_back(result);
         }
       } else {
         SmallVector<Value, 4> resultDims;
